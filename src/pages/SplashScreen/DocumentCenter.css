@@ -1,0 +1,193 @@
+/* Container layout matching the dark red translucent gym overlay */
+.document-center-container {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  padding: 80px 24px 40px 24px;
+  box-sizing: border-box;
+  font-family: 'Poppins', sans-serif;
+  
+  /* Retained gym theme and color palette */
+  background: linear-gradient(rgba(170, 30, 23, 0.88), rgba(170, 30, 23, 0.88)), 
+              url('../../assets/gym-background.jpg') no-repeat center center;
+  background-size: cover;
+  background-attachment: fixed;
+  
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Modernized navigation button position */
+.back-btn {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateX(-2px);
+}
+
+/* Downloads section wrapper */
+.downloads-section {
+  width: 100%;
+  max-width: 1000px;
+  margin: 40px auto 0 auto;
+}
+
+/* Cleaned Header spacing layout */
+.downloads-header {
+  margin-bottom: 36px;
+  text-align: left;
+}
+
+.downloads-title {
+  color: #ffffff;
+  font-size: 2.8rem;
+  letter-spacing: 2px;
+  margin: 0 0 3px 0;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.downloads-subtitle {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  line-height: 1.3;
+}
+
+.document-center-description {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1rem;
+  font-weight: 400;
+  max-width: 700px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* FIXED LEFT SPACE: Using center alignment and smaller gap sizes */
+.downloads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 320px));
+  gap: 24px;
+  justify-content: center; /* Eliminates the massive left gaps on large displays */
+}
+
+/* Balanced geometric white square file container */
+.download-card {
+  background-color: #ffffff;
+  border: 4px solid #f6cc47; /* Yellowish gold outline border preserved */
+  border-radius: 16px;
+  padding: 32px 24px 24px 24px;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.download-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Center File Vector Icon Wrapper */
+.doc-icon-container {
+  color: #61120f; /* Deep dark reddish brown preserved */
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.doc-icon {
+  width: 100%;
+  height: 100%;
+}
+
+/* Balanced file naming with modern text-underlining styles */
+.file-name-link {
+  color: #61120f;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  word-break: break-word;
+  line-height: 1.4;
+  margin: 8px 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.2s ease;
+}
+
+.file-name-link:hover {
+  color: #aa1e17;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Footer layout for action items */
+.card-actions {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  border-top: 1px solid rgba(97, 18, 15, 0.1);
+  padding-top: 16px;
+}
+
+/* FIXED SIZE: Changed to medium sizing (36px x 36px) */
+.action-btn {
+  background: transparent;
+  border: none;
+  color: #fca02b; /* Vibrant orange tint preserved */
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.action-btn svg {
+  width: 100%;
+  height: 100%;
+}
+
+.action-btn:hover {
+  transform: scale(1.12);
+  color: #e08613;
+}
+
+/* Responsive adjust for smaller viewports */
+@media (max-width: 768px) {
+  .downloads-header {
+    text-align: center;
+  }
+  .document-center-description {
+    margin: 0 auto;
+  }
+}

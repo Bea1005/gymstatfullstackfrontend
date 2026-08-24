@@ -1,0 +1,827 @@
+﻿/* =========================================================================
+   CoachRecordForm.css
+   Pixel-accurate recreation of the STRASUC OLYMPICS 2025
+   "Official Entry Form and Gallery of Volleyball" printed document.
+   ========================================================================= */
+
+:root {
+  --form-serif: "Times New Roman", Georgia, "Liberation Serif", serif;
+  --form-sans: Arial, Helvetica, "Liberation Sans", sans-serif;
+  --form-border-thick: 3px;
+  --form-border-thin: 1px;
+  --form-black: #000000;
+  --form-maroon: #7b1e1e;
+
+  --cell-label-h: 35px;
+  --cell-photo-h: 200px;
+  --cell-info-h: 35px;
+}
+
+.main-content.coach-main-content {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  padding: 24px clamp(12px, 2.5vw, 32px) 32px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+/* ---------- Page shell / print behaviour ---------- */
+
+.strasuc-doc-wrapper {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  background: #d9d9d9;
+  padding: 32px 0;
+}
+
+.strasuc-form-page {
+  width: 100%;
+  min-width: 0;
+  margin: 0 auto;
+  background: #ffffff;
+  color: var(--form-black);
+  font-family: var(--form-serif);
+  padding: 36px 48px 40px;
+  box-sizing: border-box;
+  max-width: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* =========================================================================
+   HEADER
+   ========================================================================= */
+
+.form-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.form-header-logo-left {
+  flex: 0 0 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-header-logo-left img {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+}
+
+.form-header-center {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  padding-top: 6px;
+}
+
+.form-header-center .form-title {
+  font-family: var(--form-serif);
+  font-weight: 700;
+  font-size: clamp(28px, 3.3vw, 56px);
+  letter-spacing: 0.5px;
+  margin: 0;
+  line-height: 1;
+}
+
+.form-header-center .form-title-editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.form-header-center .form-subtitle {
+  font-family: var(--form-serif);
+  font-size: clamp(14px, 1.4vw, 24px);
+  margin: 6px 0 0;
+  font-weight: 400;
+}
+
+.form-header-logo-right {
+  flex: 0 0 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-header-logo-right .scuaa-combined-logo {
+  width: 170px;
+  height: auto;
+  object-fit: contain;
+}
+
+.form-header-right-text {
+  flex: 0 0 260px;
+  text-align: right;
+  padding-top: 4px;
+}
+
+.form-number-box {
+  display: inline-block;
+  border: 1.5px solid var(--form-black);
+  padding: 3px 10px;
+  font-family: var(--form-sans);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.form-header-right-text .entry-form-title {
+  border-top: 1.5px solid var(--form-black);
+  padding-top: 6px;
+  font-family: var(--form-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.form-header-right-text .entry-form-event {
+  font-family: var(--form-sans);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.form-header-right-text .entry-form-event-label {
+  font-family: var(--form-sans);
+  font-size: 11px;
+  font-weight: 400;
+  font-style: italic;
+  margin: 0;
+}
+
+.form-header-divider {
+  border: none;
+  border-top: 4px solid var(--form-black);
+  margin: 18px 0 14px;
+}
+
+/* =========================================================================
+   INFO ROW  (Institution / Category / Screening note)
+   ========================================================================= */
+
+.form-info-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.form-info-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+  font-family: var(--form-sans);
+}
+
+.form-info-left .info-label {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.form-info-left .info-value {
+  font-size: 16px;
+  border-bottom: 1.5px solid var(--form-black);
+  padding: 0 6px 2px;
+  min-width: min(340px, 40vw);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  cursor: pointer;
+}
+
+.form-info-category {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-left: 60px;
+  font-family: var(--form-sans);
+}
+
+.form-info-category .info-label {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.form-info-category .info-value {
+  font-size: 16px;
+  border-bottom: 1.5px solid var(--form-black);
+  padding: 0 10px 2px;
+  min-width: min(160px, 25vw);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.form-info-right {
+  font-family: var(--form-sans);
+  font-size: 12px;
+  font-style: italic;
+  text-align: right;
+  max-width: 100%;
+}
+
+/* =========================================================================
+   ATHLETE / STAFF GRID BOXES
+   ========================================================================= */
+
+.form-grid-box {
+  border: var(--form-border-thick) solid var(--form-black);
+  margin-bottom: 20px;
+}
+
+.form-grid-row {
+  display: flex;
+  min-width: 0;
+}
+
+.form-grid-row + .form-grid-row {
+  border-top: 2px solid var(--form-black);
+}
+
+/* --- logo column: logo on top (spanning label+photo height), then a
+   stacked row-label rail below it (Name / Date of Birth / ... or
+   Name / Age / Contact / Email) — matching the reference exactly --- */
+
+.grid-logo-col {
+  flex: 0 0 13%;
+  min-width: 0;
+  border-right: var(--form-border-thin) solid var(--form-black);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.grid-logo-col .logo-photo-block {
+  height: calc(var(--cell-label-h) + var(--cell-photo-h));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  box-sizing: border-box;
+  border-bottom: var(--form-border-thin) solid var(--form-black);
+}
+
+.grid-logo-col .logo-photo-block img {
+  width: 100%;
+  max-width: 150px;
+  height: auto;
+  object-fit: contain;
+}
+
+.grid-logo-col .row-label-cell {
+  height: var(--cell-info-h);
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  font-family: var(--form-sans);
+  font-weight: 700;
+  font-size: 11px;
+  border-bottom: var(--form-border-thin) solid var(--form-black);
+  box-sizing: border-box;
+}
+
+.grid-logo-col .row-label-cell:last-child {
+  border-bottom: none;
+}
+
+/* --- generic stacked column (athlete or staff) --- */
+
+.grid-col {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border-right: var(--form-border-thin) solid var(--form-black);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.grid-col:last-child {
+  border-right: none;
+}
+
+.grid-col .col-label {
+  height: var(--cell-label-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--form-serif);
+  font-weight: 700;
+  font-size: 14px;
+  border-bottom: var(--form-border-thin) solid var(--form-black);
+}
+
+.grid-col.clickable-col .col-label {
+  padding-right: 28px;
+  box-sizing: border-box;
+}
+
+.grid-col .col-photo {
+  height: var(--cell-photo-h);
+  border-bottom: var(--form-border-thin) solid var(--form-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.grid-col .col-photo img {
+  width: 100%;
+  height: 100%;
+  margin-bottom: 25px;
+  object-fit: cover;
+}
+
+.grid-col .col-photo.clickable {
+  cursor: pointer;
+}
+
+.grid-col .col-photo .cell-plus {
+  font-size: 40px;
+  color: #999;
+  font-family: var(--form-sans);
+}
+
+.grid-col .col-photo .cell-x {
+  font-family: var(--form-serif);
+  font-weight: 700;
+  font-size: 90px;
+  line-height: 1;
+}
+
+/* full-height "X" placeholder cell (used for the fixed, non-editable
+   template slots in the second gallery box, and the empty staff slot) */
+
+.grid-placeholder-col {
+  flex: 1;
+  border-right: var(--form-border-thin) solid var(--form-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.grid-placeholder-col .cell-x {
+  font-family: var(--form-serif);
+  font-weight: 700;
+  font-size: 90px;
+  line-height: 1;
+}
+
+.grid-col .col-info-row {
+  height: var(--cell-info-h);
+  min-width: 0;
+  box-sizing: border-box;
+  border-bottom: var(--form-border-thin) solid var(--form-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: var(--form-sans);
+  font-size: clamp(8px, 0.72vw, 12px);
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: normal;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.grid-col .col-info-row:last-child {
+  border-bottom: none;
+}
+
+.grid-col.clickable-col {
+  cursor: pointer;
+}
+
+.grid-col.clickable-col:hover {
+  background: #fafafa;
+}
+
+/* Small visible remove control for editable athlete cells. */
+
+.grid-remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid rgba(123, 30, 30, 0.35);
+  background: rgba(255, 255, 255, 0.92);
+  color: #7b1e1e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.grid-col .col-photo .grid-status-stamp {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 42px;
+  height: 42px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: contain;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+/* =========================================================================
+   STAFF ROW: name/age/contact/email side table beneath photo
+   ========================================================================= */
+
+/* (staff row now reuses .grid-logo-col for its row-label rail — see above) */
+
+/* =========================================================================
+   ELIGIBILITY + DIRECTOR CELLS (full row-height freeform cells)
+   ========================================================================= */
+
+.grid-freeform-col {
+  flex: 1.35;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  position: relative;
+  cursor: pointer;
+}
+
+.grid-freeform-col.eligibility-col {
+  border-right: var(--form-border-thin) solid var(--form-black);
+}
+
+.grid-freeform-col h4 {
+  font-family: var(--form-serif);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.grid-freeform-col pre {
+  font-family: var(--form-sans);
+  font-size: 10.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.director-col {
+  align-items: center;
+  text-align: center;
+  justify-content: flex-start;
+}
+
+.director-col .director-heading {
+  font-family: var(--form-serif);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.15;
+  margin: 4px 0 10px;
+}
+
+.director-col img {
+  width: 110px;
+  height: 110px;
+  object-fit: contain;
+  margin-bottom: 10px;
+}
+
+.director-col .director-name {
+  font-family: var(--form-serif);
+  font-weight: 700;
+  font-size: 13px;
+  margin: 0;
+}
+
+.director-col .director-title {
+  font-family: var(--form-serif);
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.freeform-edit-icon {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+/* =========================================================================
+   TOP PORTAL BAR (kept, restyled to sit above the printable sheet)
+   ========================================================================= */
+
+.form-toolbar {
+  width: 100%;
+  min-width: 0;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  max-width: 100%;
+  font-family: var(--form-sans);
+}
+
+.form-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-toolbar-left img {
+  height: 44px;
+}
+
+.form-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.form-toolbar .bell-icon {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.form-toolbar .badge-count {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background: var(--form-maroon);
+  color: #fff;
+  font-size: 10px;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-toolbar button.toolbar-btn {
+  background: var(--form-maroon);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.form-toolbar button.toolbar-btn.ghost {
+  background: #fff;
+  color: var(--form-maroon);
+  border: 1.5px solid var(--form-maroon);
+}
+
+/* =========================================================================
+   PRINT
+   ========================================================================= */
+
+@media print {
+  .form-toolbar,
+  .grid-remove-btn,
+  .freeform-edit-icon,
+  .form-title-editable .edit-icon-btn,
+  .info-edit-icon {
+    display: none !important;
+  }
+
+  .strasuc-doc-wrapper {
+    background: #fff;
+    padding: 0;
+  }
+
+  .strasuc-form-page {
+    box-shadow: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  @page {
+    size: A3 portrait;
+    margin: 10mm;
+  }
+}
+
+/* =========================================================================
+   RESPONSIVE (document proportions preserved, horizontal scroll only)
+   ========================================================================= */
+
+@media (max-width: 1760px) {
+  .strasuc-doc-wrapper {
+    padding: 20px 12px;
+  }
+
+  .strasuc-form-page,
+  .form-toolbar {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content.coach-main-content {
+    padding: 16px 10px 24px;
+  }
+
+  .strasuc-doc-wrapper {
+    padding: 12px 0;
+  }
+
+  .strasuc-form-page {
+    padding: 22px 14px 26px;
+  }
+
+  .form-header-logo-left,
+  .form-header-logo-right,
+  .form-header-right-text {
+    flex: 1 1 100%;
+    text-align: center;
+  }
+
+  .form-header-logo-left img {
+    width: 96px;
+    height: 96px;
+  }
+
+  .form-header-logo-right .scuaa-combined-logo {
+    width: min(170px, 70vw);
+  }
+
+  .form-header-right-text {
+    padding-top: 0;
+  }
+
+  .form-info-left,
+  .form-info-right {
+    width: 100%;
+  }
+
+  .form-info-category {
+    margin-left: 0;
+  }
+}
+
+/* =========================================================================
+   MODALS (re-used from the original portal styling; kept minimal + on-brand)
+   ========================================================================= */
+
+.coach-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.coach-modal-card {
+  background: #fff;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 6px;
+  padding: 20px;
+  font-family: var(--form-sans);
+}
+
+.coach-category-modal {
+  width: 300px;
+  padding: 16px;
+}
+
+.coach-category-options {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-category-option {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #d8b400;
+  border-radius: 4px;
+  background: #fffdf0;
+  color: var(--form-maroon);
+  font-family: var(--form-sans);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.coach-category-option:hover,
+.coach-category-option.is-selected {
+  background: #d8b400;
+  color: #fff;
+}
+
+.coach-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.coach-modal-title {
+  font-size: 16px;
+  margin: 0;
+  color: var(--form-maroon);
+}
+
+.coach-modal-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.coach-edit-form label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  margin-top: 10px;
+}
+
+.coach-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.primary-btn {
+  background: var(--form-maroon);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.secondary-btn {
+  background: #eee;
+  color: #333;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.coach-announcement-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.coach-announcement-item {
+  border-bottom: 1px solid #eee;
+  padding: 10px 0;
+}
+
+.coach-announcement-item h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--form-maroon);
+}
+
+.coach-announcement-item p {
+  margin: 2px 0;
+  font-size: 12px;
+  color: #555;
+}

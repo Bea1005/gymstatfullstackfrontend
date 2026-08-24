@@ -1,0 +1,126 @@
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+  width: 100%;
+  min-height: 100vh;
+
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #root {
+    padding: 1rem;
+  }
+  
+  .logo {
+    height: 4em;
+    padding: 1em;
+  }
+  
+  .card {
+    padding: 1.5em;
+  }
+}
+
+@media (max-width: 480px) {
+  #root {
+    padding: 0.75rem;
+  }
+  
+  .logo {
+    height: 3em;
+    padding: 0.75em;
+  }
+  
+  .card {
+    padding: 1em;
+  }
+  
+  .read-the-docs {
+    font-size: 0.875rem;
+  }
+}
+
+/* For very small devices */
+@media (max-width: 360px) {
+  #root {
+    padding: 0.5rem;
+  }
+  
+  .logo {
+    height: 2.5em;
+    padding: 0.5em;
+  }
+}
+
+/* For tablets in landscape mode */
+@media (min-width: 769px) and (max-width: 1024px) {
+  #root {
+    padding: 1.5rem;
+  }
+  
+  .logo {
+    height: 5em;
+    padding: 1.2em;
+  }
+}
+
+/* For large screens */
+@media (min-width: 1281px) {
+  #root {
+    max-width: 1440px;
+    padding: 2rem;
+  }
+  
+  .logo {
+    height: 7em;
+    padding: 1.8em;
+  }
+}
