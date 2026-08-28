@@ -1,30 +1,10 @@
 import React, { useEffect, useState } from "react";
 import * as api from "../../services/api";
 import { useNotifications } from "../../components/NotificationProvider";
+import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import "./StudentProfile.css";
 
 const StudentProfile = () => {
-  const departmentOptions = [
-    "Bachelor of Science in Information Technology",
-    "Bachelor of Science in Computer Science",
-    "Bachelor of Science in Civil Engineering",
-    "Bachelor of Science in Electrical Engineering",
-    "Bachelor of Science in Industrial Technology",
-    "Bachelor of Science in Agriculture",
-    "Bachelor of Science in Fisheries",
-    "Bachelor of Science in Forestry",
-    "Bachelor of Science in Nursing",
-    "Bachelor of Science in Business Administration",
-    "Bachelor of Science in Accountancy",
-    "Bachelor of Science in Hospitality Management",
-    "Bachelor of Science in Tourism Management",
-    "Bachelor of Arts in Communication",
-    "Bachelor of Arts in Political Science",
-    "Bachelor of Elementary Education",
-    "Bachelor of Secondary Education",
-    "Bachelor of Science in Criminology",
-  ];
-  const yearLevelOptions = ["I", "II", "III", "IV"];
   const { notify } = useNotifications();
   const [user, setUser] = useState(null);
   const [form, setForm] = useState({});
@@ -126,7 +106,7 @@ const StudentProfile = () => {
     <div className="student-profile-page">
       <header className="student-profile-header">
         <div>
-          <p className="student-profile-eyebrow">Student Athlete</p>
+          <p className="student-profile-eyebrow">Student-Athlete</p>
           <h1>Student Profile</h1>
           <p>View your registered information and keep your contact email current.</p>
         </div>
@@ -158,7 +138,7 @@ const StudentProfile = () => {
                 value === "branchCampus" || value === "department" || value === "yearLevel" ? (
                   <select className="student-profile-input" value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))}>
                     <option value="">{value === "department" ? "Select department" : value === "yearLevel" ? "Select year level" : "Select branch campus"}</option>
-                    {(value === "department" ? departmentOptions : value === "yearLevel" ? yearLevelOptions : ["Boac Main", "Santa Cruz", "Gasan", "Torrijos"]).map((option) => (
+                    {(value === "department" ? DEPARTMENT_OPTIONS : value === "yearLevel" ? YEAR_LEVEL_OPTIONS : ["Boac Main", "Santa Cruz", "Gasan", "Torrijos"]).map((option) => (
                       <option key={option} value={option}>{option}</option>
                     ))}
                   </select>

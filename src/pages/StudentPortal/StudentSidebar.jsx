@@ -71,7 +71,7 @@ const StudentSidebar = ({ onLogout }) => {
           <div className="logo-circle">
             <img src={logoImage} alt="GymStat" />
           </div>
-          <h3 className="sidebar-title">Student Athlete Portal</h3>
+          <h3 className="sidebar-title">Student-Athlete Portal</h3>
         </div>
 
         {/* Navigation Menu */}

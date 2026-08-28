@@ -2,45 +2,10 @@
 import { useNavigate } from "react-router-dom";
 import { register as registerUser } from "../../services/api";
 import { useNotifications } from "../../components/NotificationProvider";
+import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import "./RegisterPage.css";
 
 import gymBackground from "../../assets/gym-background.jpg";
-
-const sportOptions = [
-  "Volleyball Women",
-  "Volleyball Men",
-  "Basketball Women",
-  "Basketball Men",
-  "Beach Volleyball Women",
-  "Beach Volleyball Men",
-  "Badminton Women",
-  "Badminton Men",
-  "Table Tennis Women",
-  "Table Tennis Men",
-  "Lawn Tennis Women",
-  "Lawn Tennis Men",
-  "Sepak Takraw Women",
-  "Sepak Takraw Men",
-  "Athletics Women",
-  "Athletics Men",
-  "Swimming Women",
-  "Swimming Men",
-  "Chess Women",
-  "Chess Men",
-  "Taekwondo Women",
-  "Taekwondo Men",
-  "Arnis Women",
-  "Arnis Men",
-  "Dancesport",
-  "Futsal Women",
-  "Futsal Men",
-  "Football Women",
-  "Football Men",
-  "Softball Women",
-  "Softball Men",
-  "Mobile Legends Women",
-  "Mobile Legends Men"
-];
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -309,24 +274,9 @@ export default function RegisterPage() {
                   onChange={set("department")}
                 >
                   <option value="">Select Department</option>
-                  <option value="Bachelor of Science in Information Technology">Bachelor of Science in Information Technology</option>
-                  <option value="Bachelor of Science in Computer Science">Bachelor of Science in Computer Science</option>
-                  <option value="Bachelor of Science in Civil Engineering">Bachelor of Science in Civil Engineering</option>
-                  <option value="Bachelor of Science in Electrical Engineering">Bachelor of Science in Electrical Engineering</option>
-                  <option value="Bachelor of Science in Industrial Technology">Bachelor of Science in Industrial Technology</option>
-                  <option value="Bachelor of Science in Agriculture">Bachelor of Science in Agriculture</option>
-                  <option value="Bachelor of Science in Fisheries">Bachelor of Science in Fisheries</option>
-                  <option value="Bachelor of Science in Forestry">Bachelor of Science in Forestry</option>
-                  <option value="Bachelor of Science in Nursing">Bachelor of Science in Nursing</option>
-                  <option value="Bachelor of Science in Business Administration">Bachelor of Science in Business Administration</option>
-                  <option value="Bachelor of Science in Accountancy">Bachelor of Science in Accountancy</option>
-                  <option value="Bachelor of Science in Hospitality Management">Bachelor of Science in Hospitality Management</option>
-                  <option value="Bachelor of Science in Tourism Management">Bachelor of Science in Tourism Management</option>
-                  <option value="Bachelor of Arts in Communication">Bachelor of Arts in Communication</option>
-                  <option value="Bachelor of Arts in Political Science">Bachelor of Arts in Political Science</option>
-                  <option value="Bachelor of Elementary Education">Bachelor of Elementary Education</option>
-                  <option value="Bachelor of Secondary Education">Bachelor of Secondary Education</option>
-                  <option value="Bachelor of Science in Criminology">Bachelor of Science in Criminology</option>
+                  {DEPARTMENT_OPTIONS.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -341,10 +291,9 @@ export default function RegisterPage() {
                   required
                 >
                   <option value="">Select year level</option>
-                  <option value="I">I</option>
-                  <option value="II">II</option>
-                  <option value="III">III</option>
-                  <option value="IV">IV</option>
+                  {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
+                    <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -359,7 +308,7 @@ export default function RegisterPage() {
                   required
                 >
                   <option value="">Select sport</option>
-                  {sportOptions.map((sport) => (
+                  {SPORT_OPTIONS.map((sport) => (
                     <option key={sport} value={sport}>{sport}</option>
                   ))}
                 </select>

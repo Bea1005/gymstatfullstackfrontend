@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminScreeners, createUser, deleteUser, deleteUsers } from '../../services/api';
+import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import './AdminPortal.css';
 
 const getUserActivityStatus = (user) => {
@@ -76,7 +77,7 @@ const parseUserListResponse = (data) => {
 };
 
 /* ── Constants ── */
-const DEPARTMENTS = ['CICS', 'CENG', 'CAS', 'CIT', 'CBA', 'COED'];
+const DEPARTMENTS = DEPARTMENT_OPTIONS;
 const SPORTS      = ['Basketball','Volleyball','Swimming','Track & Field','Badminton','Softball','Boxing','Archery','Chess','Mobile Legends'];
 
 const COLORS   = ['#7b1e1e','#1565c0','#2e7d32','#6a1b9a','#e65100','#00695c','#4527a0','#ad1457'];
@@ -111,7 +112,7 @@ export default function AdminUserRecords() {
   const [screenerSearch, setScreenerSearch] = useState('');
   const [screenerDept,   setScreenerDept]   = useState('All');
   const [selScreeners,   setSelScreeners]   = useState([]);
-  const [scrForm,        setScrForm]        = useState({ id: '', email: '', dept: 'CICS', password: '' });
+  const [scrForm,        setScrForm]        = useState({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
   const [scrPwShow,      setScrPwShow]      = useState(false);
   const [scrError,       setScrError]       = useState('');
   const [loadingScreeners, setLoadingScreeners] = useState(true);
@@ -223,7 +224,7 @@ export default function AdminUserRecords() {
       const result = await createUser(screenerData);
       const newScreener = normalizeUserRow(result?.user || result);
       setScreeners(p => [newScreener, ...p]);
-      setScrForm({ id: '', email: '', dept: 'CICS', password: '' });
+      setScrForm({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
       setScrError('');
       showToast(`Screener account created for ${scrForm.email}`, 'success');
     } catch (error) {
@@ -374,7 +375,7 @@ export default function AdminUserRecords() {
 
       {/* ── Page header ── */}
       <div className="ur-header">
-        <h1 className="ur-title">Registered Student Athletes,<br />Screeners List</h1>
+        <h1 className="ur-title">Registered Student-Athletes,<br />Screeners List</h1>
         <div className="ur-header-actions">
           <div className="ur-search-box">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2">
@@ -418,7 +419,7 @@ export default function AdminUserRecords() {
             <div className="ur-table-topbar__right">
               <select className="ur-dept-filter" value={studentDept} onChange={e => setStudentDept(e.target.value)}>
                 <option value="All">Department</option>
-                {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                {DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
           </div>
@@ -499,7 +500,7 @@ export default function AdminUserRecords() {
                   <label className="ur-reg-label">Department *</label>
                   <select className="ur-reg-input ur-reg-select" value={scrForm.dept}
                     onChange={e => setScrForm(f => ({ ...f, dept: e.target.value }))}>
-                    {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
               </div>
@@ -541,7 +542,7 @@ export default function AdminUserRecords() {
             <div className="ur-table-topbar__right">
               <select className="ur-dept-filter" value={screenerDept} onChange={e => setScreenerDept(e.target.value)}>
                 <option value="All">Department</option>
-                {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
           </div>

@@ -8,6 +8,7 @@ import DocumentViewer from '../../components/DocumentViewer';
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
+import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import './ScreenerPage.css';
 
 const ScreenerPage = () => {
@@ -204,7 +205,7 @@ const ScreenerPage = () => {
     const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = departmentFilter === 'All' || student.department === departmentFilter;
     const matchesSport = sportFilter === 'All' || student.sport === sportFilter;
-    const matchesYear = yearLevelFilter === 'All';
+    const matchesYear = yearLevelFilter === 'All' || student.yearLevel === yearLevelFilter;
     
     return matchesSearch && matchesDept && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
@@ -268,7 +269,7 @@ const ScreenerPage = () => {
                 <span className="header-badge" title="Resubmitted requirement(s) awaiting review">{resubmissionCount}</span>
               )}
             </div>
-            <p>Validate and verify submitted documents from student athletes.</p>
+            <p>Validate and verify submitted documents from student-athletes.</p>
           </div>
           <button className="logout-btn" onClick={handleLogout}>
             Log Out 
@@ -319,10 +320,9 @@ const ScreenerPage = () => {
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
               <option value="All">All</option>
-              <option value="CICS">CICS</option>
-              <option value="CENG">CENG</option>
-              <option value="CIT">CIT</option>
-              <option value="CASS">CASS</option>
+              {DEPARTMENT_OPTIONS.map((department) => (
+                <option key={department} value={department}>{department}</option>
+              ))}
             </select>
           </div>
 
@@ -333,12 +333,9 @@ const ScreenerPage = () => {
               onChange={(e) => setSportFilter(e.target.value)}
             >
               <option value="All">All</option>
-              <option value="Badminton (Women)">Badminton (Women)</option>
-              <option value="Basketball (Men)">Basketball (Men)</option>
-              <option value="Volleyball (Women)">Volleyball (Women)</option>
-              <option value="Track & Field">Track & Field</option>
-              <option value="Swimming">Swimming</option>
-              <option value="Chess">Chess</option>
+              {SPORT_OPTIONS.map((sport) => (
+                <option key={sport} value={sport}>{sport}</option>
+              ))}
             </select>
           </div>
 
@@ -349,6 +346,9 @@ const ScreenerPage = () => {
               onChange={(e) => setYearLevelFilter(e.target.value)}
             >
               <option value="All">All</option>
+              {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
+                <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
+              ))}
             </select>
           </div>
         </div>
