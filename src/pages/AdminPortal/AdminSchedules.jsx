@@ -386,7 +386,7 @@ const AdminSchedules = () => {
       setToast({ message: 'Error: Please select an end date.', type: 'error' });
       return;
     }
-    
+
     const timeToMinutes = (t) => {
       if (!t) return 0;
       const [time, meridian] = t.split(' ');
@@ -396,10 +396,14 @@ const AdminSchedules = () => {
       return h * 60 + mm;
     };
 
-    const newStartDate = new Date(formData.startDate);
-    const newEndDate = new Date(formData.endDate);
-    newStartDate.setHours(0,0,0,0);
-    newEndDate.setHours(0,0,0,0);
+    const dateToDayStart = (dateString) => {
+      const date = new Date(dateString);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+
+    const newStartDate = dateToDayStart(formData.startDate);
+    const newEndDate = dateToDayStart(formData.endDate);
     const newStartMin = timeToMinutes(formData.startTime);
     const newEndMin = timeToMinutes(formData.endTime);
     const newPrep = Number(formData.prepDays || 0) || 0;
@@ -407,26 +411,23 @@ const AdminSchedules = () => {
     const hasConflict = reservations.some((res) => {
       if (res.id === formData.id) return false;
 
-      const existingStart = new Date(res.startDate);
-      const existingEnd = new Date(res.endDate);
-      existingStart.setHours(0,0,0,0);
-      existingEnd.setHours(0,0,0,0);
-
+      const existingStart = dateToDayStart(res.startDate);
+      const existingEnd = dateToDayStart(res.endDate);
       const existingPrep = Number(res.prepDays || 0) || 0;
-      const existingStartWithPrep = new Date(existingStart);
-      existingStartWithPrep.setDate(existingStartWithPrep.getDate() - existingPrep);
+      const prepAdjustedStart = new Date(existingStart);
+      prepAdjustedStart.setDate(prepAdjustedStart.getDate() - existingPrep);
 
-      if (newEndDate < existingStartWithPrep || newStartDate > existingEnd) return false;
+      if (newEndDate < prepAdjustedStart || newStartDate > existingEnd) return false;
 
       const exStartMin = timeToMinutes(res.startTime);
       const exEndMin = timeToMinutes(res.endTime);
+      const newStartMs = newStartDate.getTime() + newStartMin * 60000;
+      const newEndMs = newEndDate.getTime() + newEndMin * 60000;
+      const exStartMs = existingStart.getTime() + exStartMin * 60000;
+      const exEndMs = existingEnd.getTime() + exEndMin * 60000;
 
-      const newFullDay = newStartMin === newEndMin;
-      const exFullDay = exStartMin === exEndMin;
-      if (newFullDay || exFullDay) return true;
-
-      const timesOverlap = !(newEndMin <= exStartMin || newStartMin >= exEndMin);
-      return timesOverlap;
+      if (newStartMs >= newEndMs || exStartMs >= exEndMs) return true;
+      return newStartMs < exEndMs && newEndMs > exStartMs;
     });
 
     if (hasConflict) {
@@ -654,6 +655,14 @@ const AdminSchedules = () => {
     URL.revokeObjectURL(url);
   };
 
+  const normalizeScheduleSource = (schedule) => {
+    if (!schedule) return 'internal';
+    if (schedule.fromRequest || schedule.source === 'public' || schedule.source === 'request' || schedule.requesterName || schedule.requesterEmail) {
+      return 'public';
+    }
+    return 'internal';
+  };
+
   const sortEventsByTime = (events) => {
     const toMinutes = (t) => {
       if (!t) return 0;
@@ -676,23 +685,34 @@ const AdminSchedules = () => {
     const eventsOnDate = sortEventsByTime(getEventsForDate(dateStr));
     const hasEvent = eventsOnDate.length > 0;
     const multipleEvents = eventsOnDate.length > 1;
-    
+    const hasPublic = eventsOnDate.some((event) => normalizeScheduleSource(event) === 'public');
+    const hasInternal = eventsOnDate.some((event) => normalizeScheduleSource(event) === 'internal');
+    const sourceClass = hasEvent
+      ? hasPublic && hasInternal
+        ? 'has-event--mixed'
+        : hasPublic
+          ? 'has-event--public'
+          : 'has-event--internal'
+      : '';
+
     calendarDays.push(
       <div 
         key={day} 
-        className={`calendar-day ${hasEvent ? 'has-event' : ''}`}
+        className={`calendar-day ${hasEvent ? 'has-event' : ''} ${sourceClass}`.trim()}
         onClick={() => handleDateClick(day)}
       >
         <span className="day-number">{day}</span>
         {hasEvent && (
           <div className={`calendar-event-info ${eventsOnDate.length >= 3 ? 'calendar-event-info--scroll' : ''}`}>
-              {eventsOnDate.map((event, idx) => {
+            {eventsOnDate.map((event, idx) => {
               const isContinuedLeft = new Date(dateStr) > new Date(event.startDate);
               const isContinuedRight = new Date(dateStr) < new Date(event.endDate);
               const cls = `mini-event ${isContinuedLeft ? 'cont-left' : ''} ${isContinuedRight ? 'cont-right' : ''}`;
+              const sourceTone = normalizeScheduleSource(event) === 'public' ? 'mini-event--public' : 'mini-event--internal';
+              const dotTone = normalizeScheduleSource(event) === 'public' ? 'event-dot--public' : 'event-dot--internal';
               return (
-                <div key={idx} className={cls} title={`${event.event}\n${formatTimeDisplay(event.startTime, event.endTime)}`}>
-                  <span className="event-dot">●</span>
+                <div key={idx} className={`${cls} ${sourceTone}`} title={`${event.event}\n${formatTimeDisplay(event.startTime, event.endTime)}`}>
+                  <span className={`event-dot ${dotTone}`}>●</span>
                   <span className="event-name">{event.event.length > 20 ? event.event.substring(0, 18) + '...' : event.event}</span>
                   <span className="event-time">{multipleEvents ? event.startTime : formatTimeDisplay(event.startTime, event.endTime)}</span>
                 </div>
@@ -761,7 +781,8 @@ const AdminSchedules = () => {
         </div>
         
         <div className="calendar-legend">
-          <span className="legend-dot"></span> Has Schedule
+          <span className="legend-dot legend-dot--internal"></span> Internal
+          <span className="legend-dot legend-dot--public" style={{ marginLeft: 10 }}></span> Public
         </div>
       </div>
 

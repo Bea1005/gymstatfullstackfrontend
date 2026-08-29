@@ -100,15 +100,49 @@ export default function PublicCalendar() {
   const toStr = (d) =>
     `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
+  const toMinutes = (t) => {
+    if (!t) return 0;
+    const [time, meridian] = String(t).split(' ');
+    const [hh, mm] = time.split(':').map(Number);
+    let h = hh % 12;
+    if (meridian === 'PM') h += 12;
+    return h * 60 + mm;
+  };
+
+  const normalizeScheduleSource = (schedule) => {
+    if (!schedule) return 'internal';
+    if (schedule.fromRequest || schedule.source === 'public' || schedule.source === 'request' || schedule.requesterName) {
+      return 'public';
+    }
+    return 'internal';
+  };
+
+  const getScheduleConflict = (candidate, existing) => {
+    if (!candidate || !existing) return false;
+
+    const candidateStartDate = new Date(`${candidate.startDate}T00:00:00`);
+    const candidateEndDate = new Date(`${candidate.endDate}T00:00:00`);
+    const existingStartDate = new Date(`${existing.startDate}T00:00:00`);
+    const existingEndDate = new Date(`${existing.endDate}T00:00:00`);
+    const existingPrepDays = Number(existing.prepDays || 0) || 0;
+    const prepStartDate = new Date(existingStartDate);
+    prepStartDate.setDate(prepStartDate.getDate() - existingPrepDays);
+
+    if (candidateEndDate < prepStartDate || candidateStartDate > existingEndDate) return false;
+
+    const candidateStartMs = candidateStartDate.getTime() + toMinutes(candidate.startTime) * 60000;
+    const candidateEndMs = candidateEndDate.getTime() + toMinutes(candidate.endTime) * 60000;
+    const existingStartMs = existingStartDate.getTime() + toMinutes(existing.startTime) * 60000;
+    const existingEndMs = existingEndDate.getTime() + toMinutes(existing.endTime) * 60000;
+
+    const basisStart = candidateStartMs < existingStartMs ? candidateStartMs : existingStartMs;
+    const basisEnd = candidateEndMs > existingEndMs ? candidateEndMs : existingEndMs;
+    const overlapMs = basisEnd - basisStart;
+    if (candidateStartMs >= candidateEndMs || existingStartMs >= existingEndMs) return false;
+    return candidateStartMs < existingEndMs && candidateEndMs > existingStartMs && overlapMs > 0;
+  };
+
   const sortEventsByTime = (events) => {
-    const toMinutes = (t) => {
-      if (!t) return 0;
-      const [time, meridian] = t.split(' ');
-      const [hh, mm] = time.split(':').map(Number);
-      let h = hh % 12;
-      if (meridian === 'PM') h += 12;
-      return h * 60 + mm;
-    };
     return [...events].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
   };
 
@@ -134,11 +168,6 @@ export default function PublicCalendar() {
   /* ── open modal ── */
   const openModal = (d) => {
     const ds = toStr(d);
-    const existingEvents = eventsOn(ds);
-    if (existingEvents.length > 0) {
-      setNotification({ message: 'This date is already booked. Please select another date.', type: 'error' });
-      return;
-    }
     setClickedDate(ds);
     setForm({
       eventName: '',
@@ -234,21 +263,36 @@ export default function PublicCalendar() {
       e.endDate = 'End date cannot be before start date.';
     if (!requestFile.name) e.requestLetter = 'Request letter is required. Please attach a PDF, DOC, or DOCX file.';
     else if (!requestFile.data) e.requestLetter = 'File is still processing. Please wait a moment or re-attach the file.';
-    
+
     if (form.prepDays && !/^\d+$/.test(form.prepDays)) {
       e.prepDays = 'Please enter a valid whole number.';
     } else if (form.prepDays && parseInt(form.prepDays) < 0) {
       e.prepDays = 'Prep days cannot be negative.';
     }
-    
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (form.requesterEmail && !emailRegex.test(form.requesterEmail))
       e.requesterEmail = 'Please enter a valid email address.';
-    
+
     const cleanedPhone = form.requesterPhone.replace(/[\s\-\(\)]/g, '');
     if (form.requesterPhone && !cleanedPhone.match(/^[0-9]{7,15}$/))
       e.requesterPhone = 'Please enter a valid phone number (7-15 digits).';
-    
+
+    if (form.startDate && form.endDate && form.startTime && form.endTime) {
+      const candidate = {
+        startDate: form.startDate,
+        endDate: form.endDate,
+        startTime: form.startTime,
+        endTime: form.endTime,
+      };
+
+      const conflict = approvedSchedules.some((schedule) => getScheduleConflict(candidate, schedule));
+      if (conflict) {
+        e.startDate = 'This time range overlaps a booked schedule on this date.';
+        e.endDate = 'Please choose another available time window.';
+      }
+    }
+
     return e;
   };
 
@@ -344,12 +388,16 @@ export default function PublicCalendar() {
         <span className="pc-day__num">{d}</span>
         {hasEvents && (
           <div className={`pc-event-list ${evs.length >= 3 ? 'pc-event-list--scroll' : ''}`}>
-            {evs.map((ev, i) => (
-              <div key={i} className="pc-event-chip" title={`${ev.event}\n${ev.startTime} - ${ev.endTime}`}>
-                <span className="pc-event-chip__name">{ev.event.length > 18 ? ev.event.slice(0, 16)+'…' : ev.event}</span>
-                <span className="pc-event-chip__time">{ev.startTime}</span>
-              </div>
-            ))}
+            {evs.map((ev, i) => {
+              const sourceClass = `pc-event-chip--${normalizeScheduleSource(ev)}`;
+              return (
+                <div key={i} className={`pc-event-chip ${sourceClass}`} title={`${ev.event}\n${ev.startTime} - ${ev.endTime}`}>
+                  <span className="pc-event-chip__name">{ev.event.length > 18 ? ev.event.slice(0, 16)+'…' : ev.event}</span>
+                  <span className="pc-event-chip__source">{normalizeScheduleSource(ev) === 'public' ? 'Public' : 'Internal'}</span>
+                  <span className="pc-event-chip__time">{ev.startTime}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -393,9 +441,10 @@ export default function PublicCalendar() {
           </div>
           <div className="pc-cal-grid">{cells}</div>
           <div className="pc-legend">
-            <span className="pc-legend__dot pc-legend__dot--booked" /> Reserved
+            <span className="pc-legend__dot pc-legend__dot--internal" /> Internal booking
+            <span className="pc-legend__dot pc-legend__dot--public" style={{marginLeft:14}} /> Public request
             <span className="pc-legend__dot pc-legend__dot--today" style={{marginLeft:14}} /> Today
-            <span className="pc-legend__hint">· Click any available day to request a schedule</span>
+            <span className="pc-legend__hint">· Click a day to request a schedule for an open time slot</span>
           </div>
         </div>
       </div>
@@ -414,10 +463,11 @@ export default function PublicCalendar() {
 
             {modalEvs.length > 0 && (
               <div className="pcm-warn">
-                <p className="pcm-warn__label">⚠️ Already booked on this day:</p>
+                <p className="pcm-warn__label">⚠️ Existing bookings for this day:</p>
                 {modalEvs.map(ev => (
-                  <div key={ev.id} className="pcm-warn__item">
+                  <div key={ev.id} className={`pcm-warn__item pcm-warn__item--${normalizeScheduleSource(ev)}`}>
                     <span className="pcm-warn__name">{ev.event}</span>
+                    <span className="pcm-warn__meta">{normalizeScheduleSource(ev) === 'public' ? 'Public Request' : 'Internal Event'}</span>
                     <span className="pcm-warn__time">{ev.startTime} – {ev.endTime}</span>
                   </div>
                 ))}

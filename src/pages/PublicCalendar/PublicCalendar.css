@@ -160,18 +160,32 @@
 .pc-day:hover            { background: #fff3cd; border-color: #ffdc00; }
 .pc-day--empty           { background: #f5f5f5; cursor: default; border-color: transparent; }
 .pc-day--empty:hover     { background: #f5f5f5; border-color: transparent; }
-.pc-day--booked          { background: #e8f5e9; border-color: #844242; outline: 2px solid #844242; }
-.pc-day--booked:hover    { background:#ffffff; border-color: #844242; }
+.pc-day--booked          { background: #f9f9f9; border-color: #d6d6d6; outline: 2px solid #d6d6d6; }
+.pc-day--booked:hover    { background:#ffffff; border-color: #d6d6d6; }
 .pc-day--today           { border: 2px solid #f9f8f8; background: #fffde7; }
 .pc-day--booked .pc-event-chip {
-  background: #fbe9e7;
-  border: 1px solid #a94442;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.pc-day--booked .pc-event-chip--internal {
+  background: #e8f5e9;
+  border-color: #2e7d32;
+}
+.pc-day--booked .pc-event-chip--public {
+  background: #fce4ec;
+  border-color: #a81e4b;
 }
 .pc-day--booked .pc-event-chip__name {
-  color: #7f1d1d;
+  color: #1f2937;
+}
+.pc-day--booked .pc-event-chip__source {
+  color: #4b5563;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .pc-day--booked .pc-event-chip__time {
-  color: #b23c3c;
+  color: #374151;
 }
 
 .pc-day__num {
@@ -226,9 +240,10 @@
   height: 12px;
   border-radius: 50%;
 }
-.pc-legend__dot--booked { background: #a5d6a7; }
-.pc-legend__dot--today  { background: #ffdc00; border: 1px solid #ccc; }
-.pc-legend__hint        { color: #999; font-size: 12px; margin-left: 6px; }
+.pc-legend__dot--internal { background: #7ccf8f; }
+.pc-legend__dot--public   { background: #de5b8e; }
+.pc-legend__dot--today    { background: #ffdc00; border: 1px solid #ccc; }
+.pc-legend__hint          { color: #999; font-size: 12px; margin-left: 6px; }
 
 /* ══════════════════════════════════════
    MODAL BACKDROP

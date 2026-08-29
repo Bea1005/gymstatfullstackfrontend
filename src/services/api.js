@@ -501,6 +501,13 @@ export const getStudentRequirements = async (filters = {}) => {
   });
 };
 
+export const importPreviousYearRequirements = async (payload = {}) => {
+  return apiRequest('/student/requirements/import-previous-year', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
+
 // Delete a student requirement
 export const deleteRequirement = async (requirementId) => {
   return apiRequest(`/student/requirements/${requirementId}`, {

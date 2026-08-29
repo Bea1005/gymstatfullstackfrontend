@@ -183,7 +183,7 @@ export default function StudentRequirements() {
   const navigate = useNavigate();
   const { notify } = useNotifications();
   const [activeTab, setActiveTab] = useState('requirements');
-  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, total: 0 });
+  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, total: 0, expired: 0, archived: 0, reusable: 0 });
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [submissions, setSubmissions] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
@@ -298,6 +298,9 @@ export default function StudentRequirements() {
           pending: statsData.data?.pending ?? submissionsData.filter((item) => item.status === 'pending').length,
           approved: statsData.data?.approved ?? submissionsData.filter((item) => item.status === 'approved').length,
           rejected: statsData.data?.rejected ?? submissionsData.filter((item) => item.status === 'rejected').length,
+          expired: statsData.data?.expired ?? submissionsData.filter((item) => item.requirementStatus === 'expired').length,
+          archived: statsData.data?.archived ?? submissionsData.filter((item) => item.requirementStatus === 'archived').length,
+          reusable: statsData.data?.reusable ?? submissionsData.filter((item) => item.requirementStatus === 'reusable').length,
           total: statsData.data?.total ?? submissionsData.length
         };
         setStats(derivedStats);
@@ -307,6 +310,9 @@ export default function StudentRequirements() {
           pending: submissionsData.filter((item) => item.status === 'pending').length,
           approved: submissionsData.filter((item) => item.status === 'approved').length,
           rejected: submissionsData.filter((item) => item.status === 'rejected').length,
+          expired: submissionsData.filter((item) => item.requirementStatus === 'expired').length,
+          archived: submissionsData.filter((item) => item.requirementStatus === 'archived').length,
+          reusable: submissionsData.filter((item) => item.requirementStatus === 'reusable').length,
           total: submissionsData.length
         });
       }
@@ -455,8 +461,32 @@ export default function StudentRequirements() {
   };
 
   const isUploadLocked = (requirementId) => {
-    const status = getSubmissionStatus(requirementId);
-    return status === 'approved';
+    const submission = getSubmissionForRequirement(requirementId);
+    const status = submission?.status;
+    const reusable = submission?.requirementStatus === 'reusable' || submission?.isReusable || (submission?.requirementType === 'psa' && submission?.importedFromPreviousYear);
+    return status === 'approved' && !reusable;
+  };
+
+  const getPreviousYearImportCount = () => {
+    const currentYear = new Date().getFullYear();
+    const currentAcademic = new Date().getMonth() >= 5 ? `${currentYear}-${String(currentYear + 1).slice(-2)}` : `${currentYear - 1}-${String(currentYear).slice(-2)}`;
+    return submissions.filter((submission) => (
+      submission.status === 'approved' && submission.academicYear && submission.academicYear !== currentAcademic && submission.requirementStatus !== 'archived'
+    )).length;
+  };
+
+  const handleImportPreviousYearRequirements = async () => {
+    try {
+      setLoading(true);
+      const response = await api.importPreviousYearRequirements({});
+      const imported = Array.isArray(response?.data) ? response.data : [];
+      notify('success', imported.length > 0 ? 'Previous-Year Records Imported' : 'No Records Available', imported.length > 0 ? 'Eligible records were imported for reuse.' : 'There were no eligible prior-year records to import.');
+      await fetchData();
+    } catch (err) {
+      notify('error', 'Import Failed', err.message || 'Unable to import previous-year records.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getUrgentCount = () => {
@@ -705,6 +735,12 @@ export default function StudentRequirements() {
           >
             + Upload New
           </button>
+          <button 
+            className={`tab-btn ${activeTab === 'import' ? 'active-tab' : ''}`} 
+            onClick={() => setActiveTab('import')}
+          >
+            Import Student Records (Intrams – STRASUC) {getPreviousYearImportCount() > 0 ? `(${getPreviousYearImportCount()})` : ''}
+          </button>
         </div>
 
         <hr className="divider" />
@@ -758,6 +794,78 @@ export default function StudentRequirements() {
               </div>
             </div>
           </section>
+        ) : activeTab === 'import' ? (
+          <section className="tab-panel">
+            <div className="submission-header">
+              <div>
+                <h3 className="section-title">📥 Import Student Records (Intrams – STRASUC)</h3>
+                <p className="section-subtitle">Reuse eligible records from the previous academic year instead of resubmitting everything.</p>
+              </div>
+            </div>
+
+            <div className="admin-requirements-list" style={{ marginTop: '1rem' }}>
+              <div className="admin-reqs-header">
+                <h3>📦 Reusable & Available Records</h3>
+                <p>Approved files from the last academic year can be imported here. PSA requirements remain reusable when eligible.</p>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+                <button className="upload-action-btn" onClick={handleImportPreviousYearRequirements} disabled={loading}>
+                  {loading ? 'Importing...' : 'Import Previous-Year Records'}
+                </button>
+                <span style={{ alignSelf: 'center', color: '#666', fontSize: '0.9rem' }}>
+                  {getPreviousYearImportCount()} eligible record(s) available
+                </span>
+              </div>
+
+              {submissions.filter((submission) => submission.requirementStatus === 'reusable' || submission.requirementStatus === 'expired' || submission.importedFromPreviousYear || submission.academicYear).length ? (
+                <div className="student-requirements-table-wrapper">
+                  <table className="student-requirements-table">
+                    <thead>
+                      <tr className="student-requirements-table-row">
+                        <th className="student-requirements-table-head">Requirement Type</th>
+                        <th className="student-requirements-table-head">Academic Year</th>
+                        <th className="student-requirements-table-head">Status</th>
+                        <th className="student-requirements-table-head">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {submissions.filter((submission) => submission.requirementStatus === 'reusable' || submission.requirementStatus === 'expired' || submission.importedFromPreviousYear || submission.academicYear).map((submission) => {
+                        const reusable = submission.requirementStatus === 'reusable' || (submission.requirementType === 'psa' && submission.importedFromPreviousYear);
+                        const canReplacePsa = reusable && submission.requirementType === 'psa';
+                        return (
+                          <tr key={submission._id} className="student-requirements-table-row">
+                            <td className="student-requirements-table-cell">
+                              {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.requirementType || 'Other'}
+                            </td>
+                            <td className="student-requirements-table-cell">{submission.academicYear || 'N/A'}</td>
+                            <td className="student-requirements-table-cell">
+                              <span className={`badge ${submission.requirementStatus === 'reusable' ? 'badge-completed' : submission.requirementStatus === 'expired' ? 'badge-declined' : submission.requirementStatus === 'archived' ? 'badge-pending' : 'badge-pending'}`}>
+                                {submission.requirementStatus || submission.status || 'active'}
+                              </span>
+                            </td>
+                            <td className="student-requirements-table-cell">
+                              {canReplacePsa ? (
+                                <button className="submit-single-btn" onClick={() => { setActiveTab('submission'); setTimeout(() => triggerFileInput(submission.requirementType), 0); }}>
+                                  Replace / Update File
+                                </button>
+                              ) : (
+                                <button className="submit-single-btn" onClick={() => handleViewSubmission(submission)}>
+                                  View
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ padding: '1rem', color: '#666' }}>No prior-year or reusable requirement records are currently available for import.</div>
+              )}
+            </div>
+          </section>
         ) : (
           <section className="tab-panel">
             <div className="submission-header">
@@ -774,6 +882,8 @@ export default function StudentRequirements() {
                 const submissionStatus = getSubmissionStatus(req.id);
                 const locked = isUploadLocked(req.id);
                 const isRejected = submissionStatus === 'rejected';
+                const isReusable = submission?.requirementStatus === 'reusable' || submission?.isReusable || (submission?.requirementType === 'psa' && submission?.importedFromPreviousYear);
+                const canReplaceReusable = isReusable && !isRejected;
                 const rejectionReason = submission?.remarks || submission?.feedback || 'The screener marked this file as rejected. Please upload a corrected copy.';
                 const rejectionDate = submission?.reviewedAt ? new Date(submission.reviewedAt).toLocaleDateString() : 'Recently';
                 const reviewerName = submission?.reviewedBy?.fullname || 'Screener';
@@ -794,9 +904,9 @@ export default function StudentRequirements() {
                     <button 
                       className="upload-action-btn" 
                       onClick={() => triggerFileInput(req.id)}
-                      disabled={uploading || locked}
+                      disabled={uploading || (locked && !canReplaceReusable)}
                     >
-                      {locked ? '✓ Approved' : isSubmitted ? (isRejected ? 'Re-upload' : 'Submitted') : 'Upload'}
+                      {locked && !canReplaceReusable ? '✓ Approved' : canReplaceReusable ? 'Replace / Update' : isSubmitted ? (isRejected ? 'Re-upload' : 'Submitted') : 'Upload'}
                     </button>
                     {isRejected && (
                       <div className="rejection-note">
@@ -864,9 +974,12 @@ export default function StudentRequirements() {
                           </td>
                           <td className="student-requirements-table-cell">
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                              <span className={`badge ${submission.status === 'approved' ? 'badge-completed' : submission.status === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
-                                {submission.status || 'pending'}
+                              <span className={`badge ${submission.requirementStatus === 'reusable' || submission.status === 'approved' ? 'badge-completed' : submission.requirementStatus === 'expired' || submission.status === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
+                                {submission.requirementStatus || submission.status || 'pending'}
                               </span>
+                              {submission.requirementStatus && submission.requirementStatus !== submission.status && (
+                                <span style={{ fontSize: '0.72rem', color: '#666' }}>{submission.status === 'approved' ? 'Approval kept for reuse' : 'Current lifecycle state'}</span>
+                              )}
                               {submission.status === 'rejected' && (
                                 <span style={{ fontSize: '0.8rem', color: '#c62828', lineHeight: 1.4 }}>
                                   {submission.remarks || submission.feedback || 'Please upload a corrected copy.'}
