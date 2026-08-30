@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getEquipment, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
@@ -43,72 +44,59 @@ const SPORTS_EQUIPMENT_OPTIONS = [
   'Racket'
 ];
 
-// Equipment structure with reference IDs and conditions
-const INITIAL_EQUIPMENT = [
-  { 
-    id: 1, 
-    name: 'Spalding Ball', 
-    type: 'Balls',
-    total: 10, 
-    date: '04-22-2026',
-    available: 10,
-    items: [
-      { referenceId: 'SPL-001', condition: 'Good' },
-      { referenceId: 'SPL-002', condition: 'Good' },
-      { referenceId: 'SPL-003', condition: 'Damaged' },
-      { referenceId: 'SPL-004', condition: 'Good' }
-    ]
-  },
-  { 
-    id: 2, 
-    name: 'Volleyball Mikasa', 
-    type: 'Balls',
-    total: 11, 
-    date: '05-20-2026',
-    available: 11,
-    items: [
-      { referenceId: 'VOL-001', condition: 'Good' },
-      { referenceId: 'VOL-002', condition: 'Good' }
-    ]
-  },
-  { 
-    id: 3, 
-    name: 'Racket', 
-    type: 'Rackets',
-    total: 8, 
-    date: '06-27-2026',
-    available: 8,
-    items: [
-      { referenceId: 'RCK-001', condition: 'Good' },
-      { referenceId: 'RCK-002', condition: 'Good' }
-    ]
-  },
-  { 
-    id: 4, 
-    name: 'Baseball Bat', 
-    type: 'Rackets',
-    total: 6, 
-    date: '06-28-2026',
-    available: 6,
-    items: [
-      { referenceId: 'BAT-001', condition: 'Good' },
-      { referenceId: 'BAT-002', condition: 'Good' }
-    ]
-  },
-];
-
 export default function AdminEquipments({ borrowingRecords = [], onUpdateInventory }) {
-  const [items, setItems] = useState(INITIAL_EQUIPMENT);
+  const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ name: '', type: '', referenceId: '' });
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [expandedItems, setExpandedItems] = useState({});
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+
+  const formatReferenceIdDisplay = (referenceIds = []) => {
+    const uniqueIds = [...new Set(referenceIds.filter(Boolean))].sort((a, b) => {
+      const matchA = a.match(/(.*?)(\d+)(.*)/);
+      const matchB = b.match(/(.*?)(\d+)(.*)/);
+
+      if (!matchA || !matchB) {
+        return a.localeCompare(b);
+      }
+
+      const prefixA = matchA[1];
+      const prefixB = matchB[1];
+      const numberA = Number(matchA[2]);
+      const numberB = Number(matchB[2]);
+      const suffixA = matchA[3];
+      const suffixB = matchB[3];
+
+      if (prefixA !== prefixB) {
+        return prefixA.localeCompare(prefixB);
+      }
+      if (suffixA !== suffixB) {
+        return suffixA.localeCompare(suffixB);
+      }
+      return numberA - numberB;
+    });
+
+    if (uniqueIds.length === 0) {
+      return '—';
+    }
+    if (uniqueIds.length === 1) {
+      return uniqueIds[0];
+    }
+
+    return '-';
+  };
 
   const mapEquipmentToUiShape = (equipment) => {
     const normalizedType = equipment.type || equipment.category || 'Sports Equipment';
     const normalizedReferenceId = equipment.referenceId || '';
+    const referenceIds = Array.isArray(equipment.referenceIds)
+      ? equipment.referenceIds.filter(Boolean)
+      : normalizedReferenceId
+        ? [normalizedReferenceId]
+        : [];
 
     return {
       id: equipment.id || equipment._id,
@@ -118,7 +106,12 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       available: Number(equipment.available ?? equipment.totalStock ?? 1),
       date: equipment.createdAt ? new Date(equipment.createdAt).toLocaleDateString() : today(),
       referenceId: normalizedReferenceId,
-      items: [{ referenceId: normalizedReferenceId, condition: equipment.condition || 'Good' }]
+      referenceIds,
+      condition: equipment.condition || 'Good',
+      items: referenceIds.map((refId) => ({
+        referenceId: refId,
+        condition: equipment.condition || 'Good'
+      }))
     };
   };
 
@@ -126,14 +119,51 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
     try {
       const response = await getEquipment();
       const serverItems = Array.isArray(response?.data) ? response.data : [];
+
       if (serverItems.length > 0) {
-        setItems(serverItems.map(mapEquipmentToUiShape));
+        const groupedEquipment = new Map();
+
+        serverItems.forEach((equipment) => {
+          const normalizedName = equipment.name || 'Unknown Equipment';
+          const item = mapEquipmentToUiShape(equipment);
+          const existing = groupedEquipment.get(normalizedName);
+
+          if (!existing) {
+            groupedEquipment.set(normalizedName, {
+              ...item,
+              referenceIds: [...item.referenceIds],
+              items: [...item.items],
+            });
+            return;
+          }
+
+          const nextReferenceIds = [...new Set([...existing.referenceIds, ...item.referenceIds])];
+          const nextItems = [...existing.items, ...item.items].filter((entry) => entry.referenceId);
+
+          existing.total = Number(existing.total || 0) + Number(item.total || 0);
+          existing.available = Number(existing.available || 0) + Number(item.available || 0);
+          existing.referenceId = nextReferenceIds[0] || '';
+          existing.referenceIds = nextReferenceIds;
+          existing.items = nextItems;
+          existing.condition = item.condition || existing.condition || 'Good';
+          existing.date = existing.date || item.date;
+        });
+
+        setItems(Array.from(groupedEquipment.values()).map((group) => ({
+          ...group,
+          referenceId: group.referenceIds[0] || '',
+          items: group.items.map((entry) => ({
+            referenceId: entry.referenceId,
+            condition: entry.condition || 'Good'
+          })),
+          condition: group.condition || 'Good'
+        })));
       } else {
-        setItems(INITIAL_EQUIPMENT);
+        setItems([]);
       }
     } catch (loadError) {
       console.error('Failed to load equipment from server:', loadError);
-      setItems(INITIAL_EQUIPMENT);
+      setItems([]);
     }
   };
 
@@ -271,7 +301,19 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
   const updateItemCondition = async (equipmentId, referenceId, newCondition) => {
     try {
-      await updateEquipment(equipmentId, { condition: newCondition });
+      const equipmentToUpdate = items.find((item) => item.id === equipmentId);
+      if (!equipmentToUpdate) {
+        throw new Error('Equipment record not found.');
+      }
+
+      const targetEquipmentId = equipmentToUpdate.referenceId === referenceId && equipmentToUpdate.id
+        ? equipmentToUpdate.id
+        : equipmentToUpdate.id;
+
+      await updateEquipment(targetEquipmentId, {
+        referenceId: referenceId || equipmentToUpdate.referenceId,
+        condition: newCondition,
+      });
       await loadEquipmentFromServer();
       showToast(`Condition updated to ${newCondition}`, 'success');
     } catch (updateError) {
@@ -287,12 +329,197 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
     return calculateAvailable(equipment.name, equipment.items);
   };
 
+  const generateEquipmentReport = async (filter) => {
+    try {
+      const response = await getEquipment();
+      const allEquipment = Array.isArray(response?.data) ? response.data : [];
+
+      let filteredEquipment = allEquipment;
+      if (filter !== 'all') {
+        filteredEquipment = allEquipment.filter(eq => (eq.condition || 'Good') === filter);
+      }
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'in',
+        format: [8.5, 13]
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 0.5;
+      const lineHeight = 0.25;
+      let yPosition = margin;
+
+      doc.setFontSize(16);
+      doc.setFont(undefined, 'bold');
+      doc.text('EQUIPMENT MASTERLIST REPORT', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += lineHeight * 2;
+
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      const filterLabel = filter === 'all' ? 'All Equipment' : 'Condition: ' + filter;
+      doc.text('Filter: ' + filterLabel, margin, yPosition);
+      yPosition += lineHeight;
+      doc.text('Generated: ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(), margin, yPosition);
+      yPosition += lineHeight * 1.5;
+
+      const col1X = margin;
+      const col2X = margin + 2.5;
+      const col3X = margin + 4.2;
+      const col4X = margin + 5.2;
+      const col5X = margin + 6.2;
+      const colWidth1 = 2.3;
+      const colWidth2 = 1.5;
+      const colWidth3 = 0.9;
+      const colWidth4 = 0.9;
+      const colWidth5 = 1.8;
+
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.setFillColor(123, 30, 30);
+      doc.setTextColor(255, 255, 255);
+      const headerY = yPosition;
+      doc.rect(col1X, headerY, colWidth1, lineHeight, 'F');
+      doc.rect(col2X, headerY, colWidth2, lineHeight, 'F');
+      doc.rect(col3X, headerY, colWidth3, lineHeight, 'F');
+      doc.rect(col4X, headerY, colWidth4, lineHeight, 'F');
+      doc.rect(col5X, headerY, colWidth5, lineHeight, 'F');
+      doc.text('EQUIPMENT NAME', col1X + 0.05, headerY + 0.18);
+      doc.text('REFERENCE ID', col2X + 0.05, headerY + 0.18);
+      doc.text('QTY', col3X + 0.05, headerY + 0.18);
+      doc.text('CONDITION', col4X + 0.05, headerY + 0.18);
+      doc.text('TYPE', col5X + 0.05, headerY + 0.18);
+      yPosition += lineHeight + 0.05;
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+
+      const maxTableHeight = pageHeight - margin - 0.5;
+      const rowHeight = lineHeight * 0.8;
+
+      filteredEquipment.forEach((equipment) => {
+        const condition = equipment.condition || 'Good';
+        const referenceIds = Array.isArray(equipment.referenceIds) && equipment.referenceIds.length > 0
+          ? equipment.referenceIds
+          : [equipment.referenceId || 'N/A'];
+        const quantity = referenceIds.length > 0 ? referenceIds.length : (equipment.total || equipment.totalStock || 1);
+
+        referenceIds.forEach((refId, idx) => {
+          if (yPosition + rowHeight > maxTableHeight) {
+            doc.addPage();
+            yPosition = margin;
+          }
+
+          if (idx % 2 === 1) {
+            doc.setFillColor(245, 245, 245);
+            doc.rect(col1X, yPosition, pageWidth - 2 * margin, rowHeight, 'F');
+          }
+
+          if (idx === 0) {
+            const nameLines = doc.splitTextToSize(equipment.name, colWidth1 - 0.1);
+            doc.text(nameLines, col1X + 0.05, yPosition + 0.08);
+          }
+
+          doc.text(refId, col2X + 0.05, yPosition + 0.12);
+
+          if (idx === 0) {
+            doc.text(String(quantity), col3X + 0.1, yPosition + 0.12);
+          }
+
+          doc.text(condition, col4X + 0.05, yPosition + 0.12);
+
+          if (idx === 0) {
+            const type = equipment.type || equipment.category || 'Sports Equipment';
+            const typeLines = doc.splitTextToSize(type, colWidth5 - 0.1);
+            doc.text(typeLines, col5X + 0.05, yPosition + 0.08);
+          }
+
+          doc.setDrawColor(200, 200, 200);
+          doc.setLineWidth(0.01);
+          doc.rect(col1X, yPosition, colWidth1, rowHeight);
+          doc.rect(col2X, yPosition, colWidth2, rowHeight);
+          doc.rect(col3X, yPosition, colWidth3, rowHeight);
+          doc.rect(col4X, yPosition, colWidth4, rowHeight);
+          doc.rect(col5X, yPosition, colWidth5, rowHeight);
+
+          yPosition += rowHeight;
+        });
+      });
+
+      const footerY = pageHeight - 0.4;
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text('Page ' + (doc.internal.pages.length - 1), pageWidth / 2, footerY, { align: 'center' });
+
+      const fileName = 'Equipment_Masterlist_' + filter + '_' + new Date().toISOString().split('T')[0] + '.pdf';
+      doc.save(fileName);
+
+      setToast({ message: 'Report downloaded successfully!', type: 'success' });
+      setShowDownloadModal(false);
+    } catch (err) {
+      console.error('Failed to generate report:', err);
+      setToast({ message: 'Failed to generate report. Please try again.', type: 'error' });
+    }
+  };
+
   return (
     <div className="eq-root">
-      <div className="eq-page-header">
-        <h1 className="eq-title">Equipment Inventory</h1>
-        <p className="eq-subtitle">Track, update, and manage all gymnasium sports assets.</p>
+      <div className="eq-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="eq-title">Equipment Inventory</h1>
+          <p className="eq-subtitle">Track, update, and manage all gymnasium sports assets.</p>
+        </div>
+        <button
+          className="eq-download-report-btn"
+          onClick={() => setShowDownloadModal(true)}
+          title="Download equipment report"
+        >
+          📥 Download Report
+        </button>
       </div>
+
+      {showDownloadModal && (
+        <div className="eq-modal-overlay" onClick={() => setShowDownloadModal(false)}>
+          <div className="eq-modal-content" onClick={e => e.stopPropagation()}>
+            <h2 className="eq-modal-title">Download Equipment Report</h2>
+            <p className="eq-modal-subtitle">Select which equipment to include:</p>
+            <div className="eq-modal-options">
+              <button
+                className="eq-modal-option-btn"
+                onClick={() => generateEquipmentReport('all')}
+              >
+                All Equipment
+              </button>
+              <button
+                className="eq-modal-option-btn"
+                onClick={() => generateEquipmentReport('Good')}
+              >
+                Good
+              </button>
+              <button
+                className="eq-modal-option-btn"
+                onClick={() => generateEquipmentReport('Damaged')}
+              >
+                Damaged
+              </button>
+              <button
+                className="eq-modal-option-btn"
+                onClick={() => generateEquipmentReport('Lost')}
+              >
+                Lost
+              </button>
+            </div>
+            <button
+              className="eq-modal-close-btn"
+              onClick={() => setShowDownloadModal(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="eq-stats">
         <div className="eq-stat-card">
@@ -373,7 +600,8 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
                 <th>EQUIPMENT NAME</th>
                 <th>EQUIPMENT TYPE</th>
                 <th>REFERENCE ID</th>
-                <th>QUANTITY (Available/Total)</th>
+                <th>CONDITION</th>
+                <th>QUANTITY</th>
                 <th>DATE</th>
                 <th></th>
               </tr>
@@ -399,7 +627,14 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
                         {equipment.name}
                       </td>
                       <td className="eq-td-type">{equipment.type || 'Sports Equipment'}</td>
-                      <td className="eq-td-refid">{equipment.referenceId || '—'}</td>
+                      <td className="eq-td-refid" style={{ minWidth: '180px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                        {formatReferenceIdDisplay(equipment.referenceIds || [equipment.referenceId])}
+                      </td>
+                      <td className="eq-td-condition">
+                        <span className={`eq-condition-badge eq-condition-badge--${(equipment.condition || 'Good').toLowerCase().replace(/\s+/g, '-')}`}>
+                          {equipment.condition || 'Good'}
+                        </span>
+                      </td>
                       <td className="eq-td-qty">{quantityDisplay}</td>
                       <td className="eq-td-date">{equipment.date}</td>
                       <td>
@@ -410,7 +645,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
                       <tr key={`${equipment.id}-detail-${idx}`} className="eq-detail-row">
                         <td className="eq-detail-name"></td>
                         <td className="eq-detail-type"></td>
-                        <td className="eq-detail-refid">{item.referenceId}</td>
+                        <td className="eq-detail-refid" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{item.referenceId}</td>
                         <td className="eq-detail-condition" colSpan="2">
                           <select
                             value={item.condition}
@@ -431,7 +666,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="eq-empty">No equipment found.</td>
+                  <td colSpan="7" className="eq-empty">No equipment found.</td>
                 </tr>
               )}
             </tbody>

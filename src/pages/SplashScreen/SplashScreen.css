@@ -362,7 +362,7 @@ body {
   }
 
   .landing-hero-title {
-    font-size: clamp(1.8rem, 4vw, 2.25rem);
+    font-size: clamp(1.9rem, 4vw, 2.25rem);
     width: 100%;
     max-width: 760px;
     margin: 0 auto 1rem;

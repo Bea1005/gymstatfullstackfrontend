@@ -93,16 +93,31 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
       equipmentList.forEach((item) => {
         if (!item?.name) return;
 
-        const quantity = Math.max(0, Number(item.quantity ?? item.available ?? item.total ?? 1) || 0);
-        const baseReferenceId = item.referenceId || item.name;
-        const refs = [];
+        const refs = equipmentRefsMap[item.name] || [];
+        const fallbackQuantity = Math.max(0, Number(item.quantity ?? item.available ?? item.total ?? 1) || 0);
 
-        for (let index = 0; index < quantity; index += 1) {
-          const suffix = index + 1;
-          refs.push({
-            id: `${baseReferenceId}-${String(suffix).padStart(3, '0')}`,
+        if (item.referenceId) {
+          const nextRef = {
+            id: item.referenceId,
             condition: item.condition || 'Good'
-          });
+          };
+
+          if (!refs.some((ref) => ref.id === nextRef.id)) {
+            refs.push(nextRef);
+          }
+        } else {
+          const baseReferenceId = item.name;
+          for (let index = 0; index < fallbackQuantity; index += 1) {
+            const suffix = index + 1;
+            const nextRef = {
+              id: `${baseReferenceId}-${String(suffix).padStart(3, '0')}`,
+              condition: item.condition || 'Good'
+            };
+
+            if (!refs.some((ref) => ref.id === nextRef.id)) {
+              refs.push(nextRef);
+            }
+          }
         }
 
         equipmentRefsMap[item.name] = refs;
@@ -344,18 +359,29 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   // Handle return - generates timestamp immediately without modal
   const handleReturn = async (recordId) => {
     try {
+      const record = records.find(r => r.id === recordId) || records.find(r => r._id === recordId);
       const returnedTimestamp = getCurrentTimestamp();
-      
+      const validConditions = ['Good', 'Damaged', 'Lost'];
+      const referenceConditions = Array.isArray(record?.referenceIds)
+        ? record.referenceIds.map((_, index) => {
+            const nextCondition = record.referenceConditions?.[index];
+            return validConditions.includes(nextCondition) ? nextCondition : 'Good';
+          })
+        : [];
+      const fallbackCondition = referenceConditions.find((condition) => validConditions.includes(condition)) || 'Good';
+
       await updateBorrowingRecord(recordId, {
         status: 'Returned',
-        returnedTimestamp: returnedTimestamp
+        returnedTimestamp: returnedTimestamp,
+        referenceConditions,
+        condition: fallbackCondition
       });
 
       await fetchData();
       setToast({ message: 'Equipment Successfully Returned', type: 'success' });
     } catch (error) {
       console.error('Error returning equipment:', error);
-      setToast({ message: 'Failed to return equipment', type: 'error' });
+      setToast({ message: error.message || 'Failed to return equipment', type: 'error' });
     }
   };
 
@@ -415,6 +441,13 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   };
 
   const availableRefIds = form.equipment ? getAvailableReferenceIds(form.equipment) : [];
+  const uniqueEquipmentOptions = Array.from(
+    new Map(
+      allEquipment
+        .filter(item => item?.name)
+        .map(item => [item.name, item])
+    ).values()
+  ).filter(item => getAvailableQuantity(item.name) > 0);
 
   // Keep the field in ISO format so the native date picker can display it correctly.
   const formattedDate = form.date || todayStr();
@@ -493,16 +526,14 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
               onChange={e => handleEquipmentChange(e.target.value)}
             >
               <option value="">Select Equipment...</option>
-              {allEquipment
-                .filter(item => item.name)
-                .map(item => {
-                  const available = getAvailableQuantity(item.name);
-                  return available > 0 ? (
-                    <option key={item._id || item.name} value={item.name}>
-                      {item.name} (Available: {available})
-                    </option>
-                  ) : null;
-                })}
+              {uniqueEquipmentOptions.map(item => {
+                const available = getAvailableQuantity(item.name);
+                return available > 0 ? (
+                  <option key={item._id || item.name} value={item.name}>
+                    {item.name} (Available: {available})
+                  </option>
+                ) : null;
+              })}
             </select>
             {allEquipment.length === 0 && (
               <p style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>

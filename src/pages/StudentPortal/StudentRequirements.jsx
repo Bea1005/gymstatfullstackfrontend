@@ -196,6 +196,7 @@ export default function StudentRequirements() {
   const [confirmUpload, setConfirmUpload] = useState(null);
   const [confirmPreviewUrl, setConfirmPreviewUrl] = useState('');
   const [previewModal, setPreviewModal] = useState(null);
+  const [requirementsAssuranceAccepted, setRequirementsAssuranceAccepted] = useState(false);
 
   useEffect(() => {
     try {
@@ -373,6 +374,11 @@ export default function StudentRequirements() {
       return;
     }
 
+    if (!requirementsAssuranceAccepted) {
+      notify('error', 'Acceptance Required', 'Please confirm the submission assurance before submitting your requirements.');
+      return;
+    }
+
     try {
       setUploading(true);
 
@@ -398,6 +404,7 @@ export default function StudentRequirements() {
       }
       setConfirmUpload(null);
       setConfirmPreviewUrl('');
+      setRequirementsAssuranceAccepted(false);
 
       await fetchData();
     } catch (err) {
@@ -415,6 +422,11 @@ export default function StudentRequirements() {
       return;
     }
 
+    if (!requirementsAssuranceAccepted) {
+      notify('error', 'Acceptance Required', 'Please confirm the submission assurance before submitting your requirements.');
+      return;
+    }
+
     try {
       setUploading(true);
       for (const [requirementId, file] of pendingUploads) {
@@ -423,6 +435,7 @@ export default function StudentRequirements() {
       notify('success', 'All Files Submitted', 'Your selected requirement files were uploaded successfully.');
       notifyRequirementUpdate();
       setUploadedFiles({});
+      setRequirementsAssuranceAccepted(false);
       await fetchData();
     } catch (err) {
       notify('error', 'Submission Failed', err.message || 'Failed to upload files');
@@ -940,7 +953,25 @@ export default function StudentRequirements() {
                 );
               })}
             </div>
-            <button className="submit-all-btn" onClick={handleSubmitAll} disabled={uploading}>
+            <div style={{ marginTop: '1rem', marginBottom: '1rem', padding: '1rem 1.1rem', border: '1px solid #e5d0d0', borderRadius: '10px', background: '#fffaf9' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', color: '#3d1e1e', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                <input
+                  type="checkbox"
+                  checked={requirementsAssuranceAccepted}
+                  onChange={(e) => setRequirementsAssuranceAccepted(e.target.checked)}
+                  style={{ marginTop: '0.2rem', width: '18px', height: '18px', accentColor: '#8f1d1d', cursor: 'pointer' }}
+                />
+                <span>
+                  <strong>I certify that the requirements I am submitting are true, valid, and belong to me. I understand that submitting false, invalid, or unauthorized documents may result in the rejection of my requirements.</strong>
+                  <br />
+                  <span style={{ display: 'block', marginTop: '0.35rem', color: '#5e3b3b' }}>
+                    By submitting these requirements, you agree to the system’s Terms of Service and Privacy Policy and confirm that the information and documents provided are accurate.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <button className="submit-all-btn" onClick={handleSubmitAll} disabled={uploading || !requirementsAssuranceAccepted}>
               {uploading ? 'Uploading...' : 'Submit Requirements'}
             </button>
 

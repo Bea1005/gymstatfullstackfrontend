@@ -121,7 +121,7 @@ const OnboardingScreen = () => {
           {/* Text Content */}
           <div className="landing-hero-text">
             <p className="landing-hero-title">
-              GYMSTAT: Gymnasium and Student Athlete Record Management System 
+              GYMSTAT: Gymnasium and Student-Athlete Record Management System 
             </p>
             <p className="landing-hero-description">
               Manage schedules, track equipment, and monitor student-athlete records 

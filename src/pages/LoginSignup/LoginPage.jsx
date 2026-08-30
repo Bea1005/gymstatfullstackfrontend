@@ -160,7 +160,7 @@ export default function LoginPage() {
           </h1>
 
           <p className="login-system-sub">
-            Gymnasium and Student Athlete Record Management System
+            Gymnasium and Student-Athlete Record Management System
           </p>
         </div>
       </div>
