@@ -67,6 +67,48 @@ const statusStampMap = {
   'no-documents': noDocumentsStamp,
 };
 
+const DEFAULT_STAFF_ROLES = ['COACH', 'ASST. COACH', 'TRAINER', 'CHAPERONE', 'OTHER FACULTY'];
+
+const createDefaultStaffMember = (role = 'COACH') => ({
+  role: String(role).toUpperCase(),
+  fullname: '',
+  age: '',
+  phone: '',
+  email: '',
+  photo: placeholderImg,
+});
+
+const normalizeStaffMembers = (members = []) => {
+  const list = Array.isArray(members) ? members : [];
+  const normalized = [];
+  const seen = new Set();
+
+  for (const role of DEFAULT_STAFF_ROLES) {
+    const existing = list.find((member) => String(member?.role || '').toUpperCase() === role);
+    if (!existing) {
+      const defaultMember = createDefaultStaffMember(role);
+      normalized.push(defaultMember);
+      seen.add(role);
+      continue;
+    }
+
+    const nextMember = { ...createDefaultStaffMember(role), ...existing, role };
+    normalized.push(nextMember);
+    seen.add(role);
+  }
+
+  const extraMembers = list.filter((member) => {
+    const role = String(member?.role || '').toUpperCase();
+    return role && !seen.has(role);
+  }).map((member) => ({
+    ...createDefaultStaffMember(String(member?.role || 'OTHER FACULTY')),
+    ...member,
+    role: String(member?.role || 'OTHER FACULTY').toUpperCase(),
+  }));
+
+  return [...normalized, ...extraMembers];
+};
+
 const normalizeAthleteStatus = (status) => {
   const normalizedStatus = String(status || 'no-documents').toLowerCase().replace(/\s+/g, '-');
   const statusAliases = {
@@ -119,6 +161,7 @@ export default function CoachRecord() {
 
   const [athletes, setAthletes] = useState([]);
   const [studentDirectory, setStudentDirectory] = useState([]);
+  const [studentDirectorySearch, setStudentDirectorySearch] = useState('');
   const [announcements, setAnnouncements] = useState([]);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -150,9 +193,6 @@ export default function CoachRecord() {
     title: 'SPORTS DIRECTOR',
   });
 
-  // STAFF: COACH / ASST. COACH / TRAINER — three roles, same shape as the
-  // reference form's staff row. Kept as a small array instead of three
-  // separate pieces of state so the row can be rendered with a single .map().
   const [staff, setStaff] = useState([
     {
       role: 'COACH',
@@ -164,12 +204,15 @@ export default function CoachRecord() {
     },
     { role: 'ASST. COACH', fullname: '', age: '', phone: '', email: '', photo: placeholderImg },
     { role: 'TRAINER', fullname: '', age: '', phone: '', email: '', photo: placeholderImg },
+    { role: 'CHAPERONE', fullname: '', age: '', phone: '', email: '', photo: placeholderImg },
+    { role: 'OTHER FACULTY', fullname: '', age: '', phone: '', email: '', photo: placeholderImg },
   ]);
 
   const [eligibilityForm, setEligibilityForm] = useState({ notes: '' });
   const [directorForm, setDirectorForm] = useState({ eventLabel: '', name: '', title: '' });
   const [editingStaffIndex, setEditingStaffIndex] = useState(null);
-  const [staffForm, setStaffForm] = useState({ fullname: '', age: '', phone: '', email: '', photo: placeholderImg });
+  const [isAddingStaff, setIsAddingStaff] = useState(false);
+  const [staffForm, setStaffForm] = useState({ role: 'CHAPERONE', fullname: '', age: '', phone: '', email: '', photo: placeholderImg });
 
   const [editForm, setEditForm] = useState({
     fullname: '',
@@ -260,7 +303,7 @@ export default function CoachRecord() {
           return next;
         });
         if (Array.isArray(profileData.staffMembers)) {
-          setStaff(profileData.staffMembers);
+          setStaff(normalizeStaffMembers(profileData.staffMembers));
         }
       }
 
@@ -531,10 +574,16 @@ export default function CoachRecord() {
           setToast({ message: 'Please select an existing student.', type: 'error' });
           return;
         }
-        await api.createCoachAthlete({ studentId: editForm.studentId, sport: athleteData.sport });
-        await fetchCoachData();
-        setToast({ message: 'Student profile added successfully.', type: 'success' });
-        setIsAddingAthlete(false);
+        try {
+          await api.createCoachAthlete({ studentId: editForm.studentId, sport: athleteData.sport });
+          await fetchCoachData();
+          setToast({ message: 'Student profile added successfully.', type: 'success' });
+          setIsAddingAthlete(false);
+        } catch (error) {
+          const message = error?.message || 'This student-athlete cannot be added yet because their requirements are not complete.';
+          setToast({ message, type: 'error' });
+          return;
+        }
       } else if (editingAthlete) {
         const savedStatus = normalizeAthleteStatus(athleteData.status);
         await api.updateCoachAthlete(editingAthlete.id, { ...athleteData, athleteStatus: savedStatus });
@@ -580,26 +629,41 @@ export default function CoachRecord() {
     setToast({ message: 'Director information updated.', type: 'success' });
   };
 
-  // ---------------- Staff (Coach / Asst. Coach / Trainer) ----------------
+  // ---------------- Staff (Coach / Asst. Coach / Trainer / Chaperone / Other Faculty) ----------------
   const handleEditStaff = (index) => {
     setEditingStaffIndex(index);
-    setStaffForm({ ...staff[index] });
+    setIsAddingStaff(false);
+    setStaffForm({ ...staff[index], role: String(staff[index]?.role || 'CHAPERONE').toUpperCase() });
+  };
+
+  const handleAddStaff = () => {
+    setIsAddingStaff(true);
+    setEditingStaffIndex(null);
+    setStaffForm({ ...createDefaultStaffMember('CHAPERONE'), fullname: '', age: '', phone: '', email: '', photo: placeholderImg });
   };
 
   const handleSaveStaff = async (e) => {
     e.preventDefault();
-    const updatedStaff = staff.map((member, index) => (
-      index === editingStaffIndex ? { ...member, ...staffForm } : member
-    ));
+    const role = String(staffForm.role || 'OTHER FACULTY').toUpperCase();
+    const normalizedForm = {
+      ...staffForm,
+      role,
+      photo: staffForm.photo || placeholderImg,
+    };
+
+    const updatedStaff = isAddingStaff
+      ? normalizeStaffMembers([...staff, normalizedForm])
+      : normalizeStaffMembers(staff.map((member, index) => (index === editingStaffIndex ? { ...member, ...normalizedForm } : member)));
 
     try {
       await api.updateCoachProfile({ staffMembers: updatedStaff });
       setStaff(updatedStaff);
-      if (editingStaffIndex === 0) {
-        setCoachProfile((prev) => ({ ...prev, fullname: staffForm.fullname, phone: staffForm.phone, email: staffForm.email, photo: staffForm.photo }));
+      if (editingStaffIndex === 0 || (!isAddingStaff && staff[editingStaffIndex]?.role === 'COACH')) {
+        setCoachProfile((prev) => ({ ...prev, fullname: normalizedForm.fullname || prev.fullname, phone: normalizedForm.phone || prev.phone, email: normalizedForm.email || prev.email, photo: normalizedForm.photo || prev.photo }));
       }
       setEditingStaffIndex(null);
-      setToast({ message: 'Staff information updated.', type: 'success' });
+      setIsAddingStaff(false);
+      setToast({ message: isAddingStaff ? 'Faculty member added.' : 'Staff information updated.', type: 'success' });
     } catch (error) {
       setToast({ message: error.message || 'Unable to save staff information.', type: 'error' });
     }
@@ -866,11 +930,21 @@ export default function CoachRecord() {
             ))}
           </div>
 
-          <div className="form-grid-row">
+          <div className="form-grid-row staff-grid-row">
             <LogoCell labels={STAFF_ROW_LABELS} />
             {staff.map((member, index) => (
-              <StaffCell key={member.role} member={member} index={index} />
+              <StaffCell key={`${member.role}-${index}`} member={member} index={index} />
             ))}
+            <div className="grid-col clickable-col staff-add-col" onClick={handleAddStaff} role="button" tabIndex={0}>
+              <div className="col-label">ADD</div>
+              <div className="col-photo clickable">
+                <span className="cell-plus">+</span>
+              </div>
+              <div className="col-info-row">Faculty</div>
+              <div className="col-info-row">Role</div>
+              <div className="col-info-row">Contact</div>
+              <div className="col-info-row">Email</div>
+            </div>
             <div className="grid-placeholder-col">
               <span className="cell-x">X</span>
             </div>
@@ -949,6 +1023,19 @@ export default function CoachRecord() {
               {isAddingAthlete && (
                 <label>
                   Select Existing Student
+                  <input
+                    type="text"
+                    value={studentDirectorySearch}
+                    onChange={(event) => setStudentDirectorySearch(event.target.value)}
+                    placeholder="Search by name, student ID, or username"
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      margin: '5px 0 8px',
+                      fontSize: '12px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
                   <select
                     value={editForm.studentId || ''}
                     onChange={(event) => {
@@ -966,13 +1053,30 @@ export default function CoachRecord() {
                       }));
                       setImagePreview(selectedStudent.profilePhoto || placeholderImg);
                     }}
-                    style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }}
+                    style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px', boxSizing: 'border-box' }}
                     required
                   >
-                    <option value="">Choose a student from MongoDB</option>
-                    {studentDirectory.filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id))).map((student) => (
-                      <option key={student._id || student.id} value={student._id || student.id}>{student.fullname}</option>
-                    ))}
+                    <option value="">{studentDirectorySearch ? 'Choose a matching student' : 'Choose a student from MongoDB'}</option>
+                    {studentDirectory
+                      .filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id)))
+                      .filter((student) => {
+                        const search = studentDirectorySearch.trim().toLowerCase();
+                        if (!search) return true;
+                        const searchableText = [
+                          student.fullname,
+                          student.id,
+                          student.username,
+                          student.studentId,
+                          student.email,
+                          student._id,
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        return searchableText.includes(search);
+                      })
+                      .map((student) => (
+                        <option key={student._id || student.id} value={student._id || student.id}>
+                          {student.fullname} {student.id ? `(${student.id})` : ''}{student.username ? ` • ${student.username}` : ''}
+                        </option>
+                      ))}
                   </select>
                 </label>
               )}
@@ -1071,14 +1175,22 @@ export default function CoachRecord() {
         </div>
       )}
 
-      {editingStaffIndex !== null && (
-        <div className="coach-modal-overlay" onClick={() => setEditingStaffIndex(null)}>
+      {(editingStaffIndex !== null || isAddingStaff) && (
+        <div className="coach-modal-overlay" onClick={() => { setEditingStaffIndex(null); setIsAddingStaff(false); }}>
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
-              <h3 className="coach-modal-title">Edit {staff[editingStaffIndex].role}</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingStaffIndex(null)}>✕</button>
+              <h3 className="coach-modal-title">{isAddingStaff ? 'Add Faculty Member' : `Edit ${String(staff[editingStaffIndex]?.role || 'Faculty')}`}</h3>
+              <button className="coach-modal-close" type="button" onClick={() => { setEditingStaffIndex(null); setIsAddingStaff(false); }}>✕</button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveStaff}>
+              <label>
+                Role
+                <select value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }}>
+                  {DEFAULT_STAFF_ROLES.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Full Name
                 <input value={staffForm.fullname} onChange={(e) => setStaffForm({ ...staffForm, fullname: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
@@ -1101,7 +1213,7 @@ export default function CoachRecord() {
                 {staffForm.photo && <img src={staffForm.photo} alt="Preview" style={{ width: '60px', height: '60px', objectFit: 'cover', marginTop: '6px', border: '1px solid #ddd' }} />}
               </label>
               <div className="coach-edit-actions">
-                <button className="secondary-btn" type="button" onClick={() => setEditingStaffIndex(null)}>Cancel</button>
+                <button className="secondary-btn" type="button" onClick={() => { setEditingStaffIndex(null); setIsAddingStaff(false); }}>Cancel</button>
                 <button className="primary-btn" type="submit">Save</button>
               </div>
             </form>

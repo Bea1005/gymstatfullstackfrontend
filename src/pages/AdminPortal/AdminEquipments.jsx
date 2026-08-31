@@ -169,10 +169,14 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
   // Calculate available count (items not on loan)
   const calculateAvailable = (equipmentName, equipmentItems) => {
+    const activeEquipmentItems = (equipmentItems || []).filter(
+      (item) => (item?.condition || 'Good') !== 'Damaged'
+    );
+
     if (!borrowingRecords || borrowingRecords.length === 0) {
-      return equipmentItems.length;
+      return activeEquipmentItems.length;
     }
-    
+
     const borrowedCount = borrowingRecords
       .filter(r => r.status === 'Out' && r.equipment === equipmentName)
       .reduce((sum, r) => {
@@ -181,8 +185,8 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         }
         return sum + (r.qty || 0);
       }, 0);
-    
-    return Math.max(0, equipmentItems.length - borrowedCount);
+
+    return Math.max(0, activeEquipmentItems.length - borrowedCount);
   };
 
   useEffect(() => {

@@ -191,6 +191,9 @@ export default function StudentRequirements() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSport, setSelectedSport] = useState('General');
+  const [participationType, setParticipationType] = useState('Intrams');
+  const [customRequirementCards, setCustomRequirementCards] = useState([]);
+  const [customRequirementModal, setCustomRequirementModal] = useState(null);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
   const [confirmUpload, setConfirmUpload] = useState(null);
@@ -324,12 +327,12 @@ export default function StudentRequirements() {
     }
   };
 
-  const handleFileChange = (requirementId, e) => {
+  const handleFileChange = (requirementId, e, extra = {}) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const previewUrl = URL.createObjectURL(file);
       setUploadedFiles(prev => ({ ...prev, [requirementId]: file }));
-      setConfirmUpload({ requirementId, file, previewUrl });
+      setConfirmUpload({ requirementId, file, previewUrl, ...extra });
       setConfirmPreviewUrl(previewUrl);
     }
   };
@@ -369,6 +372,10 @@ export default function StudentRequirements() {
 
   const handleSubmitFile = async (requirementId, fileOverride) => {
     const file = fileOverride || uploadedFiles[requirementId];
+    const uploadedRequirementType = confirmUpload?.requirementType || requirementId;
+    const uploadedCustomRequirementId = confirmUpload?.customRequirementId || '';
+    const uploadedCustomRequirementLabel = confirmUpload?.customRequirementLabel || '';
+
     if (!file) {
       notify('error', 'File Required', 'Please select a file first');
       return;
@@ -386,7 +393,14 @@ export default function StudentRequirements() {
       const submission = getSubmissionForRequirement(requirementId);
       const isReuploadingRejected = submission?.status === 'rejected';
 
-      await api.uploadRequirement(file, requirementId, selectedSport);
+      await api.uploadRequirement(
+        file,
+        uploadedRequirementType,
+        selectedSport,
+        participationType,
+        uploadedCustomRequirementId,
+        uploadedCustomRequirementLabel
+      );
 
       if (isReuploadingRejected) {
         notify('success', 'Re-submission Successful', `✅ ${file.name} re-submitted successfully! Your updated document is now pending review.`);
@@ -430,7 +444,11 @@ export default function StudentRequirements() {
     try {
       setUploading(true);
       for (const [requirementId, file] of pendingUploads) {
-        await api.uploadRequirement(file, requirementId, selectedSport);
+        const matchingCard = [...customRequirementCards, ...persistedCustomRequirementCards].find((card) => card.id === requirementId);
+        const requirementType = matchingCard ? 'other' : requirementId;
+        const customRequirementId = matchingCard ? (matchingCard.customRequirementId || requirementId) : '';
+        const customRequirementLabel = matchingCard ? (matchingCard.customRequirementLabel || matchingCard.label || '') : '';
+        await api.uploadRequirement(file, requirementType, selectedSport, participationType, customRequirementId, customRequirementLabel);
       }
       notify('success', 'All Files Submitted', 'Your selected requirement files were uploaded successfully.');
       notifyRequirementUpdate();
@@ -459,22 +477,81 @@ export default function StudentRequirements() {
     }
   };
 
-  const getSubmissionForRequirement = (requirementId) => {
+  const addCustomRequirementCard = () => {
+    const requirementName = customRequirementModal?.requirementName?.trim();
+
+    if (!requirementName) {
+      notify('error', 'Requirement Name Required', 'Please enter a requirement name before continuing.');
+      return;
+    }
+
+    setCustomRequirementCards((prev) => {
+      const nextIndex = prev.filter((card) => card.participationType === participationType).length + 1;
+      const customId = `custom-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const label = requirementName || `Others Requirement ${nextIndex}`;
+      return [
+        ...prev,
+        {
+          id: customId,
+          label,
+          icon: '📄',
+          isCustom: true,
+          participationType,
+          customRequirementId: customId,
+          customRequirementLabel: label,
+        }
+      ];
+    });
+
+    setCustomRequirementModal(null);
+  };
+
+  const persistedCustomRequirementCards = (Array.isArray(submissions) ? submissions : [])
+    .filter((submission) => {
+      const hasCustomName = Boolean(submission?.customRequirementLabel && String(submission.customRequirementLabel).trim());
+      return (submission?.requirementType === 'other' || hasCustomName) && submission?.participationType === participationType;
+    })
+    .map((submission) => ({
+      id: submission.customRequirementId || submission._id || `custom-${submission.fileName || Date.now()}`,
+      label: submission.customRequirementLabel || 'Others Requirement',
+      icon: '📎',
+      isCustom: true,
+      requirementType: 'other',
+      customRequirementId: submission.customRequirementId || submission._id || '',
+      customRequirementLabel: submission.customRequirementLabel || 'Others Requirement',
+      savedFileName: submission.fileName || '',
+      savedSubmissionId: submission._id || ''
+    }))
+    .filter((card, index, list) => list.findIndex((entry) => entry.id === card.id) === index);
+
+  const visibleRequirementCards = participationType === 'Intrams'
+    ? [...requirementTypes, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: '➕', isAddCard: true }]
+    : [...requirementTypes, { id: 'tor', label: 'TOR – Upload Card', icon: '📄' }, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: '➕', isAddCard: true }];
+
+  const getSubmissionForRequirement = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
     return [...submissions]
-      .filter((sub) => sub.requirementType === requirementId)
+      .filter((sub) => {
+        if (sub.requirementType === requirementId) return true;
+        if (sub.requirementType === 'other') {
+          if (customRequirementId && (sub.customRequirementId === customRequirementId || sub._id === customRequirementId)) return true;
+          if (customRequirementLabel && sub.customRequirementLabel === customRequirementLabel) return true;
+          if (sub._id === requirementId) return true;
+        }
+        return false;
+      })
       .sort((a, b) => new Date(b.uploadDate || b.createdAt || 0) - new Date(a.uploadDate || a.createdAt || 0))[0] || null;
   };
 
-  const isRequirementSubmitted = (requirementId) => {
-    return Boolean(getSubmissionForRequirement(requirementId));
+  const isRequirementSubmitted = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
+    return Boolean(getSubmissionForRequirement(requirementId, customRequirementId, customRequirementLabel));
   };
 
-  const getSubmissionStatus = (requirementId) => {
-    return getSubmissionForRequirement(requirementId)?.status || null;
+  const getSubmissionStatus = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
+    return getSubmissionForRequirement(requirementId, customRequirementId, customRequirementLabel)?.status || null;
   };
 
-  const isUploadLocked = (requirementId) => {
-    const submission = getSubmissionForRequirement(requirementId);
+  const isUploadLocked = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
+    const submission = getSubmissionForRequirement(requirementId, customRequirementId, customRequirementLabel);
     const status = submission?.status;
     const reusable = submission?.requirementStatus === 'reusable' || submission?.isReusable || (submission?.requirementType === 'psa' && submission?.importedFromPreviousYear);
     return status === 'approved' && !reusable;
@@ -708,6 +785,54 @@ export default function StudentRequirements() {
         </div>
       )}
 
+      {customRequirementModal && (
+        <div className="modal-overlay" onClick={() => setCustomRequirementModal(null)}>
+          <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '430px' }}>
+            <div className="modal-header">
+              <h2>Add Requirement</h2>
+              <button className="modal-close-btn" onClick={() => setCustomRequirementModal(null)}>✕</button>
+            </div>
+            <div className="detail-modal-body">
+              <div style={{ marginBottom: '1rem' }}>
+                <label htmlFor="custom-requirement-name" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#3d1e1e' }}>
+                  Requirement Name
+                </label>
+                <input
+                  id="custom-requirement-name"
+                  type="text"
+                  value={customRequirementModal.requirementName}
+                  onChange={(e) => setCustomRequirementModal((prev) => ({ ...prev, requirementName: e.target.value }))}
+                  placeholder="Enter requirement name"
+                  style={{
+                    width: '100%',
+                    padding: '0.8rem 0.9rem',
+                    border: '1px solid #d5d7db',
+                    borderRadius: '8px',
+                    fontSize: '0.98rem',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div className="detail-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button className="detail-close-btn" onClick={() => setCustomRequirementModal(null)}>
+                  Cancel
+                </button>
+                <button
+                  className="upload-action-btn"
+                  onClick={addCustomRequirementCard}
+                  disabled={!customRequirementModal.requirementName?.trim()}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="requirements-page-content">
         <header className="requirements-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -886,36 +1011,83 @@ export default function StudentRequirements() {
                 <h3 className="section-title">📤 Upload New Requirement</h3>
                 <p className="section-subtitle">Select a requirement type and upload your document</p>
               </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 170 }}>
+                <select
+                  value={participationType}
+                  onChange={(e) => setParticipationType(e.target.value)}
+                  aria-label="Participation type"
+                  style={{
+                    appearance: 'none',
+                    background: '#fff',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 8,
+                    padding: '8px 32px 8px 12px',
+                    fontSize: 14,
+                    color: '#1f2937',
+                    fontWeight: 600,
+                    minWidth: 150,
+                    cursor: 'pointer',
+                    backgroundImage: "url(data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236b7280' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E)",
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 10px center'
+                  }}
+                >
+                  <option value="Intrams">Intrams</option>
+                  <option value="STRASUC">STRASUC</option>
+                </select>
+              </div>
             </div>
 
             <div className="upload-grid">
-              {requirementTypes.map(req => {
-                const isSubmitted = isRequirementSubmitted(req.id);
-                const submission = getSubmissionForRequirement(req.id);
-                const submissionStatus = getSubmissionStatus(req.id);
-                const locked = isUploadLocked(req.id);
+              {visibleRequirementCards.map((req) => {
+                if (req.isAddCard) {
+                  return (
+                    <div key={req.id} className="upload-card" style={{ cursor: 'pointer' }}>
+                      <div className="upload-icon">{req.icon}</div>
+                      <span className="upload-label">{req.label}</span>
+                      <button className="upload-action-btn" onClick={() => setCustomRequirementModal({ requirementName: '' })}>
+                        Add Requirement
+                      </button>
+                    </div>
+                  );
+                }
+
+                const isCustomCard = Boolean(req.isCustom);
+                const cardRequirementType = isCustomCard ? 'other' : req.id;
+                const cardCustomRequirementId = req.customRequirementId || req.id;
+                const cardCustomRequirementLabel = req.customRequirementLabel || req.label;
+                const isSubmitted = isRequirementSubmitted(isCustomCard ? 'other' : req.id, isCustomCard ? cardCustomRequirementId : '', isCustomCard ? cardCustomRequirementLabel : '');
+                const submission = getSubmissionForRequirement(isCustomCard ? 'other' : req.id, isCustomCard ? cardCustomRequirementId : '', isCustomCard ? cardCustomRequirementLabel : '');
+                const submissionStatus = getSubmissionStatus(isCustomCard ? 'other' : req.id, isCustomCard ? cardCustomRequirementId : '', isCustomCard ? cardCustomRequirementLabel : '');
+                const locked = isUploadLocked(isCustomCard ? 'other' : req.id, isCustomCard ? cardCustomRequirementId : '', isCustomCard ? cardCustomRequirementLabel : '');
                 const isRejected = submissionStatus === 'rejected';
                 const isReusable = submission?.requirementStatus === 'reusable' || submission?.isReusable || (submission?.requirementType === 'psa' && submission?.importedFromPreviousYear);
                 const canReplaceReusable = isReusable && !isRejected;
                 const rejectionReason = submission?.remarks || submission?.feedback || 'The screener marked this file as rejected. Please upload a corrected copy.';
                 const rejectionDate = submission?.reviewedAt ? new Date(submission.reviewedAt).toLocaleDateString() : 'Recently';
                 const reviewerName = submission?.reviewedBy?.fullname || 'Screener';
-                
+                const savedFileName = uploadedFiles[req.id]?.name || submission?.fileName || req.savedFileName || '';
+
                 return (
                   <div key={req.id} className={`upload-card ${isRejected ? 'rejected-state' : ''}`}>
                     <div className="upload-icon">{req.icon}</div>
                     <span className="upload-label">{req.label}</span>
-                    
-                    <input 
-                      type="file" 
-                      id={`input-${req.id}`} 
-                      className="hidden-file-input" 
-                      onChange={(e) => handleFileChange(req.id, e)}
+
+                    <input
+                      type="file"
+                      id={`input-${req.id}`}
+                      className="hidden-file-input"
+                      onChange={(e) => handleFileChange(req.id, e, isCustomCard ? {
+                        requirementType: 'other',
+                        customRequirementId: cardCustomRequirementId,
+                        customRequirementLabel: cardCustomRequirementLabel,
+                      } : {})}
                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
                       disabled={uploading || locked}
                     />
-                    <button 
-                      className="upload-action-btn" 
+                    <button
+                      className="upload-action-btn"
                       onClick={() => triggerFileInput(req.id)}
                       disabled={uploading || (locked && !canReplaceReusable)}
                     >
@@ -930,23 +1102,41 @@ export default function StudentRequirements() {
                         </p>
                       </div>
                     )}
-                    {uploadedFiles[req.id] && (
+                    {savedFileName && (
                       <div className="file-preview">
-                        <div className="file-name" title={uploadedFiles[req.id].name}>
-                          📎 {uploadedFiles[req.id].name}
+                        <div className="file-name" title={savedFileName}>
+                          📎 {savedFileName}
                         </div>
-                        <button 
-                          className="submit-single-btn" 
-                          onClick={() => {
-                            const file = uploadedFiles[req.id];
-                            const previewUrl = URL.createObjectURL(file);
-                            setConfirmUpload({ requirementId: req.id, file, previewUrl });
-                            setConfirmPreviewUrl(previewUrl);
-                          }}
-                          disabled={uploading}
-                        >
-                          {uploading ? 'Uploading...' : 'Review & Confirm'}
-                        </button>
+                        {!uploadedFiles[req.id] && submission && (
+                          <button
+                            className="submit-single-btn"
+                            onClick={() => triggerFileInput(req.id)}
+                            disabled={uploading}
+                          >
+                            {uploading ? 'Uploading...' : 'Replace File'}
+                          </button>
+                        )}
+                        {uploadedFiles[req.id] && (
+                          <button
+                            className="submit-single-btn"
+                            onClick={() => {
+                              const file = uploadedFiles[req.id];
+                              const previewUrl = URL.createObjectURL(file);
+                              setConfirmUpload({
+                                requirementId: req.id,
+                                file,
+                                previewUrl,
+                                requirementType: isCustomCard ? 'other' : req.id,
+                                customRequirementId: isCustomCard ? cardCustomRequirementId : '',
+                                customRequirementLabel: isCustomCard ? cardCustomRequirementLabel : '',
+                              });
+                              setConfirmPreviewUrl(previewUrl);
+                            }}
+                            disabled={uploading}
+                          >
+                            {uploading ? 'Uploading...' : 'Review & Confirm'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

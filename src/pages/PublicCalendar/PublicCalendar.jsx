@@ -29,12 +29,21 @@ export default function PublicCalendar() {
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const APPROVED_KEY = 'gymstatApprovedSchedules';
+  const REQUESTS_KEY = 'gymstatScheduleRequests';
   const [approvedSchedules, setApprovedSchedules] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(APPROVED_KEY) || 'null');
       return Array.isArray(stored) ? stored : RESERVATIONS;
     } catch (err) {
       return RESERVATIONS;
+    }
+  });
+  const [scheduleRequests, setScheduleRequests] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch (err) {
+      return [];
     }
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,6 +58,15 @@ export default function PublicCalendar() {
     }
   };
 
+  const loadScheduleRequests = () => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
+      if (Array.isArray(stored)) setScheduleRequests(stored);
+    } catch (err) {
+      // ignore
+    }
+  };
+
   const dispatchStorageUpdate = (key) => {
     if (typeof window === 'undefined') return;
     window.dispatchEvent(new CustomEvent('gymstatStorageUpdate', { detail: { key } }));
@@ -57,10 +75,12 @@ export default function PublicCalendar() {
   useEffect(() => {
     const storageHandler = (e) => {
       if (e.key === APPROVED_KEY) loadApprovedSchedules();
+      if (e.key === REQUESTS_KEY) loadScheduleRequests();
     };
 
     const customHandler = (e) => {
       if (e.detail?.key === APPROVED_KEY) loadApprovedSchedules();
+      if (e.detail?.key === REQUESTS_KEY) loadScheduleRequests();
     };
 
     window.addEventListener('storage', storageHandler);
@@ -111,10 +131,35 @@ export default function PublicCalendar() {
 
   const normalizeScheduleSource = (schedule) => {
     if (!schedule) return 'internal';
+    if (schedule.status === 'rejected') return 'rejected';
     if (schedule.fromRequest || schedule.source === 'public' || schedule.source === 'request' || schedule.requesterName) {
       return 'public';
     }
     return 'internal';
+  };
+
+  const rejectedRequestEntriesForDate = (dateStr) => {
+    return scheduleRequests
+      .filter((request) => String(request.status || '').toLowerCase() === 'rejected')
+      .filter((request) => isDateWithinScheduleWindow(
+        {
+          startDate: request.startDate,
+          endDate: request.endDate,
+          prepDays: request.prepDays || 0,
+        },
+        dateStr
+      ))
+      .map((request) => ({
+        ...request,
+        id: request.id || request._id,
+        event: request.eventName || request.event || 'Disapproved Request',
+        startTime: request.startTime || '08:00 AM',
+        endTime: request.endTime || '12:00 PM',
+        status: 'rejected',
+        source: 'public',
+        fromRequest: true,
+        rejectionReason: request.rejectionReason || 'Rejected by admin',
+      }));
   };
 
   const getScheduleConflict = (candidate, existing) => {
@@ -160,7 +205,10 @@ export default function PublicCalendar() {
   };
 
   const eventsOn = (dateStr) =>
-    sortEventsByTime(approvedSchedules.filter((schedule) => isDateWithinScheduleWindow(schedule, dateStr)));
+    sortEventsByTime([
+      ...approvedSchedules.filter((schedule) => isDateWithinScheduleWindow(schedule, dateStr)),
+      ...rejectedRequestEntriesForDate(dateStr),
+    ]);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); };
   const nextMonth = () => { if (month === 11) { setMonth(0);  setYear(y => y+1); } else setMonth(m => m+1); };
@@ -390,10 +438,14 @@ export default function PublicCalendar() {
           <div className={`pc-event-list ${evs.length >= 3 ? 'pc-event-list--scroll' : ''}`}>
             {evs.map((ev, i) => {
               const sourceClass = `pc-event-chip--${normalizeScheduleSource(ev)}`;
+              const sourceLabel = normalizeScheduleSource(ev) === 'rejected' ? 'Disapproved' : normalizeScheduleSource(ev) === 'public' ? 'Public' : 'Internal';
+              const chipTitle = normalizeScheduleSource(ev) === 'rejected'
+                ? `${ev.event}\n${ev.rejectionReason || 'Rejected by admin'}\n${ev.startTime} - ${ev.endTime}`
+                : `${ev.event}\n${ev.startTime} - ${ev.endTime}`;
               return (
-                <div key={i} className={`pc-event-chip ${sourceClass}`} title={`${ev.event}\n${ev.startTime} - ${ev.endTime}`}>
+                <div key={i} className={`pc-event-chip ${sourceClass}`} title={chipTitle}>
                   <span className="pc-event-chip__name">{ev.event.length > 18 ? ev.event.slice(0, 16)+'…' : ev.event}</span>
-                  <span className="pc-event-chip__source">{normalizeScheduleSource(ev) === 'public' ? 'Public' : 'Internal'}</span>
+                  <span className="pc-event-chip__source">{sourceLabel}</span>
                   <span className="pc-event-chip__time">{ev.startTime}</span>
                 </div>
               );
@@ -443,6 +495,7 @@ export default function PublicCalendar() {
           <div className="pc-legend">
             <span className="pc-legend__dot pc-legend__dot--internal" /> Internal booking
             <span className="pc-legend__dot pc-legend__dot--public" style={{marginLeft:14}} /> Public request
+            <span className="pc-legend__dot pc-legend__dot--rejected" style={{marginLeft:14}} /> Disapproved
             <span className="pc-legend__dot pc-legend__dot--today" style={{marginLeft:14}} /> Today
             <span className="pc-legend__hint">· Click a day to request a schedule for an open time slot</span>
           </div>
@@ -461,14 +514,27 @@ export default function PublicCalendar() {
               <button className="pcm-close" onClick={() => setModal(false)}>✕</button>
             </div>
 
-            {modalEvs.length > 0 && (
+            {modalEvs.filter((ev) => ev.status !== 'rejected').length > 0 && (
               <div className="pcm-warn">
                 <p className="pcm-warn__label">⚠️ Existing bookings for this day:</p>
-                {modalEvs.map(ev => (
+                {modalEvs.filter((ev) => ev.status !== 'rejected').map(ev => (
                   <div key={ev.id} className={`pcm-warn__item pcm-warn__item--${normalizeScheduleSource(ev)}`}>
                     <span className="pcm-warn__name">{ev.event}</span>
                     <span className="pcm-warn__meta">{normalizeScheduleSource(ev) === 'public' ? 'Public Request' : 'Internal Event'}</span>
                     <span className="pcm-warn__time">{ev.startTime} – {ev.endTime}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {modalEvs.filter((ev) => ev.status === 'rejected').length > 0 && (
+              <div className="pcm-warn pcm-warn--rejected">
+                <p className="pcm-warn__label">❌ Disapproved request(s):</p>
+                {modalEvs.filter((ev) => ev.status === 'rejected').map(ev => (
+                  <div key={ev.id} className="pcm-warn__item pcm-warn__item--rejected">
+                    <span className="pcm-warn__name">{ev.event}</span>
+                    <span className="pcm-warn__meta">Disapproved</span>
+                    <span className="pcm-warn__time">{ev.rejectionReason || 'Rejected by admin'}</span>
                   </div>
                 ))}
               </div>

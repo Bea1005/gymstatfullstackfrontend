@@ -481,11 +481,27 @@ export const reviewSubmission = async (submissionId, reviewData) => {
 // ========== STUDENT REQUIREMENT SUBMISSION ENDPOINTS ==========
 
 // Upload a new requirement file
-export const uploadRequirement = async (file, requirementType, sport = 'General') => {
+export const uploadRequirement = async (
+  file,
+  requirementType,
+  sport = 'General',
+  participationType = 'Intrams',
+  customRequirementId = '',
+  customRequirementLabel = ''
+) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('requirementType', requirementType);
   formData.append('sport', sport);
+  formData.append('participationType', participationType);
+
+  if (customRequirementId) {
+    formData.append('requirementId', customRequirementId);
+  }
+
+  if (customRequirementLabel) {
+    formData.append('customRequirementLabel', customRequirementLabel);
+  }
 
   return apiRequest('/student/requirements', {
     method: 'POST',

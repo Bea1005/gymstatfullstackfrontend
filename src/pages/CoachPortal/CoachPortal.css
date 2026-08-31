@@ -257,6 +257,27 @@
   border-top: 2px solid var(--form-black);
 }
 
+.staff-grid-row {
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.staff-grid-row > .grid-col,
+.staff-grid-row > .grid-placeholder-col,
+.staff-grid-row > .grid-freeform-col {
+  flex: 1 1 175px;
+  min-width: 175px;
+  max-width: 100%;
+}
+
+.staff-grid-row > .grid-logo-col {
+  flex: 0 0 13%;
+}
+
+.staff-add-col {
+  min-width: 175px;
+}
+
 /* --- logo column: logo on top (spanning label+photo height), then a
    stacked row-label rail below it (Name / Date of Birth / ... or
    Name / Age / Contact / Email) — matching the reference exactly --- */

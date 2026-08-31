@@ -66,6 +66,12 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   const [expandedRows, setExpandedRows] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedBorrowerDetails, setSelectedBorrowerDetails] = useState(null);
+  const [isEditingBorrower, setIsEditingBorrower] = useState(false);
+  const [borrowerEditForm, setBorrowerEditForm] = useState({
+    fullname: '',
+    contactNo: '',
+    facebookAccount: ''
+  });
   const dateInputRef = useRef(null);
 
   const normalizeEquipmentForBorrowing = (item) => {
@@ -153,12 +159,16 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   // Get available reference IDs for selected equipment (not currently borrowed)
   const getAvailableReferenceIds = (equipmentName) => {
     const equipmentRefs = equipmentWithRefs[equipmentName] || [];
-    
+
     const borrowedRefIds = records
       .filter(r => r.status === 'Out' && r.equipment === equipmentName)
       .flatMap(r => r.referenceIds || []);
-    
-    return equipmentRefs.filter(ref => !borrowedRefIds.includes(ref.id));
+
+    return equipmentRefs.filter(ref => {
+      if (!ref || !ref.id) return false;
+      if (borrowedRefIds.includes(ref.id)) return false;
+      return (ref.condition || 'Good') === 'Good';
+    });
   };
 
   const getAvailableQuantity = (equipmentName) => {
@@ -398,6 +408,58 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
     } catch (error) {
       console.error('Error undoing return:', error);
       setToast({ message: 'Failed to undo return', type: 'error' });
+    }
+  };
+
+  const openBorrowerEdit = (record) => {
+    setBorrowerEditForm({
+      fullname: record?.fullname || '',
+      contactNo: record?.contactNo || '',
+      facebookAccount: record?.facebookAccount || ''
+    });
+    setIsEditingBorrower(true);
+  };
+
+  const cancelBorrowerEdit = () => {
+    setIsEditingBorrower(false);
+    setBorrowerEditForm({ fullname: '', contactNo: '', facebookAccount: '' });
+  };
+
+  const saveBorrowerDetails = async () => {
+    if (!selectedBorrowerDetails) {
+      return;
+    }
+
+    const trimmedName = borrowerEditForm.fullname.trim();
+    if (!trimmedName) {
+      setToast({ message: 'Borrower name is required.', type: 'error' });
+      return;
+    }
+
+    try {
+      const updatedRecord = await updateBorrowingRecord(selectedBorrowerDetails.id || selectedBorrowerDetails._id, {
+        Name: trimmedName,
+        fullname: trimmedName,
+        contactNo: borrowerEditForm.contactNo.trim(),
+        facebookAccount: borrowerEditForm.facebookAccount.trim(),
+      });
+
+      await fetchData();
+      const refreshedRecord = updatedRecord || {
+        ...selectedBorrowerDetails,
+        fullname: trimmedName,
+        contactNo: borrowerEditForm.contactNo.trim(),
+        facebookAccount: borrowerEditForm.facebookAccount.trim(),
+        Name: trimmedName,
+      };
+
+      setSelectedBorrowerDetails(refreshedRecord);
+      setIsEditingBorrower(false);
+      setBorrowerEditForm({ fullname: '', contactNo: '', facebookAccount: '' });
+      setToast({ message: 'Borrower details updated successfully.', type: 'success' });
+    } catch (error) {
+      console.error('Error updating borrower details:', error);
+      setToast({ message: error.message || 'Failed to update borrower details.', type: 'error' });
     }
   };
 
@@ -943,35 +1005,74 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
               <h3 id="borrower-details-title">Borrower Details</h3>
             </div>
             <div className="modal-body" style={{ padding: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Name</label>
-                <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.fullname}</p>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Contact No.</label>
-                <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.contactNo || '—'}</p>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Facebook Account</label>
-                <p style={{ margin: 0, color: '#666' }}>
-                  {selectedBorrowerDetails.facebookAccount ? (
-                    <a 
-                      href={
-                        selectedBorrowerDetails.facebookAccount.startsWith('http') 
-                          ? selectedBorrowerDetails.facebookAccount 
-                          : `https://${selectedBorrowerDetails.facebookAccount}`
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: '#0066cc', textDecoration: 'underline' }}
-                    >
-                      {selectedBorrowerDetails.facebookAccount}
-                    </a>
-                  ) : '—'}
-                </p>
-              </div>
+              {!isEditingBorrower ? (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Name</label>
+                    <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.fullname}</p>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Contact No.</label>
+                    <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.contactNo || '—'}</p>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Facebook Account</label>
+                    <p style={{ margin: 0, color: '#666' }}>
+                      {selectedBorrowerDetails.facebookAccount ? (
+                        <a 
+                          href={
+                            selectedBorrowerDetails.facebookAccount.startsWith('http') 
+                              ? selectedBorrowerDetails.facebookAccount 
+                              : `https://${selectedBorrowerDetails.facebookAccount}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#0066cc', textDecoration: 'underline' }}
+                        >
+                          {selectedBorrowerDetails.facebookAccount}
+                        </a>
+                      ) : '—'}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Name</label>
+                    <input
+                      type="text"
+                      value={borrowerEditForm.fullname}
+                      onChange={(e) => setBorrowerEditForm(prev => ({ ...prev, fullname: e.target.value }))}
+                      className="bw-form-input"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Contact No.</label>
+                    <input
+                      type="text"
+                      value={borrowerEditForm.contactNo}
+                      onChange={(e) => setBorrowerEditForm(prev => ({ ...prev, contactNo: e.target.value }))}
+                      className="bw-form-input"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Facebook Account</label>
+                    <input
+                      type="text"
+                      value={borrowerEditForm.facebookAccount}
+                      onChange={(e) => setBorrowerEditForm(prev => ({ ...prev, facebookAccount: e.target.value }))}
+                      className="bw-form-input"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </>
+              )}
               
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Equipment</label>
@@ -1025,11 +1126,40 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
                 </div>
               )}
             </div>
-            <div className="modal-actions">
-              <button 
-                type="button" 
-                className="modal-btn modal-confirm" 
-                onClick={() => setSelectedBorrowerDetails(null)}
+            <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px' }}>
+              {!isEditingBorrower ? (
+                <button
+                  type="button"
+                  onClick={() => openBorrowerEdit(selectedBorrowerDetails)}
+                  className="modal-btn modal-confirm"
+                >
+                  Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={cancelBorrowerEdit}
+                    className="modal-btn modal-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveBorrowerDetails}
+                    className="modal-btn modal-confirm"
+                  >
+                    Save Changes
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedBorrowerDetails(null);
+                  cancelBorrowerEdit();
+                }}
+                className="modal-btn modal-secondary"
               >
                 Close
               </button>

@@ -53,6 +53,18 @@ const AdminSchedules = () => {
   const REQUESTS_KEY = 'gymstatScheduleRequests';
   const [confirmAction, setConfirmAction] = useState(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [selectedRejectReason, setSelectedRejectReason] = useState('');
+  const [additionalRejectReason, setAdditionalRejectReason] = useState('');
+  const REJECTION_REASONS = [
+    'Schedule conflict',
+    'Gymnasium already reserved',
+    'Requested time is unavailable',
+    'Requested date is unavailable',
+    'Incomplete request information',
+    'Request does not meet scheduling requirements',
+    'Maintenance or facility unavailable',
+    'Other'
+  ];
 
   const normalizeScheduleEntry = (schedule) => ({
     id: schedule?.id || schedule?._id || Date.now(),
@@ -277,16 +289,42 @@ const AdminSchedules = () => {
   };
 
   const promptApproveRequest = (id) => setConfirmAction({ type: 'approve', id });
-  const promptRejectRequest = (id) => setConfirmAction({ type: 'reject', id });
+  const promptRejectRequest = (id) => {
+    setSelectedRejectReason('');
+    setAdditionalRejectReason('');
+    setConfirmAction({ type: 'reject', id });
+  };
+
+  const getFinalRejectionReason = () => {
+    const selected = (confirmAction?.selectedReason || selectedRejectReason || '').trim();
+    const extra = (confirmAction?.additionalReason || additionalRejectReason || '').trim();
+
+    if (!selected) return '';
+    if (selected === 'Other') {
+      return extra ? `Other: ${extra}` : '';
+    }
+    return extra ? `${selected} - ${extra}` : selected;
+  };
 
   const performConfirmAction = async () => {
     if (!confirmAction) return;
     const { type, id } = confirmAction;
     const requests = [...scheduleRequests];
     const idx = requests.findIndex(r => r.id === id);
-    if (idx === -1) { setConfirmAction(null); return; }
+    if (idx === -1) {
+      setConfirmAction(null);
+      setSelectedRejectReason('');
+      setAdditionalRejectReason('');
+      return;
+    }
     const req = { ...requests[idx] };
-    
+    const finalReason = type === 'reject' ? getFinalRejectionReason() : '';
+
+    if (type === 'reject' && !finalReason) {
+      setToast({ message: 'Please select a valid rejection reason before continuing.', type: 'error' });
+      return;
+    }
+
     try {
       if (type === 'approve') {
         req.status = 'approved';
@@ -308,8 +346,13 @@ const AdminSchedules = () => {
       } else if (type === 'reject') {
         req.status = 'rejected';
         req.reviewedAt = new Date().toISOString();
+        req.rejectionReason = finalReason;
         
-        await api.updateScheduleRequest(id, { status: 'rejected', reviewedAt: req.reviewedAt });
+        await api.updateScheduleRequest(id, {
+          status: 'rejected',
+          reviewedAt: req.reviewedAt,
+          rejectionReason: finalReason
+        });
         
         requests[idx] = req;
         await saveScheduleRequests(requests);
@@ -318,7 +361,7 @@ const AdminSchedules = () => {
         sendMailToRequester(
           req.requesterEmail, 
           `Your schedule request for ${req.eventName} was rejected`, 
-          `Hello ${req.requesterName},\n\nYour schedule request for "${req.eventName}" on ${req.startDate} has been rejected.\n\nRegards,\nAdmin`
+          `Hello ${req.requesterName},\n\nYour schedule request for "${req.eventName}" on ${req.startDate} has been rejected.\n\nReason: ${finalReason}\n\nRegards,\nAdmin`
         );
       }
     } catch (err) {
@@ -327,6 +370,8 @@ const AdminSchedules = () => {
     }
     
     setConfirmAction(null);
+    setSelectedRejectReason('');
+    setAdditionalRejectReason('');
     await loadScheduleRequests();
   };
 
@@ -1100,10 +1145,58 @@ const AdminSchedules = () => {
         <ConfirmModal
           isOpen={!!confirmAction}
           title={confirmAction.type === 'approve' ? 'Approve Request' : 'Reject Request'}
-          message={`Are you sure you want to ${confirmAction.type} this schedule request?`}
+          message={confirmAction.type === 'approve' ? 'Are you sure you want to approve this schedule request?' : 'Please select a valid reason for rejection before continuing.'}
           onConfirm={performConfirmAction}
-          onCancel={() => setConfirmAction(null)}
-        />
+          onCancel={() => {
+            setConfirmAction(null);
+            setSelectedRejectReason('');
+            setAdditionalRejectReason('');
+          }}
+          confirmDisabled={confirmAction.type === 'reject' && !getFinalRejectionReason()}
+        >
+          {confirmAction.type === 'reject' && (
+            <div style={{ marginTop: 16 }}>
+              <label htmlFor="reject-reason-select" style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Reason for Rejection</label>
+              <select
+                id="reject-reason-select"
+                value={confirmAction.selectedReason || selectedRejectReason}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSelectedRejectReason(value);
+                  setConfirmAction((current) => current ? { ...current, selectedReason: value } : current);
+                  if (value !== 'Other') {
+                    setAdditionalRejectReason('');
+                    setConfirmAction((current) => current ? { ...current, additionalReason: '' } : current);
+                  }
+                }}
+                style={{ width: '100%', borderRadius: 8, border: '1px solid #d0d7de', padding: '10px 12px', fontSize: 14, marginBottom: 12 }}
+              >
+                <option value="">Select a reason</option>
+                {REJECTION_REASONS.map((reason) => (
+                  <option key={reason} value={reason}>{reason}</option>
+                ))}
+              </select>
+
+              {(confirmAction.selectedReason || selectedRejectReason) === 'Other' && (
+                <div>
+                  <label htmlFor="additional-reject-reason" style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Additional Reason</label>
+                  <textarea
+                    id="additional-reject-reason"
+                    rows={4}
+                    value={confirmAction.additionalReason || additionalRejectReason}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAdditionalRejectReason(value);
+                      setConfirmAction((current) => current ? { ...current, additionalReason: value } : current);
+                    }}
+                    placeholder="Provide the custom reason for this rejection"
+                    style={{ width: '100%', resize: 'vertical', borderRadius: 8, border: '1px solid #d0d7de', padding: 10, fontSize: 14 }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </ConfirmModal>
       )}
 
       {/* Cancel Approved Schedule Confirmation Modal */}
