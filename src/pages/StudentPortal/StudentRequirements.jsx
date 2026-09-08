@@ -601,7 +601,7 @@ export default function StudentRequirements() {
       const token = sessionStorage.getItem('token') || localStorage.getItem('token');
       const headers = token ? { Authorization: 'Bearer ' + token } : {};
       const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
-      const fullUrl = `${apiBaseUrl}/student/requirements/${req._id}/download`;
+      const fullUrl = `${apiBaseUrl}/requirements/${req._id}/download`;
       const response = await fetch(fullUrl, { method: 'GET', headers });
 
       if (!response.ok) {
