@@ -11,6 +11,17 @@ import * as api from '../../services/api';
 import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import './ScreenerPage.css';
 
+const configuredApiUrl = import.meta.env.VITE_API_URL || '/api';
+const backendOrigin = configuredApiUrl
+  .replace(/\/api\/v1\/?$/, '')
+  .replace(/\/$/, '');
+
+const resolveAttachmentUrl = (fileUrl) => {
+  if (!fileUrl) return '';
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+  return `${backendOrigin}${fileUrl}`;
+};
+
 const ScreenerPage = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
@@ -252,7 +263,7 @@ const ScreenerPage = () => {
     if (entry?.resubmitted && entry.submissionId) {
       await markResubmissionViewed(entry.submissionId);
     }
-    setViewerSrc(entry?.fileUrl || fallbackSrc);
+    setViewerSrc(entry?.fileUrl ? resolveAttachmentUrl(entry.fileUrl) : fallbackSrc);
     setViewerName(entry?.fileName || fallbackName);
     setViewerOpen(true);
   };
@@ -408,7 +419,7 @@ const ScreenerPage = () => {
   if (currentView === 'view-details' && selectedStudent) {
     const requirementCards = requirementsTemplates.map((req) => {
       const entry = selectedStudent.requirements?.[req.id === 'med' ? 'med' : req.id] || null;
-      const viewerSrc = entry?.fileUrl ? entry.fileUrl : req.imgUrl;
+      const viewerSrc = entry?.fileUrl ? resolveAttachmentUrl(entry.fileUrl) : req.imgUrl;
       const viewerName = entry?.fileName || req.title;
       return { ...req, entry, viewerSrc, viewerName };
     });
