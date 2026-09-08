@@ -1,6 +1,12 @@
 // src/services/api.js
 // Use Vite proxy for development, full URL for production
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+const configuredApiUrl = import.meta.env.VITE_API_URL || '/api';
+
+if (import.meta.env.PROD && /^http:\/\//i.test(configuredApiUrl)) {
+  throw new Error('VITE_API_URL must use HTTPS in production');
+}
+
+const API_URL = configuredApiUrl;
 
 // List of public endpoints that don't require authentication
 const PUBLIC_ENDPOINTS = [
