@@ -600,7 +600,8 @@ export default function StudentRequirements() {
       // Directly call the published requirement download endpoint (bypass api helper to ensure correct route)
       const token = sessionStorage.getItem('token') || localStorage.getItem('token');
       const headers = token ? { Authorization: 'Bearer ' + token } : {};
-      const fullUrl = `/api/requirements/${req._id}/download`;
+      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
+      const fullUrl = `${apiBaseUrl}/student/requirements/${req._id}/download`;
       const response = await fetch(fullUrl, { method: 'GET', headers });
 
       if (!response.ok) {
@@ -668,7 +669,8 @@ export default function StudentRequirements() {
 
       const token = sessionStorage.getItem('token') || localStorage.getItem('token');
       const headers = token ? { Authorization: 'Bearer ' + token } : {};
-      const fullUrl = `/api/student/requirements/${submission._id}/download`;
+      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
+      const fullUrl = `${apiBaseUrl}/student/requirements/${submission._id}/download`;
       const response = await fetch(fullUrl, { method: 'GET', headers });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
