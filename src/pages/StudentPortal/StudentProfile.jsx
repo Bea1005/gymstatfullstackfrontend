@@ -4,6 +4,25 @@ import { useNotifications } from "../../components/NotificationProvider";
 import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import "./StudentProfile.css";
 
+const normalizeDateForInput = (value) => {
+  if (!value) return "";
+  const dateText = String(value).trim();
+  const dateOnly = dateText.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (dateOnly) return dateOnly;
+
+  const parsedDate = new Date(dateText);
+  return Number.isNaN(parsedDate.getTime()) ? "" : parsedDate.toISOString().slice(0, 10);
+};
+
+const getProfilePhotoUrl = (profilePhoto) => {
+  if (!profilePhoto) return "";
+  if (/^https?:\/\//i.test(profilePhoto)) return profilePhoto;
+
+  const configuredApiUrl = import.meta.env.VITE_API_URL || "";
+  const backendOrigin = configuredApiUrl.match(/^(https?:\/\/[^/]+)/i)?.[1];
+  return backendOrigin ? `${backendOrigin}${profilePhoto}` : profilePhoto;
+};
+
 const StudentProfile = () => {
   const { notify } = useNotifications();
   const [user, setUser] = useState(null);
@@ -25,7 +44,7 @@ const StudentProfile = () => {
           username: profile.username || "",
           email: profile.email || "",
           contactNumber: profile.contactNumber || "",
-          dateOfBirth: profile.dateOfBirth || profile.dob || "",
+          dateOfBirth: normalizeDateForInput(profile.dateOfBirth || profile.dob),
           department: profile.department || "",
           yearLevel: profile.yearLevel || "",
           sport: profile.sport || "",
@@ -47,7 +66,11 @@ const StudentProfile = () => {
 
     try {
       const formData = new FormData();
-      Object.entries(form).forEach(([field, value]) => formData.append(field, value));
+      Object.entries(form).forEach(([field, value]) => {
+        if (value !== "" && value !== null && value !== undefined) {
+          formData.append(field, value);
+        }
+      });
       if (photoFile) formData.append("profilePhoto", photoFile);
 
       await api.updateProfile(formData);
@@ -97,10 +120,11 @@ const StudentProfile = () => {
     ["Username", "username", true],
   ];
 
-  const imageUrl = user.profilePhoto
-    ? `${user.profilePhoto}${user.profilePhoto.startsWith("http") ? "" : `?v=${encodeURIComponent(user.updatedAt || "")}`}`
+  const imageUrl = getProfilePhotoUrl(user.profilePhoto);
+  const imageUrlWithCacheBuster = imageUrl
+    ? `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(user.updatedAt || "")}`
     : "";
-  const displayedImage = photoPreview || imageUrl;
+  const displayedImage = photoPreview || imageUrlWithCacheBuster;
 
   return (
     <div className="student-profile-page">
@@ -143,7 +167,7 @@ const StudentProfile = () => {
                     ))}
                   </select>
                 ) : (
-                  <input className="student-profile-input" value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))} required={value === "fullname"} />
+                  <input className="student-profile-input" type={value === "dateOfBirth" ? "date" : "text"} value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))} required={value === "fullname"} />
                 )
                 ) : <strong>{value === "department" ? displayValue(departmentDisplay) : displayValue(editable ? form[value] : value)}</strong>}
               </div>

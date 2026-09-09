@@ -12,14 +12,24 @@ import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../con
 import './ScreenerPage.css';
 
 const configuredApiUrl = import.meta.env.VITE_API_URL || '/api';
-const backendOrigin = configuredApiUrl
-  .replace(/\/api\/v1\/?$/, '')
-  .replace(/\/$/, '');
 
 const resolveAttachmentUrl = (fileUrl) => {
   if (!fileUrl) return '';
   if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-  return `${backendOrigin}${fileUrl}`;
+  return `${configuredApiUrl.replace(/\/$/, '')}/${fileUrl.replace(/^\//, '')}`;
+};
+
+const loadAttachmentBlobUrl = async (fileUrl) => {
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const response = await fetch(resolveAttachmentUrl(fileUrl), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to load uploaded file');
+  }
+
+  return URL.createObjectURL(await response.blob());
 };
 
 const ScreenerPage = () => {
@@ -263,7 +273,15 @@ const ScreenerPage = () => {
     if (entry?.resubmitted && entry.submissionId) {
       await markResubmissionViewed(entry.submissionId);
     }
-    setViewerSrc(entry?.fileUrl ? resolveAttachmentUrl(entry.fileUrl) : fallbackSrc);
+    try {
+      const attachmentUrl = entry?.fileUrl
+        ? await loadAttachmentBlobUrl(entry.fileUrl)
+        : fallbackSrc;
+      setViewerSrc(attachmentUrl);
+    } catch (error) {
+      notify('screener-error', 'Unable to open file', error.message);
+      return;
+    }
     setViewerName(entry?.fileName || fallbackName);
     setViewerOpen(true);
   };
@@ -419,7 +437,7 @@ const ScreenerPage = () => {
   if (currentView === 'view-details' && selectedStudent) {
     const requirementCards = requirementsTemplates.map((req) => {
       const entry = selectedStudent.requirements?.[req.id === 'med' ? 'med' : req.id] || null;
-      const viewerSrc = entry?.fileUrl ? resolveAttachmentUrl(entry.fileUrl) : req.imgUrl;
+      const viewerSrc = req.imgUrl;
       const viewerName = entry?.fileName || req.title;
       return { ...req, entry, viewerSrc, viewerName };
     });
