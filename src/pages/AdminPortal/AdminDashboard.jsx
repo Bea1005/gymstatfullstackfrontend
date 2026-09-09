@@ -23,20 +23,29 @@ const AdminDashboard = () => {
         const data = await api.getAdminDashboard();
         if (!mounted) return;
 
+        const [scheduleResult, pendingRequestResult] = await Promise.allSettled([
+          api.getSchedules(),
+          api.getScheduleRequests({ status: 'pending' })
+        ]);
+
         setStats({
           totalUsers: Number(data.totalUsers) || 0,
           totalEquipments: Number(data.totalEquipments) || 0,
           borrowedItems: Number(data.borrowedItems) || 0,
-          pendingReqs: Number(data.pendingRequirements) || 0,
+          pendingReqs: pendingRequestResult.status === 'fulfilled'
+            ? getPendingRequestCount(pendingRequestResult.value)
+            : Number(data.pendingRequirements) || 0,
         });
 
         setActivities(Array.isArray(data.activities) && data.activities.length > 0 ? data.activities : DEMO_ACTIVITIES);
-        setSchedules(Array.isArray(data.upcomingSchedules) && data.upcomingSchedules.length > 0 ? data.upcomingSchedules : DEMO_SCHEDULES);
+        setSchedules(scheduleResult.status === 'fulfilled'
+          ? getUpcomingSchedules(scheduleResult.value)
+          : []);
       } catch (error) {
         if (!mounted) return;
         console.warn('Admin dashboard fetch error:', error);
         setActivities(DEMO_ACTIVITIES);
-        setSchedules(DEMO_SCHEDULES);
+        setSchedules([]);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -97,7 +106,7 @@ const AdminDashboard = () => {
           { label: "TOTAL USER",       value: stats.totalUsers,      icon: <IconUsers />,    path: "/admin/student-athletes" },
           { label: "TOTAL EQUIPMENT",  value: stats.totalEquipments, icon: <IconEquip />,    path: "/admin/equipments" },
           { label: "BORROWED ITEMS",   value: stats.borrowedItems,   icon: <IconBorrow />,   path: "/admin/borrowing" },
-          { label: "PENDING REQS",     value: stats.pendingReqs,     icon: <IconReqs />,     path: "/admin/requirements" },
+          { label: "PENDING REQS",     value: stats.pendingReqs,     icon: <IconReqs />,     path: "/admin/schedules" },
         ].map((s) => (
           <div key={s.label} className="db-stat-card" onClick={() => navigate(s.path)}>
             <div className="db-stat-card__left">
@@ -130,6 +139,7 @@ const AdminDashboard = () => {
         <div className="db-panel">
           <h3 className="db-panel__title">Upcoming Schedules</h3>
           <div className="db-schedule-list">
+            {schedules.length === 0 && <p className="db-schedule-date">No upcoming approved schedules.</p>}
             {schedules.map((s) => {
               const scheduleTitle = s.event || s.title || 'Untitled Schedule';
               const scheduleDate = s.startDate
@@ -164,6 +174,52 @@ const AdminDashboard = () => {
   );
 };
 
+const getPendingRequestCount = (response) => {
+  const requests = Array.isArray(response?.data) ? response.data : [];
+  return requests.filter((request) => String(request.status || '').toLowerCase() === 'pending').length;
+};
+
+const parseScheduleDateTime = (dateValue, timeValue, endOfDay = false) => {
+  if (!dateValue) return null;
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+
+  if (!timeValue) {
+    date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, 999);
+    return date;
+  }
+
+  const timeMatch = String(timeValue).trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if (!timeMatch) return date;
+
+  let hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  const meridiem = timeMatch[3]?.toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+};
+
+const getUpcomingSchedules = (response) => {
+  const schedules = Array.isArray(response?.data) ? response.data : [];
+  const now = new Date();
+
+  return schedules
+    .filter((schedule) => String(schedule.status || '').toLowerCase() === 'active')
+    .filter((schedule) => {
+      const endDate = schedule.endDate || schedule.startDate;
+      const end = parseScheduleDateTime(endDate, schedule.endTime, true);
+      return end && end >= now;
+    })
+    .sort((first, second) => {
+      const firstStart = parseScheduleDateTime(first.startDate, first.startTime) || new Date(0);
+      const secondStart = parseScheduleDateTime(second.startDate, second.startTime) || new Date(0);
+      return firstStart - secondStart;
+    })
+    .slice(0, 10);
+};
+
 /* ── Demo data ── */
 const DEMO_ACTIVITIES = [
   { id: 1, action: "New athlete registered: Juan Dela Cruz",       time: "2 hours ago" },
@@ -171,12 +227,6 @@ const DEMO_ACTIVITIES = [
   { id: 3, action: "Schedule updated: Basketball Practice",        time: "Yesterday"   },
   { id: 4, action: "Requirement submitted: Medical Certificate",   time: "2 days ago"  },
 ];
-const DEMO_SCHEDULES = [
-  { id: 1, title: "Basketball Practice", date: "2026-03-28", time: "08:00 AM" },
-  { id: 2, title: "Swimming Tryouts",    date: "2026-03-29", time: "10:00 AM" },
-  { id: 3, title: "Coaches Meeting",     date: "2026-03-30", time: "02:00 PM" },
-];
-
 /* ── Inline SVG icons ── */
 function IconUsers() {
   return (
