@@ -104,7 +104,24 @@ const apiRequest = async (endpoint, options = {}) => {
     console.log(`📡 Response: ${response.status}`, data);
     
     if (!response.ok) {
-      throw new Error(data.message || data.error || `Server error: ${response.status}`);
+      if (response.status === 401 && !isPublic && typeof window !== 'undefined') {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('role');
+        sessionStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('role');
+        localStorage.removeItem('user');
+        if (window.location.pathname !== '/login') {
+          window.location.assign('/login?session=expired');
+        }
+      }
+
+      const serverMessage = typeof data === 'object' && data !== null
+        ? data.message || data.error
+        : '';
+      throw new Error(serverMessage || (response.status >= 500
+        ? 'The service is temporarily unavailable. Please try again.'
+        : `Request failed (${response.status}). Please check your information and try again.`));
     }
     
     return data;
