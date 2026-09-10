@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { jsPDF } from 'jspdf';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getEquipment, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
@@ -335,6 +334,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
   const generateEquipmentReport = async (filter) => {
     try {
+      const { jsPDF } = await import('jspdf');
       const response = await getEquipment();
       const allEquipment = Array.isArray(response?.data) ? response.data : [];
 

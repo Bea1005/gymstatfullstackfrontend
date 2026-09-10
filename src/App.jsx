@@ -1,41 +1,43 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SplashScreen from "./pages/SplashScreen/SplashScreen";
 import OnboardingScreen from "./pages/SplashScreen/OnboardingScreen";
 import LoginPage from "./pages/LoginSignup/LoginPage";
 import RegisterPage from "./pages/LoginSignup/RegisterPage";
-import PublicCalendar from "./pages/PublicCalendar/PublicCalendar";
 import DocumentCenter from "./pages/SplashScreen/DocumentCenter";
 
 // Student Portal Pages
-import StudentLayout from "./pages/StudentPortal/StudentLayout";
-import StudentHomePage from "./pages/StudentPortal/StudentHome";
-import StudentRequirements from "./pages/StudentPortal/StudentRequirements";
-import StudentProfile from "./pages/StudentPortal/StudentProfile";
-import StudentSettings from "./pages/StudentPortal/StudentSettings";
+const PublicCalendar = lazy(() => import("./pages/PublicCalendar/PublicCalendar"));
+const StudentLayout = lazy(() => import("./pages/StudentPortal/StudentLayout"));
+const StudentHomePage = lazy(() => import("./pages/StudentPortal/StudentHome"));
+const StudentRequirements = lazy(() => import("./pages/StudentPortal/StudentRequirements"));
+const StudentProfile = lazy(() => import("./pages/StudentPortal/StudentProfile"));
+const StudentSettings = lazy(() => import("./pages/StudentPortal/StudentSettings"));
 
 // Admin Portal Pages
-import AdminLayout from "./pages/AdminPortal/AdminLayout";
-import AdminDashboard from "./pages/AdminPortal/AdminDashboard";
-import AdminUserRecords from "./pages/AdminPortal/AdminUserRecords";
-import AdminRequirements from "./pages/AdminPortal/AdminRequirements";
-import AdminSchedules from "./pages/AdminPortal/AdminSchedules";
-import AdminEquipments from "./pages/AdminPortal/AdminEquipments";
-import AdminBorrowing from "./pages/AdminPortal/AdminBorrowing";
-import AdminSettings from "./pages/AdminPortal/AdminSettings";
+const AdminLayout = lazy(() => import("./pages/AdminPortal/AdminLayout"));
+const AdminDashboard = lazy(() => import("./pages/AdminPortal/AdminDashboard"));
+const AdminUserRecords = lazy(() => import("./pages/AdminPortal/AdminUserRecords"));
+const AdminRequirements = lazy(() => import("./pages/AdminPortal/AdminRequirements"));
+const AdminSchedules = lazy(() => import("./pages/AdminPortal/AdminSchedules"));
+const AdminEquipments = lazy(() => import("./pages/AdminPortal/AdminEquipments"));
+const AdminBorrowing = lazy(() => import("./pages/AdminPortal/AdminBorrowing"));
+const AdminSettings = lazy(() => import("./pages/AdminPortal/AdminSettings"));
 
 // Coach Portal Pages - Only Home Page
-import CoachLayout from "./pages/CoachPortal/CoachLayout";
-import CoachRecords from "./pages/CoachPortal/CoachRecords";
+const CoachLayout = lazy(() => import("./pages/CoachPortal/CoachLayout"));
+const CoachRecords = lazy(() => import("./pages/CoachPortal/CoachRecords"));
 
 // Screener Portal Pages
-import ScreenerPage from "./pages/ScreenerPortal/ScreenerPage";
+const ScreenerPage = lazy(() => import("./pages/ScreenerPortal/ScreenerPage"));
 
 function App() {
   console.log("App is rendering!");
   
   return (
     <Router>
-      <Routes>
+      <Suspense fallback={null}>
+        <Routes>
         {/* Public Routes */}
         <Route path="/" element={<SplashScreen />} />
         <Route path="/onboarding" element={<OnboardingScreen />} />
@@ -80,7 +82,8 @@ function App() {
 
         {/* Catch-all route for 404 */}
         <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+        </Routes>
+      </Suspense>
     </Router>
   );
 }
