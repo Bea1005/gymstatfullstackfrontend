@@ -1,6 +1,6 @@
 // src/services/api.js
 // Use Vite proxy for development, full URL for production
-const configuredApiUrl = import.meta.env.VITE_API_URL || '/api';
+const configuredApiUrl = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/+$/, '');
 
 if (import.meta.env.PROD && /^http:\/\//i.test(configuredApiUrl)) {
   throw new Error('VITE_API_URL must use HTTPS in production');
