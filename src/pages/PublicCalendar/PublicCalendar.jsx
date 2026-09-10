@@ -5,13 +5,6 @@ import * as api from '../../services/api';
 import './PublicCalendar.css';
 import gymBackground from '../../assets/gym-background.jpg';
 
-const RESERVATIONS = [
-  { id: 1, event: 'Acquaintance Party', startDate: '2026-03-25', endDate: '2026-03-25', startTime: '01:00 PM', endTime: '05:00 PM' },
-  { id: 2, event: 'CICS WEEK 2026',     startDate: '2026-04-10', endDate: '2026-04-10', startTime: '08:00 AM', endTime: '12:00 PM' },
-  { id: 3, event: 'Basketball Intrams', startDate: '2026-05-20', endDate: '2026-05-22', startTime: '07:00 AM', endTime: '06:00 PM' },
-  { id: 4, event: 'Volleyball Finals',  startDate: '2026-05-28', endDate: '2026-05-28', startTime: '09:00 AM', endTime: '05:00 PM' },
-];
-
 const TIMES = [
   '12:00 AM','01:00 AM','02:00 AM','03:00 AM','04:00 AM','05:00 AM',
   '06:00 AM','07:00 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM',
@@ -30,31 +23,25 @@ export default function PublicCalendar() {
   const [month, setMonth] = useState(today.getMonth());
   const APPROVED_KEY = 'gymstatApprovedSchedules';
   const REQUESTS_KEY = 'gymstatScheduleRequests';
-  const [approvedSchedules, setApprovedSchedules] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(APPROVED_KEY) || 'null');
-      return Array.isArray(stored) ? stored : RESERVATIONS;
-    } catch (err) {
-      return RESERVATIONS;
-    }
-  });
+  const [approvedSchedules, setApprovedSchedules] = useState([]);
   const [scheduleRequests, setScheduleRequests] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
       return Array.isArray(stored) ? stored : [];
-    } catch (err) {
+    } catch {
       return [];
     }
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileLoadPending, setFileLoadPending] = useState(false);
 
-  const loadApprovedSchedules = () => {
+  const loadApprovedSchedules = async () => {
     try {
-      const stored = JSON.parse(localStorage.getItem(APPROVED_KEY) || 'null');
-      if (Array.isArray(stored)) setApprovedSchedules(stored);
-    } catch (err) {
-      // ignore
+      const response = await api.getSchedules({ status: 'active' });
+      const schedules = Array.isArray(response?.data) ? response.data : [];
+      setApprovedSchedules(schedules);
+    } catch {
+      setApprovedSchedules([]);
     }
   };
 
@@ -62,17 +49,14 @@ export default function PublicCalendar() {
     try {
       const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
       if (Array.isArray(stored)) setScheduleRequests(stored);
-    } catch (err) {
+    } catch {
       // ignore
     }
   };
 
-  const dispatchStorageUpdate = (key) => {
-    if (typeof window === 'undefined') return;
-    window.dispatchEvent(new CustomEvent('gymstatStorageUpdate', { detail: { key } }));
-  };
-
   useEffect(() => {
+    loadApprovedSchedules();
+
     const storageHandler = (e) => {
       if (e.key === APPROVED_KEY) loadApprovedSchedules();
       if (e.key === REQUESTS_KEY) loadScheduleRequests();
