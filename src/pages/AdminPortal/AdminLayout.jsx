@@ -80,7 +80,7 @@ const AdminLayout = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
       localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
+      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* session storage may be unavailable */ }
       navigate('/login', { replace: true });
     }
   }, [navigate]);
@@ -94,7 +94,7 @@ const AdminLayout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     localStorage.removeItem('user');
-    try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
+    try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* session storage may be unavailable */ }
     navigate('/login');
   };
 
@@ -110,7 +110,7 @@ const AdminLayout = () => {
         type="button"
         className="admin-mobile-toggle"
         onClick={() => setMobileOpen((previous) => !previous)}
-        aria-label="Toggle admin navigation"
+        aria-label={mobileOpen ? 'Close admin navigation' : 'Open admin navigation'}
         aria-expanded={mobileOpen}
       >
         ☰

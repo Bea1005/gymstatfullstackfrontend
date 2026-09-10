@@ -201,6 +201,19 @@ const AdminSchedules = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      if (confirmAction) return;
+      if (showModal) setShowModal(false);
+      else if (showNotAvailableModal) setShowNotAvailableModal(false);
+      else if (requestPanelOpen) closeRequestPanel();
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [confirmAction, requestPanelOpen, showModal, showNotAvailableModal]);
+
   const saveScheduleRequests = async (requests) => {
     try {
       localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
@@ -373,20 +386,6 @@ const AdminSchedules = () => {
     setSelectedRejectReason('');
     setAdditionalRejectReason('');
     await loadScheduleRequests();
-  };
-
-  const addApprovedSchedule = (req) => {
-    const newSched = {
-      id: Date.now(),
-      event: req.eventName,
-      startDate: req.startDate,
-      endDate: req.endDate,
-      prepDays: Number(req.prepDays || 0) || 0,
-      startTime: req.startTime,
-      endTime: req.endTime,
-    };
-    const updated = [newSched, ...reservations];
-    saveApprovedSchedules(updated);
   };
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -745,6 +744,15 @@ const AdminSchedules = () => {
         key={day} 
         className={`calendar-day ${hasEvent ? 'has-event' : ''} ${sourceClass}`.trim()}
         onClick={() => handleDateClick(day)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleDateClick(day);
+          }
+        }}
+        role="button"
+        tabIndex="0"
+        aria-label={`${dateStr}${hasEvent ? `, ${eventsOnDate.length} scheduled event${eventsOnDate.length === 1 ? '' : 's'}` : ', available for scheduling'}`}
       >
         <span className="day-number">{day}</span>
         {hasEvent && (
@@ -807,12 +815,12 @@ const AdminSchedules = () => {
       {/* Calendar Section */}
       <div className="calendar-container">
         <div className="calendar-header">
-          <button onClick={handlePrevMonth} className="calendar-nav-btn">◀ Previous</button>
+          <button type="button" onClick={handlePrevMonth} className="calendar-nav-btn" aria-label="View previous month">◀ Previous</button>
           <div className="calendar-title-group">
             <h2>{monthNames[currentMonth]} {currentYear}</h2>
-            <button onClick={handleDownloadCalendar} className="download-calendar-btn">Download Calendar</button>
+            <button type="button" onClick={handleDownloadCalendar} className="download-calendar-btn">Download Calendar</button>
           </div>
-          <button onClick={handleNextMonth} className="calendar-nav-btn">Next ▶</button>
+          <button type="button" onClick={handleNextMonth} className="calendar-nav-btn" aria-label="View next month">Next ▶</button>
         </div>
         
         <div className="calendar-weekdays">
@@ -858,8 +866,8 @@ const AdminSchedules = () => {
                       <td>{res.endDate}</td>
                       <td>{res.startTime} - {res.endTime}</td>
                       <td style={{textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap'}}>
-                        <button className="btn-edit-action" onClick={() => handleEdit(res)}>Edit</button>
-                        <button className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel</button>
+                        <button type="button" className="btn-edit-action" onClick={() => handleEdit(res)}>Edit schedule</button>
+                        <button type="button" className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel schedule</button>
                       </td>
                     </tr>
                   ))
@@ -877,9 +885,9 @@ const AdminSchedules = () => {
       {/* Create Schedule Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content schedule-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content schedule-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>
+              <h3 id="schedule-modal-title">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                   <line x1="16" y1="2" x2="16" y2="6" />
@@ -891,13 +899,14 @@ const AdminSchedules = () => {
                 </svg>
                 {formData.id ? 'Edit Schedule' : 'Create Schedule'} for {selectedDate}
               </h3>
-              <button className="close-modal" onClick={() => setShowModal(false)}>×</button>
+              <button type="button" className="close-modal" onClick={() => setShowModal(false)} aria-label="Close schedule form">×</button>
             </div>
             
             <form onSubmit={handleSave} className="modal-form">
               <div className="form-group full-width">
-                <label>Event Name *</label>
+                <label htmlFor="schedule-event">Event name <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                 <input 
+                  id="schedule-event"
                   type="text" 
                   placeholder="e.g., Basketball Tournament" 
                   value={formData.event} 
@@ -908,8 +917,9 @@ const AdminSchedules = () => {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Start Date *</label>
+                  <label htmlFor="schedule-start-date">Start date <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <input 
+                    id="schedule-start-date"
                     type="date" 
                     value={formData.startDate} 
                     onChange={(e) => setFormData({...formData, startDate: e.target.value})} 
@@ -917,8 +927,9 @@ const AdminSchedules = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Start Time *</label>
+                  <label htmlFor="schedule-start-time">Start time <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <select 
+                    id="schedule-start-time"
                     value={formData.startTime} 
                     onChange={(e) => setFormData({...formData, startTime: e.target.value})}
                     required
@@ -930,8 +941,9 @@ const AdminSchedules = () => {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>End Date *</label>
+                  <label htmlFor="schedule-end-date">End date <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <input 
+                    id="schedule-end-date"
                     type="date" 
                     value={formData.endDate} 
                     onChange={(e) => setFormData({...formData, endDate: e.target.value})} 
@@ -939,8 +951,9 @@ const AdminSchedules = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>End Time *</label>
+                  <label htmlFor="schedule-end-time">End time <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <select 
+                    id="schedule-end-time"
                     value={formData.endTime} 
                     onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                     required
@@ -952,8 +965,9 @@ const AdminSchedules = () => {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Prep Day(s)</label>
+                  <label htmlFor="schedule-prep-days">Preparation days</label>
                   <input
+                    id="schedule-prep-days"
                     type="number"
                     min="0"
                     value={formData.prepDays || 0}
@@ -962,7 +976,7 @@ const AdminSchedules = () => {
                   <small>Days before event for setup</small>
                 </div>
                 <div className="form-group">
-                  <label />
+                  <span aria-hidden="true" />
                 </div>
               </div>
 

@@ -2604,3 +2604,152 @@
   height: 100%;
   min-height: 44px;
 }
+
+/* Usability and accessibility refinements */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid #9b6500;
+  outline-offset: 2px;
+}
+
+.calendar-day[role="button"] {
+  outline: none;
+}
+
+.calendar-day[role="button"]:focus-visible {
+  border-color: #9b6500;
+  box-shadow: 0 0 0 3px rgba(155, 101, 0, 0.35);
+}
+
+.modal-form .form-group small {
+  color: #555;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.close-modal,
+.close-modal-large {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .admin-page-content {
+    padding: 16px 12px;
+  }
+
+  .main-title {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .header-actions,
+  .header-actions > button,
+  .calendar-nav-btn,
+  .download-calendar-btn {
+    width: 100%;
+  }
+
+  .calendar-container {
+    padding: 12px;
+  }
+
+  .calendar-header {
+    align-items: stretch;
+  }
+
+  .calendar-title-group {
+    order: -1;
+  }
+
+  .calendar-grid {
+    min-width: 0;
+    grid-auto-rows: minmax(82px, auto);
+    gap: 4px;
+  }
+
+  .calendar-day {
+    height: auto;
+    min-height: 82px;
+    padding: 5px;
+    border-radius: 5px;
+  }
+
+  .weekday {
+    padding: 7px 2px;
+    font-size: 11px;
+  }
+
+  .mini-event {
+    gap: 2px;
+    padding: 4px 3px;
+    font-size: 10px;
+  }
+
+  .event-time {
+    display: none;
+  }
+
+  .event-name {
+    max-width: none;
+    font-size: 10px;
+  }
+
+  .admin-schedule-table th,
+  .admin-schedule-table td {
+    padding: 10px 8px;
+    white-space: nowrap;
+  }
+
+  .modal-content.schedule-modal {
+    border-radius: 12px;
+  }
+
+  .modal-header,
+  .modal-form {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .modal-header h3 {
+    font-size: 16px;
+    line-height: 1.3;
+  }
+
+  .modal-buttons {
+    flex-direction: column-reverse;
+  }
+
+  .modal-buttons button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
