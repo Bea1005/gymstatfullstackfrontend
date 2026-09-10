@@ -26,7 +26,16 @@ const loadAttachmentBlobUrl = async (fileUrl) => {
   });
 
   if (!response.ok) {
-    throw new Error('Unable to load uploaded file');
+    if (response.status === 401) {
+      throw new Error('Your Screener session has expired. Please log in again.');
+    }
+    if (response.status === 403) {
+      throw new Error('You are not authorized to view this document.');
+    }
+    if (response.status === 404) {
+      throw new Error('The uploaded document is no longer available in storage.');
+    }
+    throw new Error('Unable to load uploaded file. Please try again.');
   }
 
   return URL.createObjectURL(await response.blob());
@@ -39,7 +48,9 @@ const ScreenerPage = () => {
   // Navigation State: 'list' or 'view-details'
   const [currentView, setCurrentView] = useState('list');
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [requirementStatus, setRequirementStatus] = useState({});
+  const [previewUrls, setPreviewUrls] = useState({});
+  const [previewLoading, setPreviewLoading] = useState({});
+  const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
@@ -50,6 +61,7 @@ const ScreenerPage = () => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerSrc, setViewerSrc] = useState(null);
   const [viewerName, setViewerName] = useState(null);
+  const [viewerType, setViewerType] = useState('');
 
   const { notify } = useNotifications();
   const hasNotifiedLoadErrorRef = useRef(false);
@@ -67,7 +79,7 @@ const ScreenerPage = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
       localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
+      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* storage may be unavailable */ }
       navigate('/login', { replace: true });
     }
   }, [navigate]);
@@ -175,14 +187,51 @@ const ScreenerPage = () => {
     };
   }, [notify]);
 
-  // Mock static standard public document templates for previewing
+  useEffect(() => {
+    let cancelled = false;
+    const createdUrls = [];
+    const entries = Object.entries(selectedStudent?.requirements || {})
+      .filter(([, entry]) => entry?.fileUrl);
+
+    setPreviewUrls({});
+    setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, true])));
+
+    if (entries.length === 0) {
+      return () => {};
+    }
+
+    Promise.all(entries.map(async ([key, entry]) => {
+      try {
+        const blobUrl = await loadAttachmentBlobUrl(entry.fileUrl);
+        createdUrls.push(blobUrl);
+        return [key, blobUrl];
+      } catch {
+        notify('screener-error', 'Preview Unavailable', `${entry.fileName || 'Document'} could not be previewed.`);
+        return [key, ''];
+      }
+    })).then((results) => {
+      if (cancelled) {
+        createdUrls.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+      setPreviewUrls(Object.fromEntries(results));
+      setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, false])));
+    });
+
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [notify, selectedStudent]);
+
+  // Requirement labels are display metadata only; previews come from MongoDB file records.
   const requirementsTemplates = [
-    { id: "cor", title: "CERTIFICATE OF REGISTRATION", imgUrl: "https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=600&auto=format&fit=crop" },
-    { id: "med", title: "MEDICAL CERTIFICATE", imgUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600&auto=format&fit=crop" },
-    { id: "psa", title: "PSA", imgUrl: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=600&auto=format&fit=crop" },
-    { id: "insurance", title: "INSURANCE", imgUrl: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?q=80&w=600&auto=format&fit=crop" },
-    { id: "profile", title: "STUDENT PROFILE", imgUrl: "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=600&auto=format&fit=crop" },
-    { id: "consent", title: "PARENT CONSENT", imgUrl: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?q=80&w=600&auto=format&fit=crop" }
+    { id: "cor", title: "CERTIFICATE OF REGISTRATION" },
+    { id: "med", title: "MEDICAL CERTIFICATE" },
+    { id: "psa", title: "PSA" },
+    { id: "insurance", title: "INSURANCE" },
+    { id: "profile", title: "STUDENT PROFILE" },
+    { id: "consent", title: "PARENT CONSENT" }
   ];
 
   const handleSelectStudent = (student) => {
@@ -283,6 +332,7 @@ const ScreenerPage = () => {
       return;
     }
     setViewerName(entry?.fileName || fallbackName);
+    setViewerType(entry?.fileType || '');
     setViewerOpen(true);
   };
 
@@ -437,9 +487,8 @@ const ScreenerPage = () => {
   if (currentView === 'view-details' && selectedStudent) {
     const requirementCards = requirementsTemplates.map((req) => {
       const entry = selectedStudent.requirements?.[req.id === 'med' ? 'med' : req.id] || null;
-      const viewerSrc = req.imgUrl;
       const viewerName = entry?.fileName || req.title;
-      return { ...req, entry, viewerSrc, viewerName };
+      return { ...req, entry, viewerName, previewUrl: previewUrls[req.id] || '' };
     });
 
     return (
@@ -467,44 +516,68 @@ const ScreenerPage = () => {
               <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''}`} key={req.id}>
                 <h3>{req.title}</h3>
                 {req.entry?.resubmitted && <span className="document-card-resubmitted-label">Resubmitted</span>}
-                <div className="document-preview-box">
-                  <img src={req.viewerSrc} alt={req.title} className="document-img" />
-                  {req.entry?.resubmitted && (
-                    <div className="document-resubmitted-indicator" title="Resubmitted requirement awaiting review">!</div>
+                <div className={`document-preview-box${req.entry?.fileUrl ? '' : ' document-preview-box--empty'}`}>
+                  {req.entry?.fileUrl ? (
+                    <>
+                      {req.previewUrl && req.entry.fileType?.startsWith('image/') && (
+                        <img src={req.previewUrl} alt={req.entry.fileName || req.title} className="document-img" />
+                      )}
+                      {req.previewUrl && req.entry.fileType === 'application/pdf' && (
+                        <iframe
+                          src={req.previewUrl}
+                          title={req.entry.fileName || req.title}
+                          className="document-frame"
+                        />
+                      )}
+                      {!req.previewUrl && previewLoading[req.id] && (
+                        <span className="document-loading-label">Loading document...</span>
+                      )}
+                      {!req.previewUrl && !previewLoading[req.id] && (
+                        <div className="document-file-label">{req.entry.fileName || 'Uploaded document'}</div>
+                      )}
+                      {req.entry?.resubmitted && (
+                        <div className="document-resubmitted-indicator" title="Resubmitted requirement awaiting review">!</div>
+                      )}
+                      {getDocumentStamp(req.entry) && (
+                        <img
+                          src={getDocumentStamp(req.entry)}
+                          alt={req.entry?.status === 'approved' ? 'Completed stamp' : 'Incomplete stamp'}
+                          className="document-status-stamp"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="document-view-overlay-btn"
+                        onClick={async () => {
+                          await handleOpenRequirementViewer(req.entry, '', req.viewerName);
+                        }}
+                      >
+                        View Documents
+                      </button>
+                    </>
+                  ) : (
+                    <span className="no-document-label">NO DOCUMENTS</span>
                   )}
-                  {getDocumentStamp(req.entry) && (
-                    <img
-                      src={getDocumentStamp(req.entry)}
-                      alt={req.entry?.status === 'approved' ? 'Completed stamp' : 'Incomplete stamp'}
-                      className="document-status-stamp"
-                    />
-                  )}
-                  <button
-                    className="document-view-overlay-btn"
-                    onClick={async () => {
-                      await handleOpenRequirementViewer(req.entry, req.viewerSrc, req.viewerName);
-                    }}
-                  >
-                    View
-                  </button>
                 </div>
 
-                <div className="document-action-row">
-                  <button
-                    className="action-btn approve-btn"
-                    onClick={() => setApproveTarget(req.entry?.submissionId || req.id)}
-                    aria-label={`Approve ${req.title}`}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    className="action-btn reject-btn"
-                    onClick={() => setRejectTarget(req.entry?.submissionId || req.id)}
-                    aria-label={`Reject ${req.title}`}
-                  >
-                    Reject
-                  </button>
-                </div>
+                {req.entry?.submissionId && (
+                  <div className="document-action-row">
+                    <button
+                      className="action-btn approve-btn"
+                      onClick={() => setApproveTarget(req.entry.submissionId)}
+                      aria-label={`Approve ${req.title}`}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="action-btn reject-btn"
+                      onClick={() => setRejectTarget(req.entry.submissionId)}
+                      aria-label={`Reject ${req.title}`}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -570,7 +643,14 @@ const ScreenerPage = () => {
             }
           }}
         />
-        <DocumentViewer isOpen={viewerOpen} src={viewerSrc} fileName={viewerName} onClose={() => { setViewerOpen(false); setViewerSrc(null); setViewerName(null); }} />
+        <DocumentViewer
+          key={viewerOpen ? viewerSrc : 'closed'}
+          isOpen={viewerOpen}
+          src={viewerSrc}
+          fileName={viewerName}
+          fileType={viewerType}
+          onClose={() => { setViewerOpen(false); setViewerSrc(null); setViewerName(null); setViewerType(''); }}
+        />
       </div>
     );
   }

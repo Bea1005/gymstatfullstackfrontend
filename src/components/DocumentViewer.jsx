@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './DocumentViewer.css';
 import ConfirmModal from './ConfirmModal';
 
-export default function DocumentViewer({ isOpen, src, fileName, onClose }) {
+export default function DocumentViewer({ isOpen, src, fileName, fileType, onClose }) {
   const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    if (!isOpen) setScale(1);
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const isPdf = src && (src.toLowerCase().endsWith('.pdf') || (fileName && fileName.toLowerCase().endsWith('.pdf')));
-  const isImage = src && /\.(png|jpe?g|gif|webp)$/i.test(src || fileName || '');
+  const normalizedType = String(fileType || '').toLowerCase();
+  const normalizedName = String(fileName || '').toLowerCase();
+  const isPdf = normalizedType === 'application/pdf' || normalizedName.endsWith('.pdf');
+  const isImage = normalizedType.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(normalizedName);
 
   const zoomIn = () => setScale((s) => Math.min(3, +(s + 0.25).toFixed(2)));
   const zoomOut = () => setScale((s) => Math.max(0.5, +(s - 0.25).toFixed(2)));
@@ -31,19 +29,18 @@ export default function DocumentViewer({ isOpen, src, fileName, onClose }) {
             title={fileName || 'pdf-viewer'}
             src={src}
             className="doc-embed"
-            style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+            style={{ width: `${100 / scale}%`, height: `${100 / scale}%` }}
           />
         ) : isImage ? (
           <img
             src={src}
             alt={fileName || 'Uploaded document'}
-            className="doc-embed"
-            style={{ transform: `scale(${scale})`, transformOrigin: 'top left', maxWidth: '100%' }}
+            className="doc-image"
+            style={{ width: `${scale * 100}%`, height: 'auto' }}
           />
         ) : (
           <div className="docviewer-unsupported">
             <p>Preview is unavailable for this file type.</p>
-            <a href={src} download={fileName} className="doc-download-btn">Download {fileName}</a>
           </div>
         )}
       </div>
