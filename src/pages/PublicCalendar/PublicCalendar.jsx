@@ -306,7 +306,7 @@ export default function PublicCalendar() {
     if (form.requesterEmail && !emailRegex.test(form.requesterEmail))
       e.requesterEmail = 'Please enter a valid email address.';
 
-    const cleanedPhone = form.requesterPhone.replace(/[\s\-\(\)]/g, '');
+    const cleanedPhone = form.requesterPhone.replace(/[\s()-]/g, '');
     if (form.requesterPhone && !cleanedPhone.match(/^[0-9]{7,15}$/))
       e.requesterPhone = 'Please enter a valid phone number (7-15 digits).';
 
@@ -357,12 +357,8 @@ export default function PublicCalendar() {
         file: requestFile
       };
 
-      console.log('📤 Submitting schedule request:', requestData);
-
       // Use the API function from api.js (PUBLIC endpoint - no auth needed)
       const response = await api.createScheduleRequest(requestData);
-      
-      console.log('✅ Request submitted successfully:', response);
 
       // Also save to localStorage for backward compatibility
       const storedRequests = JSON.parse(localStorage.getItem('gymstatScheduleRequests') || '[]');

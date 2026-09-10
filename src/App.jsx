@@ -32,8 +32,6 @@ const CoachRecords = lazy(() => import("./pages/CoachPortal/CoachRecords"));
 const ScreenerPage = lazy(() => import("./pages/ScreenerPortal/ScreenerPage"));
 
 function App() {
-  console.log("App is rendering!");
-  
   return (
     <Router>
       <Suspense fallback={null}>

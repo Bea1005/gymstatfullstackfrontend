@@ -224,7 +224,7 @@ export default function StudentRequirements() {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
       localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
+      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* storage may be unavailable */ }
       alert('Unauthorized access. Please login.');
       navigate('/login');
       return;
@@ -264,7 +264,6 @@ export default function StudentRequirements() {
       // Fetch published requirements from MongoDB
       try {
         const publishedReqData = await api.getPublishedRequirements();
-        console.log('✅ Published requirements fetched:', publishedReqData.data);
         setPublishedRequirements(publishedReqData.data || []);
       } catch (err) {
         console.warn('⚠️ Warning: Failed to fetch published requirements:', err);
@@ -274,7 +273,6 @@ export default function StudentRequirements() {
       // Fetch announcements from MongoDB
       try {
         const announcementsData = await api.getAnnouncements({ limit: 10 });
-        console.log('✅ Announcements fetched from DB:', announcementsData.data);
         setAnnouncements(announcementsData.data || []);
       } catch (err) {
         console.warn('⚠️ Warning: Failed to fetch announcements:', err);
@@ -285,7 +283,6 @@ export default function StudentRequirements() {
       let submissionsData = [];
       try {
         const requirementsData = await api.getStudentRequirements();
-        console.log('✅ Student submissions fetched:', requirementsData.data);
         submissionsData = Array.isArray(requirementsData.data) ? requirementsData.data : [];
         setSubmissions(submissionsData);
       } catch (err) {
@@ -297,7 +294,6 @@ export default function StudentRequirements() {
       // Fetch student stats, but fall back to the submissions data if the stats endpoint is empty or unavailable
       try {
         const statsData = await api.getStudentStats();
-        console.log('✅ Student stats fetched:', statsData.data);
         const derivedStats = {
           pending: statsData.data?.pending ?? submissionsData.filter((item) => item.status === 'pending').length,
           approved: statsData.data?.approved ?? submissionsData.filter((item) => item.status === 'approved').length,
@@ -459,21 +455,6 @@ export default function StudentRequirements() {
       notify('error', 'Submission Failed', err.message || 'Failed to upload files');
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleDeleteSubmission = async (submissionId) => {
-    if (window.confirm('Are you sure you want to delete this submission?')) {
-      try {
-        setLoading(true);
-        await api.deleteRequirement(submissionId);
-        notify('success', 'Deleted Successfully', 'Requirement deleted successfully');
-        await fetchData();
-      } catch (err) {
-        notify('error', 'Deletion Failed', err.message || 'Failed to delete requirement');
-      } finally {
-        setLoading(false);
-      }
     }
   };
 
@@ -863,20 +844,20 @@ export default function StudentRequirements() {
 
 
         <div className="tab-navigation">
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'requirements' ? 'active-tab' : ''}`} 
             onClick={() => setActiveTab('requirements')}
           >
             My Submissions ({submissions.length})
           </button>
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'submission' ? 'active-tab' : ''}`} 
             onClick={() => setActiveTab('submission')}
           >
             + Upload New
           </button>
-          <button 
-            className={`tab-btn ${activeTab === 'import' ? 'active-tab' : ''}`} 
+          <button
+            className={`tab-btn ${activeTab === 'import' ? 'active-tab' : ''}`}
             onClick={() => setActiveTab('import')}
           >
             Import Student Records (Intrams – STRASUC) {getPreviousYearImportCount() > 0 ? `(${getPreviousYearImportCount()})` : ''}
@@ -1056,7 +1037,6 @@ export default function StudentRequirements() {
                 }
 
                 const isCustomCard = Boolean(req.isCustom);
-                const cardRequirementType = isCustomCard ? 'other' : req.id;
                 const cardCustomRequirementId = req.customRequirementId || req.id;
                 const cardCustomRequirementLabel = req.customRequirementLabel || req.label;
                 const isSubmitted = isRequirementSubmitted(isCustomCard ? 'other' : req.id, isCustomCard ? cardCustomRequirementId : '', isCustomCard ? cardCustomRequirementLabel : '');
