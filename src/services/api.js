@@ -76,12 +76,6 @@ const apiRequest = async (endpoint, options = {}) => {
     }
 
     const fullUrl = `${API_URL}${endpoint}`;
-    const isFormData = options.body instanceof FormData;
-    console.log(`📡 ${options.method || 'GET'} ${endpoint}`, {
-      url: fullUrl,
-      headers: { 'Authorization': headers['Authorization'] ? headers['Authorization'] : 'none' },
-      body: isFormData ? 'FormData' : (options.body ? JSON.parse(options.body) : null)
-    });
 
     const response = await fetch(fullUrl, {
       ...options,
@@ -100,8 +94,6 @@ const apiRequest = async (endpoint, options = {}) => {
     } else {
       data = await response.text();
     }
-    
-    console.log(`📡 Response: ${response.status}`, data);
     
     if (!response.ok) {
       if (response.status === 401 && !isPublic && typeof window !== 'undefined') {
@@ -412,13 +404,6 @@ export const createRequirement = async (requirementData, file) => {
     formData.append('isActive', String(requirementData.isActive));
     formData.append('file', file); // Add the actual file
 
-    console.log('📤 Creating requirement with FormData:', {
-      title: requirementData.title,
-      file: file.name,
-      fileSize: file.size,
-      fileType: file.type
-    });
-    
     return apiRequest('/requirements', {
       method: 'POST',
       body: formData,
@@ -563,8 +548,6 @@ export const downloadRequirement = async (requirementId, filename = 'requirement
     };
 
     const fullUrl = `${API_URL}/student/requirements/${requirementId}/download`;
-    console.log(`📥 Downloading requirement from: ${fullUrl}`);
-
     const response = await fetch(fullUrl, {
       method: 'GET',
       headers: Object.fromEntries(Object.entries(headers).filter(([_, v]) => v != null))
@@ -593,7 +576,6 @@ export const downloadRequirement = async (requirementId, filename = 'requirement
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
 
-    console.log(`✅ File downloaded: ${finalFilename}`);
     return { success: true, message: 'File downloaded successfully' };
   } catch (error) {
     console.error('❌ Download error:', error);
