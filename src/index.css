@@ -3,12 +3,14 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
+  color-scheme: light;
   color: rgba(12, 3, 3, 0.87);
   background: linear-gradient(to bottom, #efeff2, #5f1e12);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
@@ -32,6 +34,8 @@ body {
   margin: 0;
   display: flex;
   place-items: center;
+  width: 100%;
+  overflow-x: hidden;
   min-width: 320px;
   min-height: 100vh;
 }
