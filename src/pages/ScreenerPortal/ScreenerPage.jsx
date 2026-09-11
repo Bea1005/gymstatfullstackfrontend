@@ -172,6 +172,14 @@ const ScreenerPage = () => {
   }, [notify]);
 
   useEffect(() => {
+    const refreshInterval = window.setInterval(() => {
+      loadRequirements(true);
+    }, 10000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [notify]);
+
+  useEffect(() => {
     const handleRequirementUpdate = () => {
       loadRequirements(true);
     };
@@ -492,6 +500,8 @@ const ScreenerPage = () => {
 
   // --- VIEW 2: VIEW STUDENT ATHLETE REQUIREMENTS MAIN GRID ---
   if (currentView === 'view-details' && selectedStudent) {
+    const requirementDocuments = selectedStudent.requirements?.documents || [];
+    const standardRequirementKeys = new Set(requirementsTemplates.map((req) => req.id === 'med' ? 'med' : req.id));
     const requirementCards = requirementsTemplates.flatMap((req) => {
       const requirementKey = req.id === 'med' ? 'med' : req.id;
       const entries = (selectedStudent.requirements?.documents || [])
@@ -505,7 +515,19 @@ const ScreenerPage = () => {
         viewerName: entry?.fileName || req.title,
         previewUrl: entry?.submissionId ? previewUrls[entry.submissionId] || '' : ''
       }));
-    });
+    }).concat(requirementDocuments
+      .filter((entry) => {
+        const requirementKey = entry.requirementType === 'medical' ? 'med' : entry.requirementType;
+        return !standardRequirementKeys.has(requirementKey);
+      })
+      .map((entry) => ({
+        id: entry.requirementType,
+        title: entry.label || entry.requirementType || 'REQUIREMENT',
+        entry,
+        cardKey: entry.submissionId,
+        viewerName: entry.fileName || entry.label || 'Requirement Document',
+        previewUrl: previewUrls[entry.submissionId] || ''
+      })));
 
     return (
       <div className="view-req-container">
