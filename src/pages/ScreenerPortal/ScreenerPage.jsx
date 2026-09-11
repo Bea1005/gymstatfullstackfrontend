@@ -34,6 +34,13 @@ const isPdfFile = (entry) => (
   || getFileExtension(entry?.fileName) === '.pdf'
 );
 
+const getRequirementFileUrl = (entry) => {
+  if (entry?.fileUrl) return entry.fileUrl;
+  if (!entry?.submissionId) return '';
+  const participation = encodeURIComponent(entry.participationType || 'Intrams');
+  return `/screener/requirements/${String(entry.submissionId)}/download?participationType=${participation}`;
+};
+
 const loadAttachmentBlobUrl = async (fileUrl) => {
   const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const response = await fetch(resolveAttachmentUrl(fileUrl), {
@@ -232,8 +239,8 @@ const ScreenerPage = () => {
     let cancelled = false;
     const createdUrls = [];
     const entries = (selectedStudent?.requirements?.documents || [])
-      .filter((entry) => entry?.fileUrl)
-      .map((entry) => [entry.submissionId, entry]);
+      .map((entry) => [entry.submissionId, entry, getRequirementFileUrl(entry)])
+      .filter(([, , fileUrl]) => Boolean(fileUrl));
 
     setPreviewUrls({});
     setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, true])));
@@ -242,9 +249,9 @@ const ScreenerPage = () => {
       return () => {};
     }
 
-    Promise.all(entries.map(async ([key, entry]) => {
+    Promise.all(entries.map(async ([key, entry, fileUrl]) => {
       try {
-        const blobUrl = await loadAttachmentBlobUrl(entry.fileUrl);
+        const blobUrl = await loadAttachmentBlobUrl(fileUrl);
         createdUrls.push(blobUrl);
         return [key, blobUrl];
       } catch {
@@ -367,8 +374,9 @@ const ScreenerPage = () => {
       await markResubmissionViewed(entry.submissionId);
     }
     try {
-      const attachmentUrl = entry?.fileUrl
-        ? await loadAttachmentBlobUrl(entry.fileUrl)
+      const fileUrl = getRequirementFileUrl(entry);
+      const attachmentUrl = fileUrl
+        ? await loadAttachmentBlobUrl(fileUrl)
         : fallbackSrc;
       setViewerSrc(attachmentUrl);
     } catch (error) {
@@ -598,8 +606,8 @@ const ScreenerPage = () => {
               <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''} ${req.entry?.status === 'rejected' ? 'document-card--rejected' : ''}`} key={req.cardKey}>
                 <h3>{req.title}</h3>
                 {req.entry?.resubmitted && <span className="document-card-resubmitted-label">Resubmitted</span>}
-                <div className={`document-preview-box${req.entry?.fileUrl ? '' : ' document-preview-box--empty'}`}>
-                  {req.entry?.fileUrl ? (
+                <div className={`document-preview-box${getRequirementFileUrl(req.entry) ? '' : ' document-preview-box--empty'}`}>
+                  {getRequirementFileUrl(req.entry) ? (
                     <>
                       {req.previewUrl && isImageFile(req.entry) && (
                         <img src={req.previewUrl} alt={req.entry.fileName || req.title} className="document-img" />
