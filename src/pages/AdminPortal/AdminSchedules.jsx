@@ -104,14 +104,16 @@ const AdminSchedules = () => {
     }
   };
 
-  const saveApprovedSchedules = (list) => {
+  const saveApprovedSchedules = (list, broadcast = true) => {
     if (typeof window === 'undefined') return;
     try {
       const normalizedList = (Array.isArray(list) ? list : []).map(normalizeScheduleEntry);
       localStorage.setItem(APPROVED_KEY, JSON.stringify(normalizedList));
       setReservations(normalizedList);
-      window.dispatchEvent(new CustomEvent('gymstatStorageUpdate', { detail: { key: APPROVED_KEY } }));
-      notifyScheduleRefresh();
+      if (broadcast) {
+        window.dispatchEvent(new CustomEvent('gymstatStorageUpdate', { detail: { key: APPROVED_KEY } }));
+        notifyScheduleRefresh();
+      }
     } catch (err) {
       console.error('Error saving approved schedules:', err);
     }
@@ -127,7 +129,7 @@ const AdminSchedules = () => {
           const bDate = new Date(`${b.startDate}T00:00:00`);
           return aDate - bDate;
         });
-        saveApprovedSchedules(sortedSchedules);
+        saveApprovedSchedules(sortedSchedules, false);
         return sortedSchedules;
       }
     } catch (err) {
