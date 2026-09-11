@@ -98,6 +98,10 @@ const ScreenerPage = () => {
       // Ensure data is always an array to avoid rendering crashes
       const safeData = Array.isArray(data) ? data : [];
       setStudents(safeData);
+      setSelectedStudent((current) => {
+        if (!current) return current;
+        return safeData.find((student) => student.id === current.id) || current;
+      });
       const totalStudents = safeData.length;
       const pendingRequirements = safeData.reduce((acc, student) => {
         const statuses = Object.values(student.requirements || {});
