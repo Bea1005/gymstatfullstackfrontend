@@ -627,7 +627,7 @@ export default function StudentRequirements() {
     if (!submission?._id) return;
     try {
       setLoading(true);
-      const previewData = await api.viewRequirement(submission._id, submission.fileName || 'uploaded-file');
+      const previewData = await api.viewRequirement(submission._id, submission.fileName || 'uploaded-file', submission.participationType);
       setPreviewModal({
         url: previewData.url,
         fileType: previewData.fileType,

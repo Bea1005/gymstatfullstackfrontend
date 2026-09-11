@@ -540,14 +540,14 @@ export const deleteRequirement = async (requirementId) => {
 };
 
 // Download a requirement file
-export const downloadRequirement = async (requirementId, filename = 'requirement.pdf') => {
+export const downloadRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
   try {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = {
       'Authorization': token ? `Bearer ${token}` : undefined
     };
 
-    const fullUrl = `${API_URL}/student/requirements/${requirementId}/download`;
+    const fullUrl = `${API_URL}/student/requirements/${requirementId}/download?participationType=${encodeURIComponent(participationType)}`;
     const response = await fetch(fullUrl, {
       method: 'GET',
       headers: Object.fromEntries(Object.entries(headers).filter(([_, v]) => v != null))
@@ -583,14 +583,14 @@ export const downloadRequirement = async (requirementId, filename = 'requirement
   }
 };
 
-export const viewRequirement = async (requirementId, filename = 'requirement.pdf') => {
+export const viewRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
   try {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = {
       'Authorization': token ? `Bearer ${token}` : undefined
     };
 
-    const fullUrl = `${API_URL}/student/requirements/${requirementId}/download`;
+    const fullUrl = `${API_URL}/student/requirements/${requirementId}/download?participationType=${encodeURIComponent(participationType)}`;
     const response = await fetch(fullUrl, {
       method: 'GET',
       headers: Object.fromEntries(Object.entries(headers).filter(([_, v]) => v != null))
@@ -625,8 +625,8 @@ export const getStudentStats = async () => {
 };
 
 // Screener requirements endpoints - Make sure these are in your api.js
-export const getScreenerRequirements = async () => {
-  return apiRequest('/screener/requirements', {
+export const getScreenerRequirements = async (participationType = 'Intrams') => {
+  return apiRequest(`/screener/requirements?participationType=${encodeURIComponent(participationType)}`, {
     method: 'GET',
   });
 };
@@ -638,9 +638,10 @@ export const reviewScreenerRequirement = async (submissionId, reviewData) => {
   });
 };
 
-export const markScreenerRequirementViewed = async (submissionId) => {
+export const markScreenerRequirementViewed = async (submissionId, participationType = 'Intrams') => {
   return apiRequest(`/screener/requirements/${submissionId}/viewed`, {
     method: 'PUT',
+    body: JSON.stringify({ participationType }),
   });
 };
 
