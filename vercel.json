@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://gymstatfullstackbackend.onrender.com/api/:path*"
+      "destination": "https://gymstatfullstackbackend.onrender.com/api/v1/:path*"
     },
     {
       "source": "/(.*)",

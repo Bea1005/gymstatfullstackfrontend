@@ -19,6 +19,21 @@ const resolveAttachmentUrl = (fileUrl) => {
   return `${configuredApiUrl.replace(/\/$/, '')}/${fileUrl.replace(/^\//, '')}`;
 };
 
+const getFileExtension = (fileName = '') => {
+  const normalizedName = String(fileName).toLowerCase();
+  return normalizedName.includes('.') ? normalizedName.slice(normalizedName.lastIndexOf('.')) : '';
+};
+
+const isImageFile = (entry) => (
+  String(entry?.fileType || '').toLowerCase().startsWith('image/')
+  || ['.png', '.jpg', '.jpeg', '.gif'].includes(getFileExtension(entry?.fileName))
+);
+
+const isPdfFile = (entry) => (
+  String(entry?.fileType || '').toLowerCase() === 'application/pdf'
+  || getFileExtension(entry?.fileName) === '.pdf'
+);
+
 const loadAttachmentBlobUrl = async (fileUrl) => {
   const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const response = await fetch(resolveAttachmentUrl(fileUrl), {
@@ -581,10 +596,10 @@ const ScreenerPage = () => {
                 <div className={`document-preview-box${req.entry?.fileUrl ? '' : ' document-preview-box--empty'}`}>
                   {req.entry?.fileUrl ? (
                     <>
-                      {req.previewUrl && req.entry.fileType?.startsWith('image/') && (
+                      {req.previewUrl && isImageFile(req.entry) && (
                         <img src={req.previewUrl} alt={req.entry.fileName || req.title} className="document-img" />
                       )}
-                      {req.previewUrl && req.entry.fileType === 'application/pdf' && (
+                      {req.previewUrl && isPdfFile(req.entry) && (
                         <iframe
                           src={req.previewUrl}
                           title={req.entry.fileName || req.title}
