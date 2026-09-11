@@ -575,7 +575,7 @@ const ScreenerPage = () => {
 
           <div className="req-documents-grid">
             {requirementCards.map((req) => (
-              <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''}`} key={req.cardKey}>
+              <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''} ${req.entry?.status === 'rejected' ? 'document-card--rejected' : ''}`} key={req.cardKey}>
                 <h3>{req.title}</h3>
                 {req.entry?.resubmitted && <span className="document-card-resubmitted-label">Resubmitted</span>}
                 <div className={`document-preview-box${req.entry?.fileUrl ? '' : ' document-preview-box--empty'}`}>
@@ -621,6 +621,11 @@ const ScreenerPage = () => {
                     <span className="no-document-label">NO DOCUMENTS</span>
                   )}
                 </div>
+                {req.entry?.status === 'rejected' && req.entry?.remarks && (
+                  <div className="document-rejection-note">
+                    <strong>Reject Reason / Note:</strong> {req.entry.remarks}
+                  </div>
+                )}
 
                 {req.entry?.submissionId && (
                   <div className="document-action-row">

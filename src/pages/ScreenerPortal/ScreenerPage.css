@@ -710,3 +710,22 @@
   text-align: center;
   overflow-wrap: anywhere;
 }
+
+.document-card--rejected .document-preview-box {
+  border-color: #c62828;
+  box-shadow: 0 0 0 2px rgba(198, 40, 40, 0.18);
+}
+
+.document-rejection-note {
+  width: 100%;
+  max-width: 290px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  border-left: 3px solid #c62828;
+  background: #fff1f1;
+  color: #8b1e1e;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
