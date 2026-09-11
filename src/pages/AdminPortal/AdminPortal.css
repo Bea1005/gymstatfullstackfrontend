@@ -2100,6 +2100,30 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
+.btn-delete-approved-request {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  color: #801a1a;
+  background: transparent;
+  border: 1px solid #d9a6a6;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-delete-approved-request:hover {
+  color: #ffffff;
+  background: #801a1a;
+}
+
+.btn-delete-approved-request:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 /* ==========================================================================
    Expanded Card View Layout Extensions 
    ========================================================================== */

@@ -55,6 +55,7 @@ const AdminSchedules = () => {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [selectedRejectReason, setSelectedRejectReason] = useState('');
   const [additionalRejectReason, setAdditionalRejectReason] = useState('');
+  const [deletingRequestId, setDeletingRequestId] = useState(null);
   const REJECTION_REASONS = [
     'Schedule conflict',
     'Gymnasium already reserved',
@@ -323,6 +324,7 @@ const AdminSchedules = () => {
 
   const performConfirmAction = async () => {
     if (!confirmAction) return;
+    if (deletingRequestId) return;
     const { type, id } = confirmAction;
     const requests = [...scheduleRequests];
     const idx = requests.findIndex(r => r.id === id);
@@ -341,7 +343,14 @@ const AdminSchedules = () => {
     }
 
     try {
-      if (type === 'approve') {
+      if (type === 'delete') {
+        setDeletingRequestId(id);
+        await api.deleteScheduleRequest(id);
+        const remainingRequests = requests.filter((request) => request.id !== id);
+        setScheduleRequests(remainingRequests);
+        localStorage.setItem(REQUESTS_KEY, JSON.stringify(remainingRequests));
+        setToast({ message: 'Approved schedule request deleted successfully.', type: 'success' });
+      } else if (type === 'approve') {
         req.status = 'approved';
         req.reviewedAt = new Date().toISOString();
         
@@ -381,12 +390,16 @@ const AdminSchedules = () => {
       }
     } catch (err) {
       console.error('Error performing action:', err);
-      setToast({ message: 'Failed to update request. Please try again.', type: 'error' });
+      setToast({
+        message: type === 'delete' ? 'Failed to delete schedule request. Please try again.' : 'Failed to update request. Please try again.',
+        type: 'error'
+      });
     }
     
     setConfirmAction(null);
     setSelectedRejectReason('');
     setAdditionalRejectReason('');
+    setDeletingRequestId(null);
     await loadScheduleRequests();
   };
 
@@ -1080,6 +1093,23 @@ const AdminSchedules = () => {
                           >
                             {isExpanded ? 'Hide Details' : 'Details'}
                           </button>
+                          {req.status === 'approved' && (
+                            <button
+                              type="button"
+                              className="btn-delete-approved-request"
+                              title="Delete approved schedule request"
+                              aria-label={`Delete approved request for ${req.eventName}`}
+                              onClick={() => setConfirmAction({ type: 'delete', id: req.id })}
+                              disabled={deletingRequestId === req.id}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                <line x1="10" y1="11" x2="10" y2="17" />
+                                <line x1="14" y1="11" x2="14" y2="17" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -1160,15 +1190,15 @@ const AdminSchedules = () => {
       {confirmAction && (
         <ConfirmModal
           isOpen={!!confirmAction}
-          title={confirmAction.type === 'approve' ? 'Approve Request' : 'Reject Request'}
-          message={confirmAction.type === 'approve' ? 'Are you sure you want to approve this schedule request?' : 'Please select a valid reason for rejection before continuing.'}
+          title={confirmAction.type === 'approve' ? 'Approve Request' : confirmAction.type === 'delete' ? 'Delete Approved Request' : 'Reject Request'}
+          message={confirmAction.type === 'approve' ? 'Are you sure you want to approve this schedule request?' : confirmAction.type === 'delete' ? 'Are you sure you want to permanently delete this approved schedule request and its linked calendar schedule?' : 'Please select a valid reason for rejection before continuing.'}
           onConfirm={performConfirmAction}
           onCancel={() => {
             setConfirmAction(null);
             setSelectedRejectReason('');
             setAdditionalRejectReason('');
           }}
-          confirmDisabled={confirmAction.type === 'reject' && !getFinalRejectionReason()}
+          confirmDisabled={deletingRequestId !== null || (confirmAction.type === 'reject' && !getFinalRejectionReason())}
         >
           {confirmAction.type === 'reject' && (
             <div style={{ marginTop: 16 }}>
