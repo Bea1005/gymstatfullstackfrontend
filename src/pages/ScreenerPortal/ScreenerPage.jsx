@@ -37,6 +37,7 @@ const isPdfFile = (entry) => (
 const loadAttachmentBlobUrl = async (fileUrl) => {
   const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const response = await fetch(resolveAttachmentUrl(fileUrl), {
+    cache: 'no-store',
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
 
@@ -53,7 +54,11 @@ const loadAttachmentBlobUrl = async (fileUrl) => {
     throw new Error('Unable to load uploaded file. Please try again.');
   }
 
-  return URL.createObjectURL(await response.blob());
+  const blob = await response.blob();
+  if (!blob.size) {
+    throw new Error('The uploaded document is empty.');
+  }
+  return URL.createObjectURL(blob);
 };
 
 const ScreenerPage = () => {
