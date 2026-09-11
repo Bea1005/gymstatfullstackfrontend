@@ -194,8 +194,9 @@ const ScreenerPage = () => {
   useEffect(() => {
     let cancelled = false;
     const createdUrls = [];
-    const entries = Object.entries(selectedStudent?.requirements || {})
-      .filter(([, entry]) => entry?.fileUrl);
+    const entries = (selectedStudent?.requirements?.documents || [])
+      .filter((entry) => entry?.fileUrl)
+      .map((entry) => [entry.submissionId, entry]);
 
     setPreviewUrls({});
     setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, true])));
@@ -301,7 +302,9 @@ const ScreenerPage = () => {
   };
 
   const resubmissionCount = students.reduce((acc, student) => {
-    return acc + Object.values(student.requirements || {}).filter((item) => item?.resubmitted).length;
+    return acc + Object.values(student.requirements || {})
+      .filter((item) => !Array.isArray(item))
+      .filter((item) => item?.resubmitted).length;
   }, 0);
 
   const renderStatusCell = (entry) => (
@@ -489,10 +492,19 @@ const ScreenerPage = () => {
 
   // --- VIEW 2: VIEW STUDENT ATHLETE REQUIREMENTS MAIN GRID ---
   if (currentView === 'view-details' && selectedStudent) {
-    const requirementCards = requirementsTemplates.map((req) => {
-      const entry = selectedStudent.requirements?.[req.id === 'med' ? 'med' : req.id] || null;
-      const viewerName = entry?.fileName || req.title;
-      return { ...req, entry, viewerName, previewUrl: previewUrls[req.id] || '' };
+    const requirementCards = requirementsTemplates.flatMap((req) => {
+      const requirementKey = req.id === 'med' ? 'med' : req.id;
+      const entries = (selectedStudent.requirements?.documents || [])
+        .filter((entry) => (entry.requirementType === 'medical' ? 'med' : entry.requirementType) === requirementKey);
+      const cards = entries.length > 0 ? entries : [null];
+
+      return cards.map((entry, index) => ({
+        ...req,
+        entry,
+        cardKey: entry?.submissionId || `${req.id}-empty-${index}`,
+        viewerName: entry?.fileName || req.title,
+        previewUrl: entry?.submissionId ? previewUrls[entry.submissionId] || '' : ''
+      }));
     });
 
     return (
@@ -517,7 +529,7 @@ const ScreenerPage = () => {
 
           <div className="req-documents-grid">
             {requirementCards.map((req) => (
-              <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''}`} key={req.id}>
+              <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''}`} key={req.cardKey}>
                 <h3>{req.title}</h3>
                 {req.entry?.resubmitted && <span className="document-card-resubmitted-label">Resubmitted</span>}
                 <div className={`document-preview-box${req.entry?.fileUrl ? '' : ' document-preview-box--empty'}`}>
@@ -533,10 +545,10 @@ const ScreenerPage = () => {
                           className="document-frame"
                         />
                       )}
-                      {!req.previewUrl && previewLoading[req.id] && (
+                      {!req.previewUrl && previewLoading[req.entry.submissionId] && (
                         <span className="document-loading-label">Loading document...</span>
                       )}
-                      {!req.previewUrl && !previewLoading[req.id] && (
+                      {!req.previewUrl && !previewLoading[req.entry.submissionId] && (
                         <div className="document-file-label">{req.entry.fileName || 'Uploaded document'}</div>
                       )}
                       {req.entry?.resubmitted && (
@@ -625,7 +637,12 @@ const ScreenerPage = () => {
           onConfirm={async (payload) => {
             try {
               const submissionId = rejectTarget;
-              await api.reviewScreenerRequirement(submissionId, { status: 'rejected', feedback: payload.reason, remarks: payload.remarks });
+              await api.reviewScreenerRequirement(submissionId, {
+                status: 'rejected',
+                feedback: payload.reason,
+                remarks: payload.remarks,
+                studentId: selectedStudent?.id
+              });
               setRejectTarget(null);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
               const message = `Requirement deleted and student can re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
@@ -639,8 +656,8 @@ const ScreenerPage = () => {
               const response = await api.getScreenerRequirements();
               const data = response?.data || [];
               setStudents(data);
-              setCurrentView('list');
-              setSelectedStudent(null);
+              const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
+              setSelectedStudent(refreshedSelectedStudent);
             } catch (err) {
               notify('screener-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
             }
