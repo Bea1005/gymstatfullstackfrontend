@@ -622,7 +622,6 @@ const ScreenerPage = () => {
             try {
               const submissionId = rejectTarget;
               await api.reviewScreenerRequirement(submissionId, { status: 'rejected', feedback: payload.reason, remarks: payload.remarks });
-              await markResubmissionViewed(submissionId);
               setRejectTarget(null);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
               const message = `Requirement deleted and student can re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
