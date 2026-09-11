@@ -1093,12 +1093,12 @@ const AdminSchedules = () => {
                           >
                             {isExpanded ? 'Hide Details' : 'Details'}
                           </button>
-                          {req.status === 'approved' && (
+                          {(req.status === 'approved' || req.status === 'rejected') && (
                             <button
                               type="button"
-                              className="btn-delete-approved-request"
-                              title="Delete approved schedule request"
-                              aria-label={`Delete approved request for ${req.eventName}`}
+                              className="btn-delete-request"
+                              title={`Delete ${req.status} schedule request`}
+                              aria-label={`Delete ${req.status} request for ${req.eventName}`}
                               onClick={() => setConfirmAction({ type: 'delete', id: req.id })}
                               disabled={deletingRequestId === req.id}
                             >
@@ -1190,8 +1190,8 @@ const AdminSchedules = () => {
       {confirmAction && (
         <ConfirmModal
           isOpen={!!confirmAction}
-          title={confirmAction.type === 'approve' ? 'Approve Request' : confirmAction.type === 'delete' ? 'Delete Approved Request' : 'Reject Request'}
-          message={confirmAction.type === 'approve' ? 'Are you sure you want to approve this schedule request?' : confirmAction.type === 'delete' ? 'Are you sure you want to permanently delete this approved schedule request and its linked calendar schedule?' : 'Please select a valid reason for rejection before continuing.'}
+          title={confirmAction.type === 'approve' ? 'Approve Request' : confirmAction.type === 'delete' ? 'Delete Schedule Request' : 'Reject Request'}
+          message={confirmAction.type === 'approve' ? 'Are you sure you want to approve this schedule request?' : confirmAction.type === 'delete' ? 'Are you sure you want to permanently delete this schedule request?' : 'Please select a valid reason for rejection before continuing.'}
           onConfirm={performConfirmAction}
           onCancel={() => {
             setConfirmAction(null);

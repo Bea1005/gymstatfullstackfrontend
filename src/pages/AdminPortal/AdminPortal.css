@@ -2100,7 +2100,7 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
-.btn-delete-approved-request {
+.btn-delete-request {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2114,12 +2114,12 @@
   cursor: pointer;
 }
 
-.btn-delete-approved-request:hover {
+.btn-delete-request:hover {
   color: #ffffff;
   background: #801a1a;
 }
 
-.btn-delete-approved-request:disabled {
+.btn-delete-request:disabled {
   opacity: 0.55;
   cursor: wait;
 }
