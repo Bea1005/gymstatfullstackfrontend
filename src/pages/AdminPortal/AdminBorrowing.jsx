@@ -672,43 +672,11 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
                     setForm(f => ({ ...f, date: e.target.value || todayStr() }));
                   }}
                   style={{ 
-                    paddingRight: '40px',
+                    paddingRight: '20px',
                     width: '100%'
                   }}
                 />
-                <button
-                  type="button"
-                  onClick={openDatePicker}
-                  className="calendar-icon-btn"
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    boxShadow: 'none',
-                    cursor: 'pointer',
-                    fontSize: '18px',
-                    padding: '4px 8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#666'
-                  }}
-                  title="Select date"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                    <circle cx="12" cy="15" r="1" />
-                    <circle cx="16" cy="15" r="1" />
-                    <circle cx="8" cy="15" r="1" />
-                  </svg>
-                </button>
+
               </div>
             </div>
             <div className="bw-form-group">

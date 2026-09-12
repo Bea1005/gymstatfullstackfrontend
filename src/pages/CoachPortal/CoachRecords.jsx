@@ -23,6 +23,23 @@ import './CoachPortal.css';
 // Both header logos now use the real uploaded assets — see imports above.
 
 const placeholderImg = 'https://via.placeholder.com/300x300?text=Photo';
+const configuredApiUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+
+const resolveStudentPhotoUrl = (student) => {
+  if (!student?.profilePhotoUrl) return '';
+  if (/^https?:\/\//i.test(student.profilePhotoUrl)) return student.profilePhotoUrl;
+  return `${configuredApiUrl}/${student.profilePhotoUrl.replace(/^\//, '')}`;
+};
+
+const formatDateOfBirth = (value) => {
+  if (!value) return '';
+  const dateText = String(value).trim();
+  const dateOnly = dateText.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  const date = dateOnly ? new Date(`${dateOnly}T00:00:00`) : new Date(dateText);
+  return Number.isNaN(date.getTime())
+    ? dateText
+    : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+};
 
 const sportCategoryOptions = [
   'Volleyball Women',
@@ -224,6 +241,7 @@ export default function CoachRecord() {
     status: 'incomplete',
     photo: placeholderImg,
   });
+  const [isDobEditing, setIsDobEditing] = useState(false);
 
   const [eventForm, setEventForm] = useState({ title: '', schedule: '', institution: '' });
 
@@ -317,7 +335,7 @@ export default function CoachRecord() {
               sport: athlete.sport || selectedSport || 'Volleyball Women',
               location: athlete.branchCampus || athlete.location || '',
               dob: athlete.dateOfBirth || athlete.dob || '',
-              photo: athlete.profilePhoto || athlete.photo || placeholderImg,
+              photo: resolveStudentPhotoUrl(athlete) || athlete.photo || '',
               status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
             }))
           : [];
@@ -508,6 +526,7 @@ export default function CoachRecord() {
       status: athlete.status || 'incomplete',
       photo: athlete.photo || placeholderImg,
     });
+    setIsDobEditing(false);
     setImagePreview(athlete.photo || placeholderImg);
     setSelectedFile(null);
   };
@@ -527,6 +546,7 @@ export default function CoachRecord() {
       status: 'incomplete',
       photo: placeholderImg,
     });
+    setIsDobEditing(false);
     setImagePreview(placeholderImg);
     setSelectedFile(null);
   };
@@ -765,14 +785,14 @@ export default function CoachRecord() {
       >
         <div className="col-label">ATHLETE</div>
         <div className="col-photo">
-          <img src={athlete.photo || placeholderImg} alt={athlete.fullname} />
+          {athlete.photo && <img src={athlete.photo} alt={athlete.fullname} />}
           <button type="button" className="grid-remove-btn" onClick={openRemoveModal('athlete', athlete.id, athlete.fullname)} title="Remove">
             <RemoveIcon />
           </button>
           <img className="grid-status-stamp" src={statusStampMap[athlete.status] || noDocumentsStamp} alt={`${athlete.status} stamp`} />
         </div>
         <div className="col-info-row" title={athlete.fullname}>{athlete.fullname}</div>
-        <div className="col-info-row" title={athlete.dob}>{athlete.dob}</div>
+        <div className="col-info-row" title={formatDateOfBirth(athlete.dob)}>{formatDateOfBirth(athlete.dob)}</div>
         <div className="col-info-row" title={athlete.course}>{athlete.course}</div>
         <div className="col-info-row" title={athlete.location}>{athlete.location}</div>
       </div>
@@ -1049,9 +1069,9 @@ export default function CoachRecord() {
                         course: [selectedStudent.department, selectedStudent.yearLevel].filter(Boolean).join(' - '),
                         location: selectedStudent.branchCampus || '',
                         email: selectedStudent.email || '',
-                        photo: selectedStudent.profilePhoto || placeholderImg,
+                        photo: resolveStudentPhotoUrl(selectedStudent),
                       }));
-                      setImagePreview(selectedStudent.profilePhoto || placeholderImg);
+                      setImagePreview(resolveStudentPhotoUrl(selectedStudent));
                     }}
                     style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px', boxSizing: 'border-box' }}
                     required
@@ -1086,7 +1106,7 @@ export default function CoachRecord() {
               </label>
               <label>
                 Date of Birth
-                <input value={editForm.dob} onChange={(event) => setEditForm({ ...editForm, dob: event.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={isDobEditing ? editForm.dob : formatDateOfBirth(editForm.dob)} onFocus={() => setIsDobEditing(true)} onBlur={() => setIsDobEditing(false)} onChange={(event) => setEditForm({ ...editForm, dob: event.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <label>
                 Course & Year
