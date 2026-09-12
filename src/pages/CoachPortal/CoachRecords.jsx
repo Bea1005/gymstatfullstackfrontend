@@ -84,7 +84,7 @@ const createDefaultStaffMember = (role = 'COACH') => ({
   age: '',
   phone: '',
   email: '',
-  photo: placeholderImg,
+  photo: '',
 });
 
 const normalizeStaffMembers = (members = []) => {
@@ -330,7 +330,7 @@ export default function CoachRecord() {
                 photo = '';
               }
             }
-            return { ...member, photo: photo || placeholderImg };
+            return { ...member, photo };
           }))
         : [];
       if (Array.isArray(facultyData)) setStaff(normalizeStaffMembers(normalizedFaculty));
@@ -599,6 +599,10 @@ export default function CoachRecord() {
         await api.deleteCoachAthlete(id);
         await fetchCoachData();
         setToast({ message: 'Student removed.', type: 'success' });
+      } else if (type === 'faculty') {
+        await api.deleteFacultyMember(id);
+        await fetchCoachData();
+        setToast({ message: 'Faculty member removed.', type: 'success' });
       }
     } catch (err) {
       console.error('Remove error:', err);
@@ -850,7 +854,7 @@ export default function CoachRecord() {
   );
 
   const StaffCell = ({ member, index }) => {
-    const hasStaffData = Boolean(member.fullname || member.phone || member.email || member.photo !== placeholderImg);
+    const hasStaffData = Boolean(member.fullname || member.age || member.phone || member.email || member.facultyId || member.id);
     if (!hasStaffData && !hasActivatedGrid) return null;
 
     return (
@@ -858,10 +862,10 @@ export default function CoachRecord() {
       <div className="col-label">{member.role}</div>
       <div className="col-photo">
         <button type="button" className="faculty-photo-viewer-trigger" onClick={(e) => { e.stopPropagation(); setViewingFacultyMember(member); }} title="View profile photo">
-          <img src={member.photo || placeholderImg} alt={member.role} />
+          {member.photo ? <img src={member.photo} alt={member.role} /> : <span className="cell-x" aria-label="No profile photo">X</span>}
         </button>
-        <button type="button" className="grid-remove-btn" onClick={(e) => { e.stopPropagation(); handleEditStaff(index); }} title="Edit">
-          <EditIcon size={12} color="#fff" />
+        <button type="button" className="grid-remove-btn" onClick={openRemoveModal('faculty', member.facultyId || member.id, member.fullname)} title="Delete faculty member" aria-label={`Delete ${member.fullname || 'faculty member'}`}>
+          <RemoveIcon />
         </button>
       </div>
       <div className="col-info-row" title={member.fullname}>{member.fullname}</div>
@@ -1331,7 +1335,7 @@ export default function CoachRecord() {
       <LogoutConfirmModal isOpen={showLogoutModal} onClose={() => setShowLogoutModal(false)} onConfirm={confirmLogout} />
       <ConfirmModal
         isOpen={removeModalOpen}
-        title="Remove Student"
+        title={removeTarget.type === 'faculty' ? 'Remove Faculty Member' : 'Remove Student'}
         message={`Are you sure you want to remove "${removeTarget.name || ''}"? This action cannot be undone.`}
         confirmText="Remove"
         cancelText="Cancel"

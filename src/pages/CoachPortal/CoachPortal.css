@@ -27,6 +27,18 @@
   min-width: 0;
 }
 
+.portal-container.coach-portal-shell {
+  min-height: 100vh;
+  background: #d9d9d9;
+  background-image: none;
+  background-repeat: no-repeat;
+  background-attachment: scroll;
+}
+
+.coach-portal-shell .strasuc-doc-wrapper {
+  background: transparent;
+}
+
 /* ---------- Page shell / print behaviour ---------- */
 
 .strasuc-doc-wrapper {
@@ -855,6 +867,13 @@
   border: 0;
   background: transparent;
   cursor: zoom-in;
+}
+
+.faculty-photo-viewer-trigger .cell-x {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
 }
 
 .faculty-photo-viewer-trigger img { display: block; }
