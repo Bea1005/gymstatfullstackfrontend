@@ -968,7 +968,7 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
       {/* Borrower Details Modal */}
       {selectedBorrowerDetails && (
         <div className="modal-backdrop" onClick={() => setSelectedBorrowerDetails(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="borrower-details-title">
+          <div className="modal-card borrowing-details-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="borrower-details-title">
             <div className="modal-header">
               <h3 id="borrower-details-title">Borrower Details</h3>
             </div>

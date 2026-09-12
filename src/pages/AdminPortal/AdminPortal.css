@@ -171,6 +171,8 @@
 .no-data { color: #666; font-style: italic; text-align: center; padding: 20px; }
 .bold-maroon { font-weight: 700; color: #800000; }
 
+.borrowing-details-modal .modal-btn.modal-secondary { color: white; }
+
 /* ════════════════════════════════════════
    SCHEDULES PAGE
 ════════════════════════════════════════ */
