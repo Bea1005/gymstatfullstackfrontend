@@ -26,7 +26,7 @@ const getFileExtension = (fileName = '') => {
 
 const isImageFile = (entry) => (
   String(entry?.fileType || '').toLowerCase().startsWith('image/')
-  || ['.png', '.jpg', '.jpeg', '.gif'].includes(getFileExtension(entry?.fileName))
+  || ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(getFileExtension(entry?.fileName))
 );
 
 const isPdfFile = (entry) => (
@@ -43,7 +43,8 @@ const getRequirementFileUrl = (entry) => {
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
   const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-  const response = await fetch(resolveAttachmentUrl(fileUrl), {
+  const resolvedUrl = resolveAttachmentUrl(fileUrl);
+  const response = await fetch(resolvedUrl, {
     cache: 'no-store',
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
