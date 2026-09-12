@@ -503,6 +503,7 @@ export default function CoachRecord() {
         ...Array.from(sourceBoxes[0]?.querySelectorAll('.form-grid-row:not(.staff-grid-row) > .grid-col') || []).slice(0, 12),
         ...Array.from(sourceBoxes[1]?.querySelectorAll('.form-grid-row:not(.staff-grid-row) > .grid-col') || []).slice(0, 1),
       ];
+      const sourceBlankAthleteCard = sourceAthleteCards.find((card) => !card.querySelector('.col-info-row')?.textContent.trim()) || sourceAthleteCards[0];
       const athleteChunks = [];
       for (let index = 0; index < athletes.length; index += 10) {
         athleteChunks.push(athletes.slice(index, index + 10));
@@ -510,6 +511,13 @@ export default function CoachRecord() {
       const athleteTemplate = sourceAthleteCards[0];
       const hasFacultySection = Boolean(sourceBoxes[1]);
       if (athleteChunks.length === 0 && !hasFacultySection) athleteChunks.push([]);
+      const facultyChunks = [];
+      if (hasFacultySection) {
+        for (let index = 0; index < staff.length; index += 5) {
+          facultyChunks.push(staff.slice(index, index + 5));
+        }
+        if (facultyChunks.length === 0) facultyChunks.push([]);
+      }
 
       const createAthleteCard = (template, athlete) => {
         const card = (template || sourceAthleteCards[0])?.cloneNode(true);
@@ -539,6 +547,62 @@ export default function CoachRecord() {
         return card;
       };
 
+      const createEmptyAthleteCard = () => {
+        const card = sourceBlankAthleteCard?.cloneNode(true);
+        if (!card) return null;
+        card.classList.remove('clickable-col');
+        card.querySelectorAll('.grid-remove-btn, .grid-status-stamp').forEach((control) => control.remove());
+        card.querySelectorAll('.col-info-row').forEach((row) => {
+          row.textContent = '';
+          row.removeAttribute('title');
+        });
+        const photo = card.querySelector('.col-photo');
+        photo?.querySelectorAll('img').forEach((image) => image.remove());
+        const emptyMark = document.createElement('span');
+        emptyMark.className = 'cell-x';
+        emptyMark.textContent = 'X';
+        photo?.appendChild(emptyMark);
+        return card;
+      };
+
+      const createFacultyCard = (template, member) => {
+        const card = template?.cloneNode(true);
+        if (!card) return null;
+        card.classList.remove('clickable-col');
+        card.querySelectorAll('.grid-remove-btn, .faculty-photo-viewer-trigger').forEach((control) => control.remove());
+        const label = card.querySelector('.col-label');
+        const infoRows = card.querySelectorAll('.col-info-row');
+        if (member) {
+          if (label) label.textContent = member.role || 'FACULTY';
+          [member.fullname, member.age, member.phone, member.email].forEach((value, index) => {
+            if (infoRows[index]) infoRows[index].textContent = value || '';
+          });
+          const photo = card.querySelector('.col-photo');
+          photo?.querySelectorAll('img').forEach((image) => image.remove());
+          if (member.photo) {
+            const image = document.createElement('img');
+            image.src = member.photo;
+            image.alt = member.fullname || member.role || 'Faculty member';
+            photo?.appendChild(image);
+          } else {
+            const emptyMark = document.createElement('span');
+            emptyMark.className = 'cell-x';
+            emptyMark.textContent = 'X';
+            photo?.appendChild(emptyMark);
+          }
+        } else {
+          label.textContent = 'FACULTY';
+          infoRows.forEach((row) => { row.textContent = ''; });
+          const photo = card.querySelector('.col-photo');
+          photo?.querySelectorAll('img').forEach((image) => image.remove());
+          const emptyMark = document.createElement('span');
+          emptyMark.className = 'cell-x';
+          emptyMark.textContent = 'X';
+          photo?.appendChild(emptyMark);
+        }
+        return card;
+      };
+
       exportRoot = document.createElement('div');
       exportRoot.className = 'coach-pdf-export-root';
       exportRoot.style.width = `${Math.max(form.getBoundingClientRect().width, 1200)}px`;
@@ -548,7 +612,7 @@ export default function CoachRecord() {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const pageMargin = 0.16;
-      const totalPages = athleteChunks.length + (hasFacultySection ? 1 : 0);
+      const totalPages = athleteChunks.length + facultyChunks.length;
       const waitForImages = async (element) => {
         await Promise.all(Array.from(element.querySelectorAll('img')).map((image) => (
           image.complete ? Promise.resolve() : new Promise((resolve) => {
@@ -568,9 +632,23 @@ export default function CoachRecord() {
         const isFacultyPage = pageIndex >= athleteChunks.length;
 
         if (isFacultyPage) {
-          athleteBox?.remove();
-          const facultyRows = Array.from(facultyBox?.querySelectorAll(':scope > .form-grid-row') || []);
-          facultyRows.filter((row) => !row.classList.contains('staff-grid-row')).forEach((row) => row.remove());
+          const facultyChunk = facultyChunks[pageIndex - athleteChunks.length] || [];
+          const athleteRows = Array.from(athleteBox?.querySelectorAll(':scope > .form-grid-row') || []);
+          const athleteLogo = athleteRows[0]?.querySelector('.grid-logo-col');
+          athleteRows.forEach((row) => {
+            row.replaceChildren(athleteLogo?.cloneNode(true));
+            for (let slot = 0; slot < 5; slot += 1) row.appendChild(createEmptyAthleteCard());
+          });
+          const facultyRow = facultyBox?.querySelector('.staff-grid-row');
+          const facultyLogo = facultyRow?.querySelector('.grid-logo-col');
+          const facultyTemplate = facultyRow?.querySelector('.grid-col:not(.staff-add-col):not(.grid-placeholder-col)');
+          if (facultyRow) {
+            facultyRow.replaceChildren(facultyLogo?.cloneNode(true));
+            for (let slot = 0; slot < 5; slot += 1) {
+              facultyRow.appendChild(createFacultyCard(facultyTemplate, facultyChunk[slot] || null));
+            }
+          }
+          facultyBox?.querySelectorAll('.staff-add-col, .grid-placeholder-col').forEach((element) => element.remove());
         } else {
           facultyBox?.remove();
         }
@@ -615,6 +693,9 @@ export default function CoachRecord() {
           const cardTemplate = sourceAthleteCards[pageIndex * 10 + cardIndex] || athleteTemplate;
           const card = createAthleteCard(cardTemplate, athlete);
           if (row && card) row.appendChild(card);
+        });
+        sourceRows.forEach((row) => {
+          while (row.querySelectorAll(':scope > .grid-col').length < 5) row.appendChild(createEmptyAthleteCard());
         });
 
         const pageNumber = document.createElement('div');
