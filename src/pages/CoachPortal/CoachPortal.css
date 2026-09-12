@@ -330,10 +330,10 @@
 }
 
 .coach-pdf-export-root {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: -20000px;
-  z-index: -1;
+  z-index: 1;
   background: #fff;
   pointer-events: none;
 }
