@@ -23,14 +23,6 @@ import './CoachPortal.css';
 // Both header logos now use the real uploaded assets — see imports above.
 
 const placeholderImg = 'https://via.placeholder.com/300x300?text=Photo';
-const configuredApiUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
-
-const resolveStudentPhotoUrl = (student) => {
-  if (!student?.profilePhotoUrl) return '';
-  if (/^https?:\/\//i.test(student.profilePhotoUrl)) return student.profilePhotoUrl;
-  return `${configuredApiUrl}/${student.profilePhotoUrl.replace(/^\//, '')}`;
-};
-
 const formatDateOfBirth = (value) => {
   if (!value) return '';
   const dateText = String(value).trim();
@@ -326,7 +318,16 @@ export default function CoachRecord() {
       }
 
       const normalizedAthletes = Array.isArray(athletesData)
-          ? athletesData.map((athlete) => ({
+          ? await Promise.all(athletesData.map(async (athlete) => {
+              let photo = '';
+              if (athlete.profilePhotoUrl) {
+                try {
+                  photo = await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl);
+                } catch {
+                  photo = '';
+                }
+              }
+              return {
               id: athlete._id || athlete.id,
               userId: athlete._id || athlete.id,
               fullname: athlete.fullname || '',
@@ -335,8 +336,9 @@ export default function CoachRecord() {
               sport: athlete.sport || selectedSport || 'Volleyball Women',
               location: athlete.branchCampus || athlete.location || '',
               dob: athlete.dateOfBirth || athlete.dob || '',
-              photo: resolveStudentPhotoUrl(athlete) || athlete.photo || '',
+              photo,
               status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
+              };
             }))
           : [];
 
@@ -397,16 +399,24 @@ export default function CoachRecord() {
       const latestAthletes = await api.getCoachAthletes(coachProfile.mainSport).catch(() => []);
       if (cancelled || !Array.isArray(latestAthletes)) return;
 
-      const latestStatuses = new Map(
-        latestAthletes.map((athlete) => [
-          String(athlete._id || athlete.id),
-          normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
-        ]),
-      );
+      const latestPhotos = await Promise.all(latestAthletes.map(async (athlete) => {
+        if (!athlete.profilePhotoUrl) return ['', String(athlete._id || athlete.id)];
+        try {
+          return [await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl), String(athlete._id || athlete.id)];
+        } catch {
+          return ['', String(athlete._id || athlete.id)];
+        }
+      }));
+      const latestPhotoById = new Map(latestPhotos.map(([photo, id]) => [id, photo]));
+      const latestStatuses = new Map(latestAthletes.map((athlete) => [
+        String(athlete._id || athlete.id),
+        normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
+      ]));
 
       setAthletes((currentAthletes) => currentAthletes.map((athlete) => {
         const latestStatus = latestStatuses.get(String(athlete.id));
-        return latestStatus ? { ...athlete, status: latestStatus } : athlete;
+        const latestPhoto = latestPhotoById.get(String(athlete.id));
+        return latestStatus ? { ...athlete, status: latestStatus, photo: latestPhoto || athlete.photo } : athlete;
       }));
     };
 
@@ -1069,9 +1079,17 @@ export default function CoachRecord() {
                         course: [selectedStudent.department, selectedStudent.yearLevel].filter(Boolean).join(' - '),
                         location: selectedStudent.branchCampus || '',
                         email: selectedStudent.email || '',
-                        photo: resolveStudentPhotoUrl(selectedStudent),
+                        photo: placeholderImg,
                       }));
-                      setImagePreview(resolveStudentPhotoUrl(selectedStudent));
+                      setImagePreview(placeholderImg);
+                      if (selectedStudent.profilePhotoUrl) {
+                        api.getProtectedImageObjectUrl(selectedStudent.profilePhotoUrl)
+                          .then((photoUrl) => {
+                            setEditForm((current) => ({ ...current, photo: photoUrl }));
+                            setImagePreview(photoUrl);
+                          })
+                          .catch(() => {});
+                      }
                     }}
                     style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px', boxSizing: 'border-box' }}
                     required

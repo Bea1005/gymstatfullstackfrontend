@@ -14,15 +14,6 @@ const normalizeDateForInput = (value) => {
   return Number.isNaN(parsedDate.getTime()) ? "" : parsedDate.toISOString().slice(0, 10);
 };
 
-const getProfilePhotoUrl = (profilePhoto) => {
-  if (!profilePhoto) return "";
-  if (/^https?:\/\//i.test(profilePhoto)) return profilePhoto;
-
-  const configuredApiUrl = import.meta.env.VITE_API_URL || "";
-  const backendOrigin = configuredApiUrl.match(/^(https?:\/\/[^/]+)/i)?.[1];
-  return backendOrigin ? `${backendOrigin}${profilePhoto}` : profilePhoto;
-};
-
 const getEditableProfileFields = (profile = {}) => ({
   fullname: profile.fullname || profile.name || "",
   username: profile.username || "",
@@ -44,6 +35,9 @@ const StudentProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoLoading, setPhotoLoading] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -52,6 +46,10 @@ const StudentProfile = () => {
         const profile = response.user || response.data || {};
         setUser(profile);
         setForm(getEditableProfileFields(profile));
+        if (profile.profilePhoto) {
+          const currentPhotoUrl = await api.getProtectedImageObjectUrl("/profile/photo");
+          setPhotoUrl(currentPhotoUrl);
+        }
       } catch (error) {
         notify("error", "Unable to load profile", error.message || "Please try again.");
       } finally {
@@ -85,6 +83,10 @@ const StudentProfile = () => {
         throw new Error("The profile was saved, but Date of Birth, Year Level, or Branch Campus was not persisted.");
       }
       setUser(updatedUser);
+      if (photoFile) {
+        const currentPhotoUrl = await api.getProtectedImageObjectUrl("/profile/photo");
+        setPhotoUrl(currentPhotoUrl);
+      }
       setPhotoFile(null);
       setPhotoPreview("");
       setForm(getEditableProfileFields(updatedUser));
@@ -96,6 +98,22 @@ const StudentProfile = () => {
       notify("error", "Unable to update profile", error.message || "Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePhotoSelect = async (event) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoModalOpen(true);
+  };
+
+  const closePhotoModal = () => {
+    if (!saving) {
+      setPhotoModalOpen(false);
+      setPhotoFile(null);
+      setPhotoPreview("");
     }
   };
 
@@ -122,11 +140,7 @@ const StudentProfile = () => {
     ["Username", "username", true],
   ];
 
-  const imageUrl = getProfilePhotoUrl(user.profilePhoto);
-  const imageUrlWithCacheBuster = imageUrl
-    ? `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(user.updatedAt || "")}`
-    : "";
-  const displayedImage = photoPreview || imageUrlWithCacheBuster;
+  const displayedImage = photoPreview || photoUrl;
 
   return (
     <div className="student-profile-page">
@@ -136,11 +150,10 @@ const StudentProfile = () => {
           <h1>Student Profile</h1>
           <p>View your registered information and keep your contact email current.</p>
         </div>
-        <label className="student-profile-avatar" title="Update profile photo">
+        <button type="button" className="student-profile-avatar" title="View or update profile photo" onClick={() => setPhotoModalOpen(true)}>
           {displayedImage ? <img src={displayedImage} alt="Student profile" /> : (user.fullname || user.name || "S").charAt(0).toUpperCase()}
           {isEditing && <span className="student-profile-avatar__edit">Edit</span>}
-          <input type="file" accept="image/jpeg,image/png,image/gif" onChange={(event) => { const file = event.target.files?.[0] || null; setPhotoFile(file); setPhotoPreview(file ? URL.createObjectURL(file) : ""); }} disabled={!isEditing} />
-        </label>
+        </button>
       </header>
 
       <section className="student-profile-card">
@@ -191,6 +204,23 @@ const StudentProfile = () => {
       </section>
 
       <p className="student-profile-note">Student ID is managed by GymStat administrators. Username changes must be unique.</p>
+
+      {photoModalOpen && <div className="student-profile-photo-modal" role="dialog" aria-modal="true" aria-labelledby="student-profile-photo-title" onClick={closePhotoModal}>
+        <div className="student-profile-photo-modal__card" onClick={(event) => event.stopPropagation()}>
+          <div className="student-profile-photo-modal__header">
+            <h2 id="student-profile-photo-title">Profile Photo</h2>
+            <button type="button" onClick={closePhotoModal} disabled={saving} aria-label="Close">&times;</button>
+          </div>
+          <div className="student-profile-photo-modal__preview">
+            {displayedImage ? <img src={displayedImage} alt="Current student profile" /> : <span>No profile photo</span>}
+          </div>
+          <label className="student-profile-button">
+            {photoLoading ? "Loading..." : "Choose New Photo"}
+            <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handlePhotoSelect} disabled={saving || photoLoading} />
+          </label>
+          {photoFile && <button type="button" className="student-profile-button" onClick={async () => { setPhotoLoading(true); await handleSave({ preventDefault: () => {} }); setPhotoLoading(false); setPhotoModalOpen(false); }} disabled={saving}>Save Photo</button>}
+        </div>
+      </div>}
     </div>
   );
 };

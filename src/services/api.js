@@ -371,6 +371,16 @@ export const updateProfile = async (userData) => {
   });
 };
 
+export const getProtectedImageObjectUrl = async (endpoint) => {
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error('Unable to load profile photo');
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
 // Get all students (for screener/admin)
 export const getStudents = async () => {
   return apiRequest('/screener/students', {
