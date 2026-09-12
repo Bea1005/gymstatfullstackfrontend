@@ -22,7 +22,7 @@ import './CoachPortal.css';
 
 // Both header logos now use the real uploaded assets — see imports above.
 
-const placeholderImg = 'https://via.placeholder.com/300x300?text=Photo';
+const placeholderImg = logoImage;
 const formatDateOfBirth = (value) => {
   if (!value) return '';
   const dateText = String(value).trim();
