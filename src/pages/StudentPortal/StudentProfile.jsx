@@ -23,6 +23,18 @@ const getProfilePhotoUrl = (profilePhoto) => {
   return backendOrigin ? `${backendOrigin}${profilePhoto}` : profilePhoto;
 };
 
+const getEditableProfileFields = (profile = {}) => ({
+  fullname: profile.fullname || profile.name || "",
+  username: profile.username || "",
+  email: profile.email || "",
+  contactNumber: profile.contactNumber || "",
+  dateOfBirth: normalizeDateForInput(profile.dateOfBirth || profile.dob),
+  department: profile.department || "",
+  yearLevel: profile.yearLevel || "",
+  sport: profile.sport || "",
+  branchCampus: profile.branchCampus || ""
+});
+
 const StudentProfile = () => {
   const { notify } = useNotifications();
   const [user, setUser] = useState(null);
@@ -39,17 +51,7 @@ const StudentProfile = () => {
         const response = await api.getProfile();
         const profile = response.user || response.data || {};
         setUser(profile);
-        setForm({
-          fullname: profile.fullname || profile.name || "",
-          username: profile.username || "",
-          email: profile.email || "",
-          contactNumber: profile.contactNumber || "",
-          dateOfBirth: normalizeDateForInput(profile.dateOfBirth || profile.dob),
-          department: profile.department || "",
-          yearLevel: profile.yearLevel || "",
-          sport: profile.sport || "",
-          branchCampus: profile.branchCampus || ""
-        });
+        setForm(getEditableProfileFields(profile));
       } catch (error) {
         notify("error", "Unable to load profile", error.message || "Please try again.");
       } finally {
@@ -66,7 +68,7 @@ const StudentProfile = () => {
 
     try {
       const formData = new FormData();
-      Object.entries(form).forEach(([field, value]) => {
+      Object.entries(getEditableProfileFields(form)).forEach(([field, value]) => {
         if (value !== "" && value !== null && value !== undefined) {
           formData.append(field, value);
         }
@@ -85,7 +87,7 @@ const StudentProfile = () => {
       setUser(updatedUser);
       setPhotoFile(null);
       setPhotoPreview("");
-      setForm((current) => ({ ...current, ...updatedUser }));
+      setForm(getEditableProfileFields(updatedUser));
       localStorage.setItem("user", JSON.stringify(updatedUser));
       sessionStorage.setItem("user", JSON.stringify(updatedUser));
       setIsEditing(false);
