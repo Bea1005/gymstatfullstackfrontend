@@ -490,6 +490,7 @@ export default function CoachRecord() {
 
   // ---------------- Download report ----------------
   const handleDownloadReport = async () => {
+    let exportRoot;
     let form;
     try {
       const { jsPDF } = await import('jspdf');
@@ -497,37 +498,125 @@ export default function CoachRecord() {
       form = document.querySelector('.strasuc-form-page');
       if (!form) throw new Error('The student-athlete form is unavailable.');
 
-      form.classList.add('coach-pdf-export');
-      await Promise.all(Array.from(form.querySelectorAll('img')).map((image) => (
-        image.complete ? Promise.resolve() : new Promise((resolve) => {
-          image.addEventListener('load', resolve, { once: true });
-          image.addEventListener('error', resolve, { once: true });
-        })
-      )));
+      const sourceBoxes = Array.from(form.querySelectorAll(':scope > .form-grid-box'));
+      const sourceAthleteCards = [
+        ...Array.from(sourceBoxes[0]?.querySelectorAll('.form-grid-row:not(.staff-grid-row) > .grid-col') || []).slice(0, 12),
+        ...Array.from(sourceBoxes[1]?.querySelectorAll('.form-grid-row:not(.staff-grid-row) > .grid-col') || []).slice(0, 1),
+      ];
+      const athleteChunks = [];
+      for (let index = 0; index < athletes.length; index += 10) {
+        athleteChunks.push(athletes.slice(index, index + 10));
+      }
+      if (athleteChunks.length === 0) athleteChunks.push([]);
+      const athleteTemplate = sourceAthleteCards[0];
 
-      const canvas = await html2canvas(form, {
-        backgroundColor: '#ffffff',
-        scale: Math.min(2, window.devicePixelRatio || 1),
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        windowWidth: form.scrollWidth,
-        windowHeight: form.scrollHeight,
-      });
+      const createAthleteCard = (template, athlete) => {
+        const card = (template || sourceAthleteCards[0])?.cloneNode(true);
+        if (!card) return null;
+        const photo = card.querySelector('.col-photo');
+        const statusStamp = photo?.querySelector('.grid-status-stamp');
+        photo?.querySelectorAll('img:not(.grid-status-stamp)').forEach((image) => image.remove());
+        if (athlete.photo && photo) {
+          const image = document.createElement('img');
+          image.src = athlete.photo;
+          image.alt = athlete.fullname || 'Student athlete';
+          photo.insertBefore(image, statusStamp || null);
+        }
+        const infoRows = card.querySelectorAll('.col-info-row');
+        const values = [
+          athlete.fullname || '',
+          formatDateOfBirth(athlete.dob),
+          athlete.course || '',
+          athlete.location || '',
+        ];
+        values.forEach((value, index) => {
+          if (infoRows[index]) {
+            infoRows[index].textContent = value;
+            infoRows[index].setAttribute('title', value);
+          }
+        });
+        return card;
+      };
+
+      exportRoot = document.createElement('div');
+      exportRoot.className = 'coach-pdf-export-root';
+      exportRoot.style.width = `${Math.max(form.getBoundingClientRect().width, 1200)}px`;
+      document.body.appendChild(exportRoot);
+
       const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: [13, 8.5] });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-      const imageWidth = canvas.width * scale;
-      const imageHeight = canvas.height * scale;
-      doc.addImage(canvas.toDataURL('image/png'), 'PNG', (pageWidth - imageWidth) / 2, (pageHeight - imageHeight) / 2, imageWidth, imageHeight, undefined, 'FAST');
+      const pageMargin = 0.16;
+      const totalPages = athleteChunks.length;
+      const waitForImages = async (element) => {
+        await Promise.all(Array.from(element.querySelectorAll('img')).map((image) => (
+          image.complete ? Promise.resolve() : new Promise((resolve) => {
+            image.addEventListener('load', resolve, { once: true });
+            image.addEventListener('error', resolve, { once: true });
+          })
+        )));
+      };
+
+      for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+        const page = form.cloneNode(true);
+        page.classList.add('coach-pdf-export');
+        page.style.width = exportRoot.style.width;
+        const pageBoxes = Array.from(page.querySelectorAll(':scope > .form-grid-box'));
+        const athleteBox = pageBoxes[0];
+        const facultyBox = pageBoxes[1];
+        const sourceLogo = athleteBox?.querySelector('.grid-logo-col');
+        const sourceRows = athleteBox ? Array.from(athleteBox.querySelectorAll(':scope > .form-grid-row')) : [];
+        const cards = athleteChunks[pageIndex];
+
+        sourceRows.forEach((row) => {
+          row.replaceChildren(sourceLogo?.cloneNode(true));
+        });
+        cards.forEach((athlete, cardIndex) => {
+          const row = sourceRows[Math.floor(cardIndex / 5)];
+          const cardTemplate = sourceAthleteCards[pageIndex * 10 + cardIndex] || athleteTemplate;
+          const card = createAthleteCard(cardTemplate, athlete);
+          if (row && card) row.appendChild(card);
+        });
+
+        if (facultyBox) {
+          const facultyRows = Array.from(facultyBox.querySelectorAll(':scope > .form-grid-row'));
+          facultyRows.filter((row) => !row.classList.contains('staff-grid-row')).forEach((row) => row.remove());
+          if (pageIndex !== totalPages - 1) facultyBox.remove();
+        }
+
+        const pageNumber = document.createElement('div');
+        pageNumber.className = 'form-page-number';
+        pageNumber.textContent = `Page ${pageIndex + 1} of ${totalPages}`;
+        page.appendChild(pageNumber);
+        exportRoot.replaceChildren(page);
+        await waitForImages(page);
+
+        const canvas = await html2canvas(page, {
+          backgroundColor: '#ffffff',
+          scale: Math.min(2, window.devicePixelRatio || 1),
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          windowWidth: page.scrollWidth,
+          windowHeight: page.scrollHeight,
+        });
+        if (pageIndex > 0) doc.addPage([13, 8.5], 'landscape');
+        const scale = Math.min(
+          (pageWidth - pageMargin * 2) / canvas.width,
+          (pageHeight - pageMargin * 2) / canvas.height,
+        );
+        const imageWidth = canvas.width * scale;
+        const imageHeight = canvas.height * scale;
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', (pageWidth - imageWidth) / 2, (pageHeight - imageHeight) / 2, imageWidth, imageHeight, undefined, 'FAST');
+      }
+
       doc.save(`STRASUC_${(coachProfile.mainSport || 'Report').replace(/[^a-z0-9]+/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       setToast({ message: 'Report downloaded successfully!', type: 'success' });
     } catch (error) {
       console.error('Failed to generate report:', error);
       setToast({ message: 'Failed to generate report. Please try again.', type: 'error' });
     } finally {
-      form?.classList.remove('coach-pdf-export');
+      exportRoot?.remove();
     }
   };
 

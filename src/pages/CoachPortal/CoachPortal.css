@@ -324,8 +324,27 @@
 
 .coach-pdf-export .grid-remove-btn,
 .coach-pdf-export .edit-icon-btn,
+.coach-pdf-export .freeform-edit-icon,
 .coach-pdf-export .staff-add-col {
   display: none !important;
+}
+
+.coach-pdf-export-root {
+  position: fixed;
+  top: 0;
+  left: -20000px;
+  z-index: -1;
+  background: #fff;
+  pointer-events: none;
+}
+
+.coach-pdf-export .form-page-number {
+  margin-top: 8px;
+  color: var(--form-maroon);
+  font-family: var(--form-sans);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
 }
 
 .grid-logo-col .row-label-cell {
