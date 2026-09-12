@@ -679,6 +679,28 @@ export const updateCoachProfile = async (profileData) => {
   });
 };
 
+export const getFacultyMembers = async () => {
+  return apiRequest('/coach/faculty-members', { method: 'GET' });
+};
+
+export const createFacultyMember = async (facultyData) => {
+  return apiRequest('/coach/faculty-members', {
+    method: 'POST',
+    body: facultyData,
+  });
+};
+
+export const updateFacultyMember = async (facultyId, facultyData) => {
+  return apiRequest(`/coach/faculty-members/${facultyId}`, {
+    method: 'PUT',
+    body: facultyData,
+  });
+};
+
+export const deleteFacultyMember = async (facultyId) => {
+  return apiRequest(`/coach/faculty-members/${facultyId}`, { method: 'DELETE' });
+};
+
 // Coach announcements
 export const getCoachUpdates = async () => {
   return apiRequest('/coach/updates', {

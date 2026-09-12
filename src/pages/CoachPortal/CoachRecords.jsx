@@ -222,6 +222,8 @@ export default function CoachRecord() {
   const [editingStaffIndex, setEditingStaffIndex] = useState(null);
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [staffForm, setStaffForm] = useState({ role: 'CHAPERONE', fullname: '', age: '', phone: '', email: '', photo: placeholderImg });
+  const [selectedStaffFile, setSelectedStaffFile] = useState(null);
+  const [viewingFacultyMember, setViewingFacultyMember] = useState(null);
 
   const [editForm, setEditForm] = useState({
     fullname: '',
@@ -284,11 +286,12 @@ export default function CoachRecord() {
     try {
       if (selectedSport === coachProfile.mainSport) setLoading(true);
       else setCategoryLoading(true);
-      const [profileData, athletesData, directoryData, updatesData] = await Promise.all([
+      const [profileData, athletesData, directoryData, updatesData, facultyData] = await Promise.all([
         api.getCoachProfile().catch(() => null),
         api.getCoachAthletes(selectedSport).catch(() => []),
-      api.getCoachStudentDirectory(selectedSport).catch(() => []),
+        api.getCoachStudentDirectory(selectedSport).catch(() => []),
         api.getCoachUpdates().catch(() => []),
+        api.getFacultyMembers().catch(() => []),
       ]);
 
       if (profileData) {
@@ -312,10 +315,25 @@ export default function CoachRecord() {
           };
           return next;
         });
-        if (Array.isArray(profileData.staffMembers)) {
+        if (!Array.isArray(facultyData) && Array.isArray(profileData.staffMembers)) {
           setStaff(normalizeStaffMembers(profileData.staffMembers));
         }
       }
+
+      const normalizedFaculty = Array.isArray(facultyData)
+        ? await Promise.all(facultyData.map(async (member) => {
+            let photo = '';
+            if (member.profilePhotoUrl) {
+              try {
+                photo = await api.getProtectedImageObjectUrl(member.profilePhotoUrl);
+              } catch {
+                photo = '';
+              }
+            }
+            return { ...member, photo: photo || placeholderImg };
+          }))
+        : [];
+      if (Array.isArray(facultyData)) setStaff(normalizeStaffMembers(normalizedFaculty));
 
       const normalizedAthletes = Array.isArray(athletesData)
           ? await Promise.all(athletesData.map(async (athlete) => {
@@ -371,6 +389,7 @@ export default function CoachRecord() {
       setStudentDirectory(filteredDirectory);
       setHasActivatedGrid(
         normalizedAthletes.length > 0
+        || Boolean(normalizedFaculty.some((member) => member.fullname || member.phone || member.email))
         || Boolean(profileData?.staffMembers?.some((member) => member.fullname || member.phone || member.email))
       );
 
@@ -463,6 +482,7 @@ export default function CoachRecord() {
       setToast({ message: 'Image size should be less than 5MB.', type: 'error' });
       return;
     }
+    setSelectedStaffFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setStaffForm((current) => ({ ...current, photo: reader.result }));
     reader.readAsDataURL(file);
@@ -664,35 +684,39 @@ export default function CoachRecord() {
     setEditingStaffIndex(index);
     setIsAddingStaff(false);
     setStaffForm({ ...staff[index], role: String(staff[index]?.role || 'CHAPERONE').toUpperCase() });
+    setSelectedStaffFile(null);
   };
 
   const handleAddStaff = () => {
     setIsAddingStaff(true);
     setEditingStaffIndex(null);
     setStaffForm({ ...createDefaultStaffMember('CHAPERONE'), fullname: '', age: '', phone: '', email: '', photo: placeholderImg });
+    setSelectedStaffFile(null);
   };
 
   const handleSaveStaff = async (e) => {
     e.preventDefault();
     const role = String(staffForm.role || 'OTHER FACULTY').toUpperCase();
-    const normalizedForm = {
-      ...staffForm,
-      role,
-      photo: staffForm.photo || placeholderImg,
-    };
-
-    const updatedStaff = isAddingStaff
-      ? normalizeStaffMembers([...staff, normalizedForm])
-      : normalizeStaffMembers(staff.map((member, index) => (index === editingStaffIndex ? { ...member, ...normalizedForm } : member)));
-
     try {
-      await api.updateCoachProfile({ staffMembers: updatedStaff });
-      setStaff(updatedStaff);
-      if (editingStaffIndex === 0 || (!isAddingStaff && staff[editingStaffIndex]?.role === 'COACH')) {
-        setCoachProfile((prev) => ({ ...prev, fullname: normalizedForm.fullname || prev.fullname, phone: normalizedForm.phone || prev.phone, email: normalizedForm.email || prev.email, photo: normalizedForm.photo || prev.photo }));
+      const currentMember = editingStaffIndex !== null ? staff[editingStaffIndex] : null;
+      const facultyData = new FormData();
+      facultyData.append('role', role);
+      facultyData.append('name', staffForm.fullname.trim());
+      facultyData.append('age', staffForm.age || '');
+      facultyData.append('contactNumber', staffForm.phone || '');
+      facultyData.append('email', staffForm.email || '');
+      if (selectedStaffFile) facultyData.append('profilePhoto', selectedStaffFile);
+      if (isAddingStaff) {
+        await api.createFacultyMember(facultyData);
+      } else if (currentMember?.facultyId || currentMember?.id) {
+        await api.updateFacultyMember(currentMember.facultyId || currentMember.id, facultyData);
+      } else {
+        throw new Error('Faculty member ID is missing. Refresh the Coach Portal and try again.');
       }
+      await fetchCoachData();
       setEditingStaffIndex(null);
       setIsAddingStaff(false);
+      setSelectedStaffFile(null);
       setToast({ message: isAddingStaff ? 'Faculty member added.' : 'Staff information updated.', type: 'success' });
     } catch (error) {
       setToast({ message: error.message || 'Unable to save staff information.', type: 'error' });
@@ -833,7 +857,9 @@ export default function CoachRecord() {
     <div className="grid-col clickable-col" onClick={() => handleEditStaff(index)} role="button" tabIndex={0}>
       <div className="col-label">{member.role}</div>
       <div className="col-photo">
-        <img src={member.photo || placeholderImg} alt={member.role} />
+        <button type="button" className="faculty-photo-viewer-trigger" onClick={(e) => { e.stopPropagation(); setViewingFacultyMember(member); }} title="View profile photo">
+          <img src={member.photo || placeholderImg} alt={member.role} />
+        </button>
         <button type="button" className="grid-remove-btn" onClick={(e) => { e.stopPropagation(); handleEditStaff(index); }} title="Edit">
           <EditIcon size={12} color="#fff" />
         </button>
@@ -1255,6 +1281,20 @@ export default function CoachRecord() {
                 <button className="primary-btn" type="submit">Save</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {viewingFacultyMember && (
+        <div className="coach-modal-overlay" onClick={() => setViewingFacultyMember(null)}>
+          <div className="coach-modal-card faculty-photo-viewer" onClick={(e) => e.stopPropagation()}>
+            <div className="coach-modal-header">
+              <h3 className="coach-modal-title">{viewingFacultyMember.fullname || 'Faculty Member'} Photo</h3>
+              <button className="coach-modal-close" type="button" onClick={() => setViewingFacultyMember(null)}>✕</button>
+            </div>
+            <div className="faculty-photo-viewer__image">
+              <img src={viewingFacultyMember.photo || placeholderImg} alt={viewingFacultyMember.fullname || viewingFacultyMember.role} />
+            </div>
           </div>
         </div>
       )}
