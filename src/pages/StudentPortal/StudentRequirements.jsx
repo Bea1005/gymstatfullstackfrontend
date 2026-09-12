@@ -258,6 +258,11 @@ export default function StudentRequirements() {
   }, []);
 
   const fetchData = async () => {
+    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
+    if (role !== 'student') {
+      return;
+    }
+
     try {
       setLoading(true);
 
