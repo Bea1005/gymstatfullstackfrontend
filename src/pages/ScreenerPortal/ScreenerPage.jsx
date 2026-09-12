@@ -38,7 +38,7 @@ const getRequirementFileUrl = (entry) => {
   if (entry?.fileUrl) return entry.fileUrl;
   if (!entry?.submissionId) return '';
   const participation = encodeURIComponent(entry.participationType || 'Intrams');
-  return `/screener/requirements/${String(entry.submissionId)}/download?participationType=${participation}`;
+  return `/screener/requirements/${String(entry.submissionId)}/preview?participationType=${participation}`;
 };
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
@@ -78,6 +78,7 @@ const ScreenerPage = () => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [previewUrls, setPreviewUrls] = useState({});
   const [previewLoading, setPreviewLoading] = useState({});
+  const [previewErrors, setPreviewErrors] = useState({});
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -245,6 +246,7 @@ const ScreenerPage = () => {
 
     setPreviewUrls({});
     setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, true])));
+    setPreviewErrors({});
 
     if (entries.length === 0) {
       return () => {};
@@ -611,7 +613,17 @@ const ScreenerPage = () => {
                   {getRequirementFileUrl(req.entry) ? (
                     <>
                       {req.previewUrl && isImageFile(req.entry) && (
-                        <img src={req.previewUrl} alt={req.entry.fileName || req.title} className="document-img" />
+                        !previewErrors[req.entry.submissionId] && (
+                          <img
+                            src={req.previewUrl}
+                            alt={req.entry.fileName || req.title}
+                            className="document-img"
+                            onError={() => setPreviewErrors((current) => ({
+                              ...current,
+                              [req.entry.submissionId]: true
+                            }))}
+                          />
+                        )
                       )}
                       {req.previewUrl && isPdfFile(req.entry) && (
                         <iframe
@@ -623,8 +635,15 @@ const ScreenerPage = () => {
                       {!req.previewUrl && previewLoading[req.entry.submissionId] && (
                         <span className="document-loading-label">Loading document...</span>
                       )}
-                      {!req.previewUrl && !previewLoading[req.entry.submissionId] && (
+                      {req.previewUrl && isImageFile(req.entry) && !previewErrors[req.entry.submissionId] && (
                         <div className="document-file-label">{req.entry.fileName || 'Uploaded document'}</div>
+                      )}
+                      {(!req.previewUrl || previewErrors[req.entry.submissionId] || (!isImageFile(req.entry) && !isPdfFile(req.entry)))
+                        && !previewLoading[req.entry.submissionId] && (
+                        <div className="document-file-label">
+                          <div>Document preview unavailable</div>
+                          <div>{req.entry.fileName || 'Uploaded document'}</div>
+                        </div>
                       )}
                       {req.entry?.resubmitted && (
                         <div className="document-resubmitted-indicator" title="Resubmitted requirement awaiting review">!</div>
