@@ -311,6 +311,7 @@
   padding: 8px;
   box-sizing: border-box;
   border-bottom: var(--form-border-thin) solid var(--form-black);
+  overflow: hidden;
 }
 
 .grid-logo-col .logo-photo-block img {
@@ -318,6 +319,13 @@
   max-width: 150px;
   height: auto;
   object-fit: contain;
+  max-height: 100%;
+}
+
+.coach-pdf-export .grid-remove-btn,
+.coach-pdf-export .edit-icon-btn,
+.coach-pdf-export .staff-add-col {
+  display: none !important;
 }
 
 .grid-logo-col .row-label-cell {
@@ -474,6 +482,12 @@
   justify-content: center;
   cursor: pointer;
   z-index: 3;
+}
+
+.grid-remove-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
 }
 
 .grid-col .col-photo .grid-status-stamp {
@@ -664,7 +678,7 @@
   }
 
   @page {
-    size: A3 portrait;
+    size: 13in 8.5in landscape;
     margin: 10mm;
   }
 }

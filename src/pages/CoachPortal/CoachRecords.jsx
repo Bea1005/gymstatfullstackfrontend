@@ -144,8 +144,8 @@ const EditIcon = ({ size = 14, color = '#7b1e1e' }) => (
   </svg>
 );
 const RemoveIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M3.25 3.25l9.5 9.5m0-9.5l-9.5 9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+    <path d="M3 4.25h10M6 2.25h4l.75 2H5.25l.75-2ZM4.25 4.25l.5 9.25h6.5l.5-9.25M6.5 6.25v5M9.5 6.25v5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -490,55 +490,44 @@ export default function CoachRecord() {
 
   // ---------------- Download report ----------------
   const handleDownloadReport = async () => {
+    let form;
     try {
-      const form = document.querySelector('.strasuc-form-page');
+      const { jsPDF } = await import('jspdf');
+      const html2canvas = (await import('html2canvas')).default;
+      form = document.querySelector('.strasuc-form-page');
       if (!form) throw new Error('The student-athlete form is unavailable.');
 
-      const clonedForm = form.cloneNode(true);
-      const images = Array.from(clonedForm.querySelectorAll('img'));
-      await Promise.all(images.map(async (image) => {
-        if (!image.src || image.src.startsWith('data:')) return;
-        try {
-          const response = await fetch(image.src);
-          const blob = await response.blob();
-          image.src = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        } catch (error) {
-          console.warn('Unable to embed report image:', image.src, error);
-        }
-      }));
+      form.classList.add('coach-pdf-export');
+      await Promise.all(Array.from(form.querySelectorAll('img')).map((image) => (
+        image.complete ? Promise.resolve() : new Promise((resolve) => {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+        })
+      )));
 
-      const css = Array.from(document.styleSheets).flatMap((sheet) => {
-        try {
-          return Array.from(sheet.cssRules).map((rule) => rule.cssText);
-        } catch {
-          return [];
-        }
-      }).join('\n');
-      const reportContent = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>${eventMeta.title}</title><style>${css}
-        html, body { margin: 0; background: #fff; }
-        .strasuc-doc-wrapper { padding: 0 !important; background: #fff !important; overflow: visible !important; }
-        .strasuc-form-page { box-shadow: none !important; max-width: none !important; overflow: visible !important; }
-        .grid-info-row, .col-info-row { overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere !important; white-space: normal !important; }
-        @page { size: A3 portrait; margin: 10mm; }
-      </style></head><body>${clonedForm.outerHTML}</body></html>`;
-      const blob = new Blob([reportContent], { type: 'text/html' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Athlete_Report_${new Date().toISOString().split('T')[0]}.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      const canvas = await html2canvas(form, {
+        backgroundColor: '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        windowWidth: form.scrollWidth,
+        windowHeight: form.scrollHeight,
+      });
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: [13, 8.5] });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+      const imageWidth = canvas.width * scale;
+      const imageHeight = canvas.height * scale;
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', (pageWidth - imageWidth) / 2, (pageHeight - imageHeight) / 2, imageWidth, imageHeight, undefined, 'FAST');
+      doc.save(`STRASUC_${(coachProfile.mainSport || 'Report').replace(/[^a-z0-9]+/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       setToast({ message: 'Report downloaded successfully!', type: 'success' });
     } catch (error) {
       console.error('Failed to generate report:', error);
       setToast({ message: 'Failed to generate report. Please try again.', type: 'error' });
+    } finally {
+      form?.classList.remove('coach-pdf-export');
     }
   };
 
