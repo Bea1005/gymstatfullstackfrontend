@@ -24,6 +24,11 @@ const getFileExtension = (fileName = '') => {
   return normalizedName.includes('.') ? normalizedName.slice(normalizedName.lastIndexOf('.')) : '';
 };
 
+const getDisplayFileName = (fileName, fallback = 'Uploaded document') => {
+  const name = String(fileName || '').split(/[\\/]/).pop()?.trim();
+  return name || fallback;
+};
+
 const isImageFile = (entry) => (
   String(entry?.fileType || '').toLowerCase().startsWith('image/')
   || ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(getFileExtension(entry?.fileName))
@@ -636,13 +641,13 @@ const ScreenerPage = () => {
                         <span className="document-loading-label">Loading document...</span>
                       )}
                       {req.previewUrl && isImageFile(req.entry) && !previewErrors[req.entry.submissionId] && (
-                        <div className="document-file-label">{req.entry.fileName || 'Uploaded document'}</div>
+                        <div className="document-file-label">{getDisplayFileName(req.entry.fileName)}</div>
                       )}
                       {(!req.previewUrl || previewErrors[req.entry.submissionId] || (!isImageFile(req.entry) && !isPdfFile(req.entry)))
                         && !previewLoading[req.entry.submissionId] && (
                         <div className="document-file-label">
                           <div>Document preview unavailable</div>
-                          <div>{req.entry.fileName || 'Uploaded document'}</div>
+                          <div>{getDisplayFileName(req.entry.fileName)}</div>
                         </div>
                       )}
                       {req.entry?.resubmitted && (

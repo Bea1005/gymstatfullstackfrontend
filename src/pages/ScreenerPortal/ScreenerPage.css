@@ -703,12 +703,23 @@
 }
 
 .document-file-label {
+  display: block;
+  width: 100%;
   max-width: 90%;
+  min-width: 0;
   color: #555;
   font-size: 13px;
   line-height: 1.4;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-file-label > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .document-card--rejected .document-preview-box {
