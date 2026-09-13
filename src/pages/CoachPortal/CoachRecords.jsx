@@ -508,6 +508,8 @@ export default function CoachRecord() {
       const facultySourceRow = facultySourceBox?.querySelector('.staff-grid-row');
       const facultyLogoTemplate = facultySourceRow?.querySelector('.grid-logo-col');
       const facultyCardTemplate = facultySourceRow?.querySelector('.grid-col:not(.staff-add-col):not(.grid-placeholder-col)') || athleteTemplate;
+      const eligibilityTemplate = facultySourceBox?.querySelector('.grid-freeform-col.eligibility-col');
+      const directorTemplate = facultySourceBox?.querySelector('.grid-freeform-col.director-col');
       const athleteChunks = [];
       for (let index = 0; index < athletes.length; index += 10) athleteChunks.push(athletes.slice(index, index + 10));
       if (athleteChunks.length === 0) athleteChunks.push([]);
@@ -605,6 +607,8 @@ export default function CoachRecord() {
         for (let index = 0; index < 5; index += 1) {
           row.appendChild(createFacultyCard(facultyCardTemplate, members[index] || null));
         }
+        if (eligibilityTemplate) row.appendChild(eligibilityTemplate.cloneNode(true));
+        if (directorTemplate) row.appendChild(directorTemplate.cloneNode(true));
         return row;
       };
 
