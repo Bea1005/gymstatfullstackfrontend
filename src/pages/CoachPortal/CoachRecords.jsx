@@ -520,6 +520,7 @@ export default function CoachRecord() {
       const createAthleteCard = (template, athlete) => {
         const card = (template || athleteTemplate)?.cloneNode(true);
         if (!card) return null;
+        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon').forEach((control) => control.remove());
         const photo = card.querySelector('.col-photo');
         const statusStamp = photo?.querySelector('.grid-status-stamp');
         photo?.querySelectorAll('img:not(.grid-status-stamp)').forEach((image) => image.remove());
@@ -554,7 +555,7 @@ export default function CoachRecord() {
         const card = athleteTemplate?.cloneNode(true);
         if (!card) return null;
         card.classList.remove('clickable-col');
-        card.querySelectorAll('.grid-remove-btn, .grid-status-stamp').forEach((control) => control.remove());
+        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon, .grid-status-stamp').forEach((control) => control.remove());
         card.querySelectorAll('.col-info-row').forEach((row) => {
           row.textContent = '';
           row.removeAttribute('title');
@@ -572,7 +573,7 @@ export default function CoachRecord() {
         const card = template?.cloneNode(true);
         if (!card) return null;
         card.classList.remove('clickable-col');
-        card.querySelectorAll('.grid-remove-btn, .faculty-photo-viewer-trigger').forEach((control) => control.remove());
+        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon, .faculty-photo-viewer-trigger').forEach((control) => control.remove());
         const label = card.querySelector('.col-label');
         const infoRows = card.querySelectorAll('.col-info-row');
         if (label) label.textContent = member?.role || 'FACULTY';
@@ -658,6 +659,7 @@ export default function CoachRecord() {
         });
         pageBoxes.slice(1).forEach((box) => box.remove());
         page.appendChild(createFacultySection(facultyChunks[pageIndex] || []));
+        page.querySelectorAll('.grid-remove-btn, .faculty-photo-viewer-trigger, .staff-add-col, .cell-plus, .edit-icon-btn, .freeform-edit-icon').forEach((control) => control.remove());
 
         const pageNumber = document.createElement('div');
         pageNumber.className = 'form-page-number';
