@@ -329,6 +329,35 @@
   display: none !important;
 }
 
+.coach-pdf-export .form-faculty-section {
+  border: var(--form-border-thick) solid var(--form-black);
+  margin-top: 14px;
+}
+
+.coach-pdf-export .faculty-grid-row {
+  display: flex;
+  min-width: 0;
+}
+
+.coach-pdf-export .faculty-grid-row > .grid-col {
+  flex: 1;
+}
+
+.coach-pdf-export .faculty-detail-row {
+  display: flex;
+  min-width: 0;
+  border-top: 2px solid var(--form-black);
+}
+
+.coach-pdf-export .faculty-detail-row > .grid-freeform-col {
+  flex: 1;
+  min-height: 130px;
+}
+
+.coach-pdf-export .faculty-detail-row > .grid-freeform-col + .grid-freeform-col {
+  border-left: var(--form-border-thin) solid var(--form-black);
+}
+
 .coach-pdf-export-root {
   position: absolute;
   top: 0;
