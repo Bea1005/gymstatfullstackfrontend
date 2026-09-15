@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import * as api from "../../services/api";
+import Icon from "../../components/Icon";
 import "./StudentPortal.css";
 
 const UPDATES = [
@@ -13,6 +14,8 @@ export default function StudentHomePage() {
   const [user, setUser] = useState({ name: "", email: "" });
   const [announcements, setAnnouncements] = useState([]);
   const [stats, setStats] = useState({ pending: 0, approved: 0 });
+  const [documentNotifications, setDocumentNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,10 +49,16 @@ export default function StudentHomePage() {
       setAnnouncements(announcementsData.data || []);
       const statsData = await api.getStudentStats();
       setStats(statsData.data);
+      const requirementsData = await api.getStudentRequirements();
+      const reviewedRequirements = (requirementsData.data || [])
+        .filter((requirement) => ['approved', 'rejected'].includes(String(requirement.status || '').toLowerCase()))
+        .sort((first, second) => new Date(second.reviewedAt || second.updatedAt || 0) - new Date(first.reviewedAt || first.updatedAt || 0));
+      setDocumentNotifications(reviewedRequirements);
     } catch (error) {
       console.error("Error fetching data:", error);
       setAnnouncements([]);
       setStats({ pending: 0, approved: 0 });
+      setDocumentNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -59,8 +68,25 @@ export default function StudentHomePage() {
     navigate(`/student/${key}`);
   };
 
-  const handleNotifications = () => {
-    alert("No new notifications at the moment.");
+  const handleNotifications = () => setNotificationsOpen((open) => !open);
+
+  const handleNotificationClick = () => {
+    setNotificationsOpen(false);
+    handleNav("requirements");
+  };
+
+  const getRequirementLabel = (requirement) => {
+    if (requirement.customRequirementLabel) return requirement.customRequirementLabel;
+    const labels = {
+      medical: 'Medical Certificate',
+      cor: 'COR',
+      psa: 'PSA',
+      insurance: 'Insurance',
+      profile: 'Profile',
+      consent: 'Parent Consent',
+      tor: 'TOR'
+    };
+    return labels[requirement.requirementType] || requirement.fileName || 'Requirement document';
   };
 
   const handleUpdateClick = (update) => {
@@ -75,27 +101,54 @@ export default function StudentHomePage() {
     <div className="portal-page-content">
       <div className="portal-topbar">
         <div className="topbar-right">
-          <button 
-            className="topbar-icon-btn sh-topbar-document" 
-            onClick={() => handleNav("requirements")} 
-            title="View Requirements"
-          >
-            <svg 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-              width="40"   
-              height="40"  
+          <div className="sh-notification-wrap">
+            <button
+              className="topbar-icon-btn sh-topbar-document"
+              onClick={handleNotifications}
+              title="View document notifications"
+              aria-label="View document notifications"
+              aria-expanded={notificationsOpen}
             >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="11" x2="12" y2="17" />
-              <line x1="9" y1="14" x2="15" y2="14" />
-            </svg>
-          </button>
+              <Icon name="bell" className="sh-notification-bell" />
+              <Icon name="document" className="sh-notification-document" />
+              {documentNotifications.length > 0 && <span className="sh-notification-badge">{documentNotifications.length}</span>}
+            </button>
+            {notificationsOpen && (
+              <div className="sh-notification-panel" role="status">
+                <div className="sh-notification-panel__header">
+                  <strong>Document Updates</strong>
+                  <button type="button" onClick={() => setNotificationsOpen(false)} aria-label="Close notifications">
+                    <Icon name="close" size={16} />
+                  </button>
+                </div>
+                {documentNotifications.length === 0 ? (
+                  <p className="sh-notification-empty">No reviewed document updates.</p>
+                ) : (
+                  documentNotifications.map((notification) => {
+                    const rejected = String(notification.status).toLowerCase() === 'rejected';
+                    const reviewedDate = notification.reviewedAt || notification.updatedAt;
+                    return (
+                      <button
+                        type="button"
+                        className="sh-notification-item"
+                        key={notification._id}
+                        onClick={handleNotificationClick}
+                      >
+                        <Icon name={rejected ? 'xCircle' : 'checkCircle'} size={18} />
+                        <span>
+                          <strong>{getRequirementLabel(notification)} - {rejected ? 'Rejected' : 'Approved'}</strong>
+                          {rejected && (notification.remarks || notification.feedback) && (
+                            <small>Reason: {notification.remarks || notification.feedback}</small>
+                          )}
+                          {reviewedDate && <time>{new Date(reviewedDate).toLocaleString()}</time>}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

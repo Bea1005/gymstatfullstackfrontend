@@ -317,15 +317,15 @@ export const getAllUsers = async (role = null) => {
 };
 
 // Get all students (admin view)
-export const getAdminStudents = async () => {
-  return apiRequest('/users?role=student', {
+export const getAdminStudents = async (accountStatus = 'active') => {
+  return apiRequest(`/users?role=student&accountStatus=${accountStatus}`, {
     method: 'GET',
   });
 };
 
 // Get all screeners (admin view)
-export const getAdminScreeners = async () => {
-  return apiRequest('/users?role=screener', {
+export const getAdminScreeners = async (accountStatus = 'active') => {
+  return apiRequest(`/users?role=screener&accountStatus=${accountStatus}`, {
     method: 'GET',
   });
 };
@@ -338,17 +338,17 @@ export const createUser = async (userData) => {
   });
 };
 
-// Delete single user by ID
-export const deleteUser = async (userId) => {
-  return apiRequest(`/users/${userId}`, {
-    method: 'DELETE',
+// Archive or restore a single student/screener by ID
+export const updateUserArchiveStatus = async (userId, accountStatus) => {
+  return apiRequest(`/users/${userId}/${accountStatus === 'archived' ? 'archive' : 'restore'}`, {
+    method: 'PATCH',
   });
 };
 
-// Delete multiple users by ID (bulk delete)
-export const deleteUsers = async (userIds) => {
-  return apiRequest('/users/bulk-delete', {
-    method: 'DELETE',
+// Archive multiple student/screener accounts by ID
+export const archiveUsers = async (userIds) => {
+  return apiRequest('/users/archive', {
+    method: 'PATCH',
     body: JSON.stringify({ ids: userIds }),
   });
 };
@@ -875,8 +875,8 @@ export default {
   getAdminStudents,
   getAdminScreeners,
   createUser,
-  deleteUser,
-  deleteUsers,
+  updateUserArchiveStatus,
+  archiveUsers,
   // Students
   getStudents,
   verifyStudent,

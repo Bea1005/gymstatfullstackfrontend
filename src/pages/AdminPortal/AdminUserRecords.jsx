@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { getAdminStudents, getAdminScreeners, createUser, deleteUser, deleteUsers } from '../../services/api';
+import { getAdminStudents, getAdminScreeners, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import Icon from '../../components/Icon';
 import './AdminPortal.css';
@@ -66,7 +66,8 @@ const normalizeUserRow = (user) => {
     department: deptVal,
     sport: sportVal || '',
     status: getUserActivityStatus(raw),
-    role: raw?.role || 'student'
+    role: raw?.role || 'student',
+    accountStatus: raw?.accountStatus === 'archived' ? 'archived' : 'active'
   };
 };
 
@@ -105,6 +106,7 @@ export default function AdminUserRecords() {
   const [students,       setStudents]       = useState([]);
   const [studentSearch,  setStudentSearch]  = useState('');
   const [studentDept,    setStudentDept]    = useState('All');
+  const [studentAccountStatus, setStudentAccountStatus] = useState('active');
   const [selStudents,    setSelStudents]    = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
 
@@ -112,6 +114,7 @@ export default function AdminUserRecords() {
   const [screeners,      setScreeners]      = useState([]);
   const [screenerSearch, setScreenerSearch] = useState('');
   const [screenerDept,   setScreenerDept]   = useState('All');
+  const [screenerAccountStatus, setScreenerAccountStatus] = useState('active');
   const [selScreeners,   setSelScreeners]   = useState([]);
   const [scrForm,        setScrForm]        = useState({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
   const [scrPwShow,      setScrPwShow]      = useState(false);
@@ -133,7 +136,7 @@ export default function AdminUserRecords() {
   const fetchStudents = async () => {
     try {
       setLoadingStudents(true);
-      const data = await getAdminStudents();
+      const data = await getAdminStudents(studentAccountStatus);
       const studentsData = parseUserListResponse(data)
         .filter((user) => (user?.role || 'student').toLowerCase() === 'student')
         .map(normalizeUserRow);
@@ -151,7 +154,7 @@ export default function AdminUserRecords() {
   const fetchScreeners = async () => {
     try {
       setLoadingScreeners(true);
-      const data = await getAdminScreeners();
+      const data = await getAdminScreeners(screenerAccountStatus);
       const screenersData = parseUserListResponse(data)
         .filter((user) => (user?.role || 'screener').toLowerCase() === 'screener')
         .map(normalizeUserRow);
@@ -168,7 +171,7 @@ export default function AdminUserRecords() {
   useEffect(() => {
     fetchStudents();
     fetchScreeners();
-  }, []);
+  }, [studentAccountStatus, screenerAccountStatus]);
 
   /* ── Generic checkbox helpers ── */
   const toggle    = (id, setter) => setter(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -254,22 +257,19 @@ export default function AdminUserRecords() {
   };
 
   /* ── Delete selected students ── */
-  const deleteSelectedStudents = async () => {
+  const archiveSelectedStudents = async () => {
     if (!selStudents.length) return;
     const validIds = selStudents.filter(id => id && String(id).trim().length > 0);
     if (!validIds.length) {
       showToast('No valid student IDs selected', 'error');
       return;
     }
-    console.log('🗑️ Bulk delete students - IDs:', validIds);
-    openConfirmDialog(`Delete ${validIds.length} student(s)?`, async () => {
+    openConfirmDialog(`Archive ${validIds.length} student(s)?`, async () => {
       try {
-        console.log('📤 Sending delete request for IDs:', validIds);
-        const result = await deleteUsers(validIds);
-        console.log('✅ Delete successful:', result);
+        await archiveUsers(validIds);
         setStudents(p => p.filter(s => !validIds.includes(s.id)));
         setSelStudents([]);
-        showToast(`Successfully deleted ${validIds.length} student(s)`, 'success');
+        showToast(`Successfully archived ${validIds.length} student(s)`, 'success');
       } catch (error) {
         console.error('❌ Error deleting students:', error);
         console.error('Error details:', {
@@ -283,22 +283,19 @@ export default function AdminUserRecords() {
   };
 
   /* ── Delete selected screeners ── */
-  const deleteSelectedScreeners = async () => {
+  const archiveSelectedScreeners = async () => {
     if (!selScreeners.length) return;
     const validIds = selScreeners.filter(id => id && String(id).trim().length > 0);
     if (!validIds.length) {
       showToast('No valid screener IDs selected', 'error');
       return;
     }
-    console.log('🗑️ Bulk delete screeners - IDs:', validIds);
-    openConfirmDialog(`Delete ${validIds.length} screener(s)?`, async () => {
+    openConfirmDialog(`Archive ${validIds.length} screener(s)?`, async () => {
       try {
-        console.log('📤 Sending delete request for IDs:', validIds);
-        const result = await deleteUsers(validIds);
-        console.log('✅ Delete successful:', result);
+        await archiveUsers(validIds);
         setScreeners(p => p.filter(s => !validIds.includes(s.id)));
         setSelScreeners([]);
-        showToast(`Successfully deleted ${validIds.length} screener(s)`, 'success');
+        showToast(`Successfully archived ${validIds.length} screener(s)`, 'success');
       } catch (error) {
         console.error('❌ Error deleting screeners:', error);
         console.error('Error details:', {
@@ -312,19 +309,16 @@ export default function AdminUserRecords() {
   };
 
   /* ── Delete single student ── */
-  const deleteStudent = async (id) => {
+  const archiveStudent = async (id) => {
     if (!id || String(id).trim().length === 0) {
       showToast('Invalid student ID', 'error');
       return;
     }
-    console.log('🗑️ Single delete student - ID:', id);
-    openConfirmDialog('Delete this student account permanently?', async () => {
+    openConfirmDialog('Archive this student account?', async () => {
       try {
-        console.log('📤 Sending delete request for ID:', id);
-        const result = await deleteUser(id);
-        console.log('✅ Delete successful:', result);
+        await updateUserArchiveStatus(id, 'archived');
         setStudents(p => p.filter(x => x.id !== id));
-        showToast('Student account deleted successfully.', 'success');
+        showToast('Student account archived successfully.', 'success');
       } catch (error) {
         console.error('❌ Error deleting student:', error);
         console.error('Error details:', {
@@ -338,19 +332,16 @@ export default function AdminUserRecords() {
   };
 
   /* ── Delete single screener ── */
-  const deleteScreener = async (id) => {
+  const archiveScreener = async (id) => {
     if (!id || String(id).trim().length === 0) {
       showToast('Invalid screener ID', 'error');
       return;
     }
-    console.log('🗑️ Single delete screener - ID:', id);
-    openConfirmDialog('Delete this screener account permanently?', async () => {
+    openConfirmDialog('Archive this screener account?', async () => {
       try {
-        console.log('📤 Sending delete request for ID:', id);
-        const result = await deleteUser(id);
-        console.log('✅ Delete successful:', result);
+        await updateUserArchiveStatus(id, 'archived');
         setScreeners(p => p.filter(x => x.id !== id));
-        showToast('Screener account deleted successfully.', 'success');
+        showToast('Screener account archived successfully.', 'success');
       } catch (error) {
         console.error('❌ Error deleting screener:', error);
         console.error('Error details:', {
@@ -359,6 +350,19 @@ export default function AdminUserRecords() {
           response: error?.response
         });
         showToast(error?.message || 'Failed to delete screener account', 'error');
+      }
+    });
+  };
+
+  const restoreUser = async (id, type) => {
+    openConfirmDialog(`Restore this ${type} account?`, async () => {
+      try {
+        await updateUserArchiveStatus(id, 'active');
+        if (type === 'student') setStudents((rows) => rows.filter((row) => row.id !== id));
+        else setScreeners((rows) => rows.filter((row) => row.id !== id));
+        showToast(`${type === 'student' ? 'Student' : 'Screener'} account restored successfully.`, 'success');
+      } catch (error) {
+        showToast(error?.message || `Failed to restore ${type} account`, 'error');
       }
     });
   };
@@ -413,11 +417,14 @@ export default function AdminUserRecords() {
             <div className="ur-table-topbar__left">
               <span className="ur-section-label">Students</span>
               <span className="ur-count-badge">{filtStudents.length} users</span>
-              {selStudents.length > 0 && (
-                <button className="ur-delete-sel-btn" onClick={deleteSelectedStudents}>Delete ({selStudents.length})</button>
+              {studentAccountStatus === 'active' && selStudents.length > 0 && (
+                <button className="ur-delete-sel-btn" onClick={archiveSelectedStudents}>Archive ({selStudents.length})</button>
               )}
             </div>
             <div className="ur-table-topbar__right">
+              <select className="ur-dept-filter" value={studentAccountStatus} onChange={e => setStudentAccountStatus(e.target.value)}>
+                <option value="active">Active</option><option value="archived">Archived</option>
+              </select>
               <select className="ur-dept-filter" value={studentDept} onChange={e => setStudentDept(e.target.value)}>
                 <option value="All">Department</option>
                 {DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -454,7 +461,7 @@ export default function AdminUserRecords() {
                     <td className="ur-dept-tag">{s.dept || '—'}</td>
                     <td className="ur-email">{s.email || '—'}</td>
                     <td>
-                      <button className="ur-row-del" onClick={() => deleteStudent(s.id)}><Icon name="trash" size={16} /></button>
+                      {s.accountStatus === 'archived' ? <button className="ur-row-del" onClick={() => restoreUser(s.id, 'student')}>Restore</button> : <button className="ur-row-del" onClick={() => archiveStudent(s.id)}><Icon name="trash" size={16} /></button>}
                     </td>
                   </tr>
                 ))}
@@ -536,11 +543,14 @@ export default function AdminUserRecords() {
               <span className="ur-section-label">Screeners</span>
               <span className="ur-count-badge">{filtScreeners.length} users</span>
               <span className="ur-academic-label">Active Registry for Academic Year 2025-2026</span>
-              {selScreeners.length > 0 && (
-                <button className="ur-delete-sel-btn" onClick={deleteSelectedScreeners}>Delete ({selScreeners.length})</button>
+              {screenerAccountStatus === 'active' && selScreeners.length > 0 && (
+                <button className="ur-delete-sel-btn" onClick={archiveSelectedScreeners}>Archive ({selScreeners.length})</button>
               )}
             </div>
             <div className="ur-table-topbar__right">
+              <select className="ur-dept-filter" value={screenerAccountStatus} onChange={e => setScreenerAccountStatus(e.target.value)}>
+                <option value="active">Active</option><option value="archived">Archived</option>
+              </select>
               <select className="ur-dept-filter" value={screenerDept} onChange={e => setScreenerDept(e.target.value)}>
                 <option value="All">Department</option>
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -577,7 +587,7 @@ export default function AdminUserRecords() {
                     <td><StatusBadge status={s.status} /></td>
                     <td className="ur-sport">{s.sport || '—'}</td>
                     <td>
-                      <button className="ur-row-del" onClick={() => deleteScreener(s.id)}><Icon name="trash" size={16} /></button>
+                      {s.accountStatus === 'archived' ? <button className="ur-row-del" onClick={() => restoreUser(s.id, 'screener')}>Restore</button> : <button className="ur-row-del" onClick={() => archiveScreener(s.id)}><Icon name="trash" size={16} /></button>}
                     </td>
                   </tr>
                 ))}
