@@ -137,7 +137,6 @@ export const register = async (userData) => {
     method: 'POST',
     body: JSON.stringify({
       fullname: userData.fullname,
-      username: userData.username,
       email: userData.email,
       password: userData.password,
       department: userData.department || "",

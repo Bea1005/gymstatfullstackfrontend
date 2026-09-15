@@ -13,7 +13,6 @@ export default function RegisterPage() {
 
   const [form, setForm] = useState({
     fullname: "",
-    username: "",
     email: "",
     password: "",
     role: "student", // Default role
@@ -88,7 +87,7 @@ export default function RegisterPage() {
     e.preventDefault();
     
     // ✅ ID and Email are both required for all users
-    if (!form.fullname || !form.username || !form.email || !form.password || !form.id) {
+    if (!form.fullname || !form.email || !form.password || !form.id) {
       notify("warning", "Missing Information", "Please fill in all required fields.");
       return;
     }
@@ -164,18 +163,6 @@ export default function RegisterPage() {
                 value={form.fullname}
                 onChange={set("fullname")}
                 placeholder="Enter your full name"
-                required
-              />
-            </div>
-
-            <div className="login-field">
-              <label>Username</label>
-              <input
-                type="text"
-                className="login-input"
-                value={form.username}
-                onChange={set("username")}
-                placeholder="Choose a username"
                 required
               />
             </div>

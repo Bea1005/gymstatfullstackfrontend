@@ -16,7 +16,6 @@ const normalizeDateForInput = (value) => {
 
 const getEditableProfileFields = (profile = {}) => ({
   fullname: profile.fullname || profile.name || "",
-  username: profile.username || "",
   email: profile.email || "",
   contactNumber: profile.contactNumber || "",
   dateOfBirth: normalizeDateForInput(profile.dateOfBirth || profile.dob),
@@ -137,7 +136,6 @@ const StudentProfile = () => {
     ["Year Level", "yearLevel", true],
     ["Sport", "sport", true],
     ["Branch Campus", "branchCampus", true],
-    ["Username", "username", true],
   ];
 
   const displayedImage = photoPreview || photoUrl;
@@ -203,7 +201,7 @@ const StudentProfile = () => {
         </form>}
       </section>
 
-      <p className="student-profile-note">Student ID is managed by GymStat administrators. Username changes must be unique.</p>
+      <p className="student-profile-note">Student ID is managed by GymStat administrators.</p>
 
       {photoModalOpen && <div className="student-profile-photo-modal" role="dialog" aria-modal="true" aria-labelledby="student-profile-photo-title" onClick={closePhotoModal}>
         <div className="student-profile-photo-modal__card" onClick={(event) => event.stopPropagation()}>
