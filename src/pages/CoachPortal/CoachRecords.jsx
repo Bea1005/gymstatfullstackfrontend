@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import NotificationToast from '../../components/NotificationToast';
+import Icon from '../../components/Icon';
 import logoImage from '../../assets/logo.png';
 import marsuSeal from '../../assets/MarsuLogo.jpg';
 // Header logos (uploaded by the user):
@@ -1190,7 +1191,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card coach-category-modal" onClick={(event) => event.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Select Category</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setShowSportDropdown(false)}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => setShowSportDropdown(false)}><Icon name="close" /></button>
             </div>
             <div className="coach-category-options">
               {sportCategoryOptions.map((sport) => (
@@ -1208,7 +1209,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card" onClick={(event) => event.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Announcements</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setShowAnnouncements(false)}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => setShowAnnouncements(false)}><Icon name="close" /></button>
             </div>
             <div className="coach-announcement-list">
               {announcements.length ? (
@@ -1232,7 +1233,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card" onClick={(event) => event.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">{isAddingAthlete ? 'Add Student Athlete' : 'Edit Student Profile'}</h3>
-              <button className="coach-modal-close" type="button" onClick={() => { setEditingAthlete(null); setIsAddingAthlete(false); }}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => { setEditingAthlete(null); setIsAddingAthlete(false); }}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveAthlete}>
               {isAddingAthlete && (
@@ -1353,7 +1354,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Edit Eligibility Requirements</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingEligibility(false)}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => setEditingEligibility(false)}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveEligibility}>
               <label>
@@ -1374,7 +1375,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Edit Sports Director Info</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingDirector(false)}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => setEditingDirector(false)}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveDirector}>
               <label>
@@ -1403,7 +1404,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">{isAddingStaff ? 'Add Faculty Member' : `Edit ${String(staff[editingStaffIndex]?.role || 'Faculty')}`}</h3>
-              <button className="coach-modal-close" type="button" onClick={() => { setEditingStaffIndex(null); setIsAddingStaff(false); }}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => { setEditingStaffIndex(null); setIsAddingStaff(false); }}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveStaff}>
               <label>
@@ -1449,7 +1450,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card faculty-photo-viewer" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">{viewingFacultyMember.fullname || 'Faculty Member'} Photo</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setViewingFacultyMember(null)}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => setViewingFacultyMember(null)}><Icon name="close" /></button>
             </div>
             <div className="faculty-photo-viewer__image">
               <img src={viewingFacultyMember.photo || placeholderImg} alt={viewingFacultyMember.fullname || viewingFacultyMember.role} />
@@ -1463,7 +1464,7 @@ export default function CoachRecord() {
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Modify Sheet Headers</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingEvent(false)}>✕</button>
+              <button className="coach-modal-close" type="button" onClick={() => setEditingEvent(false)}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveEvent}>
               <label>

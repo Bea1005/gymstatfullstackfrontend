@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import * as api from '../../services/api';
+import Icon from '../../components/Icon';
 import "./AdminPortal.css";
 
 const AdminDashboard = () => {
@@ -103,10 +104,10 @@ const AdminDashboard = () => {
       {/* ── Stat Cards ── */}
       <div className="db-stats">
         {[
-          { label: "TOTAL USER",       value: stats.totalUsers,      icon: <IconUsers />,    path: "/admin/student-athletes" },
-          { label: "TOTAL EQUIPMENT",  value: stats.totalEquipments, icon: <IconEquip />,    path: "/admin/equipments" },
-          { label: "BORROWED ITEMS",   value: stats.borrowedItems,   icon: <IconBorrow />,   path: "/admin/borrowing" },
-          { label: "PENDING REQS",     value: stats.pendingReqs,     icon: <IconReqs />,     path: "/admin/schedules" },
+          { label: "TOTAL USER",       value: stats.totalUsers,      icon: <Icon name="users" size={38} />,    path: "/admin/student-athletes" },
+          { label: "TOTAL EQUIPMENT",  value: stats.totalEquipments, icon: <Icon name="wrench" size={38} />,    path: "/admin/equipments" },
+          { label: "BORROWED ITEMS",   value: stats.borrowedItems,   icon: <Icon name="clipboardCheck" size={38} />,   path: "/admin/borrowing" },
+          { label: "PENDING REQS",     value: stats.pendingReqs,     icon: <Icon name="fileText" size={38} />,     path: "/admin/schedules" },
         ].map((s) => (
           <div key={s.label} className="db-stat-card" onClick={() => navigate(s.path)}>
             <div className="db-stat-card__left">
@@ -227,35 +228,5 @@ const DEMO_ACTIVITIES = [
   { id: 3, action: "Schedule updated: Basketball Practice",        time: "Yesterday"   },
   { id: 4, action: "Requirement submitted: Medical Certificate",   time: "2 days ago"  },
 ];
-/* ── Inline SVG icons ── */
-function IconUsers() {
-  return (
-    <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-    </svg>
-  );
-}
-function IconEquip() {
-  return (
-    <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29l-1.43-1.43z"/>
-    </svg>
-  );
-}
-function IconBorrow() {
-  return (
-    <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/>
-    </svg>
-  );
-}
-function IconReqs() {
-  return (
-    <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-    </svg>
-  );
-}
-
 export default AdminDashboard;
 

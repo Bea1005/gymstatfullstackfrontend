@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createRequirement, publishRequirement, getAllRequirements, deleteAdminRequirement } from '../../services/api';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
+import Icon from '../../components/Icon';
 import './AdminPortal.css';
 
 const AdminRequirements = () => {
@@ -316,7 +317,7 @@ const AdminRequirements = () => {
 
             <div className="requirement-submit-row">
               <button type="submit" className="primary-upload-btn" disabled={loading}>
-                {loading ? '⏳ Publishing...' : '📤 Publish to Portal'}
+                {loading ? 'Publishing...' : <><Icon name="upload" size={16} /> Publish to Portal</>}
               </button>
             </div>
           </form>
@@ -326,17 +327,17 @@ const AdminRequirements = () => {
       {/* ACTIVE REQUIREMENTS - Same design as Student Requirements */}
       <div className="admin-requirements-list">
         <div className="admin-reqs-header">
-          <h3>📄 Active Requirements </h3>
+                <h3><Icon name="document" size={20} /> Active Requirements </h3>
           <p>Click on any form to view details or download</p>
         </div>
 
         {loading && uploadedReqs.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-            <p>⏳ Loading requirements...</p>
+            <p>Loading requirements...</p>
           </div>
         ) : uploadedReqs.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-            <p>📭 No requirements published yet</p>
+                <p><Icon name="folder" size={18} /> No requirements published yet</p>
           </div>
         ) : (
           <div className="requirements-boxes-grid">
@@ -347,17 +348,17 @@ const AdminRequirements = () => {
                 onClick={() => handleOpenModal(req)}
               >
                 <div className="requirement-box-icon">
-                  📄
+                  <Icon name="document" />
                 </div>
                 <div className="requirement-box-content">
                   <h4>{req.title}</h4>
                   <p>{req.description}</p>
                   <div className="requirement-box-meta">
-                    <span className="meta-date">📅 Posted: {req.date}</span>
+                    <span className="meta-date"><Icon name="calendar" size={16} /> Posted: {req.date}</span>
                   </div>
                 </div>
                 <div className="requirement-box-arrow">
-                  <span className="arrow-icon">›</span>
+                  <span className="arrow-icon"><Icon name="chevronRight" /></span>
                 </div>
               </div>
             ))}
@@ -365,7 +366,7 @@ const AdminRequirements = () => {
         )}
 
         <div className="admin-reqs-note">
-          <p>💡 <strong>Note:</strong> These Parent Consent forms are visible to all students. They can download and submit accomplished forms.</p>
+          <p><Icon name="info" size={16} /> <strong>Note:</strong> These Parent Consent forms are visible to all students. They can download and submit accomplished forms.</p>
         </div>
       </div>
 
@@ -388,7 +389,7 @@ const AdminRequirements = () => {
                 onClick={handleDeleteRequirement}
                 disabled={isDeleting}
               >
-                {isDeleting ? '⏳ Deleting...' : '🗑️ Delete'}
+                {isDeleting ? 'Deleting...' : <><Icon name="trash" size={16} /> Delete</>}
               </button>
               <button className="minimal-cancel" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="minimal-download" onClick={handleDownloadFromModal}>Download</button>

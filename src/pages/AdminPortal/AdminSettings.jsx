@@ -4,6 +4,7 @@ import NotificationToast from '../../components/NotificationToast';
 import '../../components/ConfirmModal.css';
 import './AdminPortal.css';
 import { getProfile, updateProfile } from '../../services/api';
+import Icon from '../../components/Icon';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
@@ -148,7 +149,7 @@ const AdminSettings = () => {
           {/* Email Address */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #eee" }}>
             <div>
-              <p style={{ fontWeight: "600", marginBottom: "4px" }}>📧 Email Address</p>
+              <p style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="mail" size={16} /> Email Address</p>
               <p style={{ fontSize: "12px", color: "#888" }}>{adminInfo.email || 'Not set'}</p>
             </div>
             <button 
@@ -162,7 +163,7 @@ const AdminSettings = () => {
           {/* Notifications */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
             <div>
-              <p style={{ fontWeight: "600", marginBottom: "4px" }}>🔔 Notifications</p>
+              <p style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="bell" size={16} /> Notifications</p>
               <p style={{ fontSize: "12px", color: "#888" }}>Receive system updates</p>
             </div>
             <button

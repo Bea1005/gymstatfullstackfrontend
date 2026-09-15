@@ -144,6 +144,14 @@ body {
   pointer-events: none; /* para hindi ma-block yung typing */
 }
 
+.forgot-password-toggle svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .login-input {
   width: 100%;
   height: clamp(44px, 5.5vw, 50px);

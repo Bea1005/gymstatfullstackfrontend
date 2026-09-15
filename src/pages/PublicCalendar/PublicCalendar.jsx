@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
 import * as api from '../../services/api';
+import Icon from '../../components/Icon';
 import './PublicCalendar.css';
 import gymBackground from '../../assets/gym-background.jpg';
 
@@ -489,9 +490,9 @@ export default function PublicCalendar() {
             <div className="pcm-header">
               <div>
                 <h2 className="pcm-title">Request Gym Schedule</h2>
-                <p className="pcm-sub">📅 {MONTHS[mm]} {md}, {my}</p>
+                <p className="pcm-sub"><Icon name="calendar" size={16} /> {MONTHS[mm]} {md}, {my}</p>
               </div>
-              <button className="pcm-close" onClick={() => setModal(false)}>✕</button>
+              <button className="pcm-close" onClick={() => setModal(false)}><Icon name="close" /></button>
             </div>
 
             {modalEvs.filter((ev) => ev.status !== 'rejected').length > 0 && (
@@ -509,7 +510,7 @@ export default function PublicCalendar() {
 
             {modalEvs.filter((ev) => ev.status === 'rejected').length > 0 && (
               <div className="pcm-warn pcm-warn--rejected">
-                <p className="pcm-warn__label">❌ Disapproved request(s):</p>
+                <p className="pcm-warn__label"><Icon name="xCircle" size={16} /> Disapproved request(s):</p>
                 {modalEvs.filter((ev) => ev.status === 'rejected').map(ev => (
                   <div key={ev.id} className="pcm-warn__item pcm-warn__item--rejected">
                     <span className="pcm-warn__name">{ev.event}</span>
@@ -522,7 +523,7 @@ export default function PublicCalendar() {
 
             {done ? (
               <div className="pcm-success">
-                <div className="pcm-success__icon">✅</div>
+                <div className="pcm-success__icon"><Icon name="checkCircle" /></div>
                 <h3 className="pcm-success__title">Request Submitted!</h3>
                 <p className="pcm-success__msg">
                   Your request for <strong>{form.eventName}</strong> has been submitted.

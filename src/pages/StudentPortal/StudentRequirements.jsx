@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../../services/api';
 import { useNotifications } from '../../components/NotificationProvider';
+import Icon from '../../components/Icon';
 import './StudentPortal.css';
 
 const requirementTypes = [
-  { id: 'medical', label: 'Medical Certificate', icon: '🏥' },
-  { id: 'cor', label: 'Certificate of Registration', icon: '📜' },
-  { id: 'psa', label: 'PSA', icon: '📋' },
-  { id: 'insurance', label: 'Insurance', icon: '🛡️' },
-  { id: 'profile', label: 'Profile', icon: '👤' },
-  { id: 'consent', label: 'Parent Consent', icon: '📝' },
+  { id: 'medical', label: 'Medical Certificate', icon: 'stethoscope' },
+  { id: 'cor', label: 'Certificate of Registration', icon: 'fileCheck' },
+  { id: 'psa', label: 'PSA', icon: 'clipboard' },
+  { id: 'insurance', label: 'Insurance', icon: 'shield' },
+  { id: 'profile', label: 'Profile', icon: 'user' },
+  { id: 'consent', label: 'Parent Consent', icon: 'fileText' },
 ];
 
 const formatUploadDateTime = (value) => {
@@ -39,14 +40,14 @@ const AnnouncementDetailModal = ({ announcement, onClose }) => {
   if (!announcement) return null;
 
   const getIconForAnnouncement = (title) => {
-    if (!title) return "📢";
-    if (title.includes("Sport Event")) return "🏆";
-    if (title.includes("Athlete Records")) return "📊";
-    if (title.includes("Sports Clearance")) return "✅";
-    if (title.includes("Medical Evaluation")) return "🏥";
-    if (title.includes("Records Verification")) return "🔍";
-    if (title.includes("Requirement")) return "📋";
-    return "📢";
+    if (!title) return 'megaphone';
+    if (title.includes('Sport Event')) return 'trophy';
+    if (title.includes('Athlete Records')) return 'barChart';
+    if (title.includes('Sports Clearance')) return 'checkCircle';
+    if (title.includes('Medical Evaluation')) return 'stethoscope';
+    if (title.includes('Records Verification')) return 'search';
+    if (title.includes('Requirement')) return 'clipboard';
+    return 'megaphone';
   };
 
   const getStatusStyle = (type) => {
@@ -66,9 +67,9 @@ const AnnouncementDetailModal = ({ announcement, onClose }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <div className="header-icon">{getIconForAnnouncement(announcement.title)}</div>
+          <div className="header-icon"><Icon name={getIconForAnnouncement(announcement.title)} /></div>
           <h2>{announcement.title || 'Announcement'}</h2>
-          <button className="modal-close-btn" onClick={onClose}>✕</button>
+          <button className="modal-close-btn" onClick={onClose}><Icon name="close" /></button>
         </div>
         <div className="detail-modal-body">
           <div className="detail-status">
@@ -85,7 +86,7 @@ const AnnouncementDetailModal = ({ announcement, onClose }) => {
             >
               {announcement.type || 'general'}
             </span>
-            <span className="detail-date">📅 Posted: {announcement.date ? new Date(announcement.date).toLocaleDateString() : 'Recently'}</span>
+            <span className="detail-date"><Icon name="calendar" size={16} /> Posted: {announcement.date ? new Date(announcement.date).toLocaleDateString() : 'Recently'}</span>
           </div>
           <div className="detail-description">
             <p>{announcement.description || 'No description available'}</p>
@@ -119,18 +120,18 @@ const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [] 
   };
 
   const getIconForType = (type) => {
-    if (type === 'requirement') return "📋";
-    if (type === 'event') return "🏆";
-    if (type === 'training') return "🏋️";
-    return "📢";
+    if (type === 'requirement') return 'clipboard';
+    if (type === 'event') return 'trophy';
+    if (type === 'training') return 'dumbbell';
+    return 'megaphone';
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="announcements-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📢 Announcements ({requirementAnnouncements.length})</h2>
-          <button className="modal-close-btn" onClick={onClose}>✕</button>
+          <h2><Icon name="megaphone" size={22} /> Announcements ({requirementAnnouncements.length})</h2>
+          <button className="modal-close-btn" onClick={onClose}><Icon name="close" /></button>
         </div>
         <div className="modal-body no-scrollbar">
           {requirementAnnouncements.length > 0 ? (
@@ -141,7 +142,7 @@ const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [] 
                 onClick={() => onSelectAnnouncement(item)}
               >
                 <div className="announcement-icon-left">
-                  <span className="announcement-icon">{getIconForType(item.type)}</span>
+                  <span className="announcement-icon"><Icon name={getIconForType(item.type)} /></span>
                 </div>
                 <div className="announcement-content">
                   <h3>{item.title || 'Untitled Announcement'}</h3>
@@ -167,7 +168,7 @@ const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [] 
             ))
           ) : (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-              <p>📭 No requirement announcements at this time</p>
+              <p><Icon name="folder" size={18} /> No requirement announcements at this time</p>
               <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#999' }}>
                 Admin will publish requirements here
               </p>
@@ -480,7 +481,7 @@ export default function StudentRequirements() {
         {
           id: customId,
           label,
-          icon: '📄',
+          icon: 'document',
           isCustom: true,
           participationType,
           customRequirementId: customId,
@@ -500,7 +501,7 @@ export default function StudentRequirements() {
     .map((submission) => ({
       id: submission.customRequirementId || submission._id || `custom-${submission.fileName || Date.now()}`,
       label: submission.customRequirementLabel || 'Others Requirement',
-      icon: '📎',
+      icon: 'paperclip',
       isCustom: true,
       requirementType: 'other',
       customRequirementId: submission.customRequirementId || submission._id || '',
@@ -511,8 +512,8 @@ export default function StudentRequirements() {
     .filter((card, index, list) => list.findIndex((entry) => entry.id === card.id) === index);
 
   const visibleRequirementCards = participationType === 'Intrams'
-    ? [...requirementTypes, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: '➕', isAddCard: true }]
-    : [...requirementTypes, { id: 'tor', label: 'TOR – Upload Card', icon: '📄' }, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: '➕', isAddCard: true }];
+    ? [...requirementTypes, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: 'plus', isAddCard: true }]
+    : [...requirementTypes, { id: 'tor', label: 'TOR – Upload Card', icon: 'document' }, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: 'plus', isAddCard: true }];
 
   const getSubmissionForRequirement = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
     return [...submissions]
@@ -694,7 +695,7 @@ export default function StudentRequirements() {
       {/* Notification Bell Icon */}
       <div className="notification-bell-container" onClick={() => setShowAnnouncements(true)}>
         <div className="notification-bell">
-          <span className="bell-icon">🔔</span>
+          <span className="bell-icon"><Icon name="bell" /></span>
           {getUrgentCount() > 0 && (
             <span className="notification-badge">{getUrgentCount()}</span>
           )}
@@ -723,7 +724,7 @@ export default function StudentRequirements() {
           <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Confirm Upload</h2>
-              <button className="modal-close-btn" onClick={handleUndoUpload}>✕</button>
+              <button className="modal-close-btn" onClick={handleUndoUpload}><Icon name="close" /></button>
             </div>
             <div className="detail-modal-body">
               <p style={{ marginBottom: '1rem' }}>Please review the selected file before it is submitted for screening.</p>
@@ -752,7 +753,7 @@ export default function StudentRequirements() {
           <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{previewModal.filename || 'File Preview'}</h2>
-              <button className="modal-close-btn" onClick={closePreviewModal}>✕</button>
+              <button className="modal-close-btn" onClick={closePreviewModal}><Icon name="close" /></button>
             </div>
             <div className="detail-modal-body">
               {previewModal.fileType?.startsWith('image/') ? (
@@ -778,7 +779,7 @@ export default function StudentRequirements() {
           <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '430px' }}>
             <div className="modal-header">
               <h2>Add Requirement</h2>
-              <button className="modal-close-btn" onClick={() => setCustomRequirementModal(null)}>✕</button>
+              <button className="modal-close-btn" onClick={() => setCustomRequirementModal(null)}><Icon name="close" /></button>
             </div>
             <div className="detail-modal-body">
               <div style={{ marginBottom: '1rem' }}>
@@ -879,7 +880,7 @@ export default function StudentRequirements() {
           <section className="tab-panel">
             <div className="admin-requirements-list">
               <div className="admin-reqs-header">
-                <h3>📄 Active Requirements</h3>
+                <h3><Icon name="document" size={20} /> Active Requirements</h3>
                 <p>Click on any form to view details or download</p>
               </div>
 
@@ -892,31 +893,31 @@ export default function StudentRequirements() {
                       onClick={() => handleOpenModal(req)}
                     >
                       <div className="requirement-box-icon">
-                        📄
+                        <Icon name="document" />
                       </div>
                       <div className="requirement-box-content">
                         <h4>{req.title}</h4>
                         <p>{req.description}</p>
                         <div className="requirement-box-meta">
                           <span className="meta-date">
-                            📅 Posted: {new Date(req.publishedAt || req.createdAt).toLocaleDateString()}
+                            <Icon name="calendar" size={16} /> Posted: {new Date(req.publishedAt || req.createdAt).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
                       <div className="requirement-box-arrow">
-                        <span className="arrow-icon">›</span>
+                        <span className="arrow-icon"><Icon name="chevronRight" /></span>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p>📭 No requirements published yet</p>
+                  <p><Icon name="folder" size={18} /> No requirements published yet</p>
                 </div>
               )}
 
               <div className="admin-reqs-note">
-                <p>💡 <strong>Note:</strong> Download required forms and submit your completed documents in the "Upload New" tab.</p>
+                <p><Icon name="info" size={16} /> <strong>Note:</strong> Download required forms and submit your completed documents in the "Upload New" tab.</p>
               </div>
             </div>
           </section>
@@ -924,14 +925,14 @@ export default function StudentRequirements() {
           <section className="tab-panel">
             <div className="submission-header">
               <div>
-                <h3 className="section-title">📥 Import Student Records (Intrams – STRASUC)</h3>
+                <h3 className="section-title"><Icon name="download" size={20} /> Import Student Records (Intrams – STRASUC)</h3>
                 <p className="section-subtitle">Reuse eligible records from the previous academic year instead of resubmitting everything.</p>
               </div>
             </div>
 
             <div className="admin-requirements-list" style={{ marginTop: '1rem' }}>
               <div className="admin-reqs-header">
-                <h3>📦 Reusable & Available Records</h3>
+                <h3><Icon name="folder" size={20} /> Reusable & Available Records</h3>
                 <p>Approved files from the last academic year can be imported here. PSA requirements remain reusable when eligible.</p>
               </div>
 
@@ -996,7 +997,7 @@ export default function StudentRequirements() {
           <section className="tab-panel">
             <div className="submission-header">
               <div>
-                <h3 className="section-title">📤 Upload New Requirement</h3>
+                <h3 className="section-title"><Icon name="upload" size={20} /> Upload New Requirement</h3>
                 <p className="section-subtitle">Select a requirement type and upload your document</p>
               </div>
 
@@ -1032,7 +1033,7 @@ export default function StudentRequirements() {
                 if (req.isAddCard) {
                   return (
                     <div key={req.id} className="upload-card" style={{ cursor: 'pointer' }}>
-                      <div className="upload-icon">{req.icon}</div>
+                      <div className="upload-icon"><Icon name={req.icon} /></div>
                       <span className="upload-label">{req.label}</span>
                       <button className="upload-action-btn" onClick={() => setCustomRequirementModal({ requirementName: '' })}>
                         Add Requirement
@@ -1058,7 +1059,7 @@ export default function StudentRequirements() {
 
                 return (
                   <div key={req.id} className={`upload-card ${isRejected ? 'rejected-state' : ''}`}>
-                    <div className="upload-icon">{req.icon}</div>
+                    <div className="upload-icon"><Icon name={req.icon} /></div>
                     <span className="upload-label">{req.label}</span>
 
                     <input
@@ -1082,7 +1083,7 @@ export default function StudentRequirements() {
                     </button>
                     {isRejected && (
                       <div className="rejection-note">
-                        <span className="rejection-pill">❌ Rejected</span>
+                        <span className="rejection-pill"><Icon name="xCircle" size={16} /> Rejected</span>
                         <p className="rejection-reason"><strong>Reason:</strong> {rejectionReason}</p>
                         <p className="rejection-detail" style={{ fontSize: '0.75rem', color: '#6b1c1c', marginTop: '0.35rem' }}>
                           Reviewed by {reviewerName} on {rejectionDate}
@@ -1092,7 +1093,7 @@ export default function StudentRequirements() {
                     {savedFileName && (
                       <div className="file-preview">
                         <div className="file-name" title={savedFileName}>
-                          📎 {savedFileName}
+                          <Icon name="paperclip" size={16} /> {savedFileName}
                         </div>
                         {!uploadedFiles[req.id] && submission && (
                           <button

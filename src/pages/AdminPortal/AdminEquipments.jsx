@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getEquipment, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
+import Icon from '../../components/Icon';
 import './AdminPortal.css';
 
 const today = () => {
@@ -480,7 +481,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
           onClick={() => setShowDownloadModal(true)}
           title="Download equipment report"
         >
-          📥 Download Report
+          <Icon name="download" size={16} /> Download Report
         </button>
       </div>
 
@@ -642,7 +643,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
                       <td className="eq-td-qty">{quantityDisplay}</td>
                       <td className="eq-td-date">{equipment.date}</td>
                       <td>
-                        <button className="eq-del-btn" title="Delete" onClick={() => handleDelete(equipment.id)}>🗑</button>
+                        <button className="eq-del-btn" title="Delete" onClick={() => handleDelete(equipment.id)}><Icon name="trash" size={16} /></button>
                       </td>
                     </tr>
                     {isExpanded && equipment.items.map((item, idx) => (

@@ -3,6 +3,7 @@ import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import DocumentViewer from '../../components/DocumentViewer';
 import * as api from '../../services/api';
+import Icon from '../../components/Icon';
 import './AdminPortal.css';
 
 // Define TIMES array for time selection
@@ -1022,7 +1023,7 @@ const AdminSchedules = () => {
                 {selectedEventDetails && selectedEventDetails.map((event, idx) => (
                   <div key={idx} className="reserved-event-card" style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
                     <div style={{display: 'flex', gap: 12, alignItems: 'center'}}>
-                      <div className="event-icon">📅</div>
+                      <div className="event-icon"><Icon name="calendar" /></div>
                       <div className="event-info">
                         <div className="event-title">{event.event}</div>
                         <div className="event-datetime">

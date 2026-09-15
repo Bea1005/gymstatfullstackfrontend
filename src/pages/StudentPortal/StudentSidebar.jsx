@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import logoImage from "../../assets/logo.png";
-import settingImage from "../../assets/setting.png"; // ✅ ADDED import for setting image
+import Icon from '../../components/Icon';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 
 const StudentSidebar = ({ onLogout }) => {
@@ -33,7 +33,7 @@ const StudentSidebar = ({ onLogout }) => {
     ) },
     { name: 'Settings', path: '/student/settings', icon: (
       // ✅ FIXED: Use imported setting image instead of SVG
-      <img src={settingImage} alt="Settings" style={{ width: '20px', height: '20px' }} />
+      <Icon name="settings" />
     ) },
   ];
   
@@ -60,7 +60,7 @@ const StudentSidebar = ({ onLogout }) => {
         onClick={() => setMobileOpen((prev) => !prev)}
         aria-label="Toggle navigation"
       >
-        ☰
+        <Icon name="menu" />
       </button>
 
       <div className={`mobile-sidebar-backdrop ${mobileOpen ? 'open' : ''}`} onClick={closeMobileMenu}></div>
@@ -91,7 +91,7 @@ const StudentSidebar = ({ onLogout }) => {
 
         {/* Logout Button sa Baba */}
         <button className="logout-btn" onClick={handleLogoutClick}>
-          Log out <span className="logout-icon"></span>
+          Log out <span className="logout-icon"><Icon name="logout" size={16} /></span>
         </button>
       </aside>
       <LogoutConfirmModal

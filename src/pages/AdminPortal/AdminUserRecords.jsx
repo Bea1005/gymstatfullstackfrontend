@@ -3,6 +3,7 @@ import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminScreeners, createUser, deleteUser, deleteUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
+import Icon from '../../components/Icon';
 import './AdminPortal.css';
 
 const getUserActivityStatus = (user) => {
@@ -453,7 +454,7 @@ export default function AdminUserRecords() {
                     <td className="ur-dept-tag">{s.dept || '—'}</td>
                     <td className="ur-email">{s.email || '—'}</td>
                     <td>
-                      <button className="ur-row-del" onClick={() => deleteStudent(s.id)}>🗑</button>
+                      <button className="ur-row-del" onClick={() => deleteStudent(s.id)}><Icon name="trash" size={16} /></button>
                     </td>
                   </tr>
                 ))}
@@ -576,7 +577,7 @@ export default function AdminUserRecords() {
                     <td><StatusBadge status={s.status} /></td>
                     <td className="ur-sport">{s.sport || '—'}</td>
                     <td>
-                      <button className="ur-row-del" onClick={() => deleteScreener(s.id)}>🗑</button>
+                      <button className="ur-row-del" onClick={() => deleteScreener(s.id)}><Icon name="trash" size={16} /></button>
                     </td>
                   </tr>
                 ))}

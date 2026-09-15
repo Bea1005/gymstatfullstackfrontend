@@ -234,6 +234,14 @@ body {
   pointer-events: none;
 }
 
+.password-toggle-btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .login-input-wrapper .login-input {
   padding-left: clamp(36px, 3vw, 40px);
 }

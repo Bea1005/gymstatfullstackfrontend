@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './SplashScreen.css';
 import gymBackground from "../../assets/gym-background.jpg";
 import logoImage from "../../assets/logo.png";
+import Icon from '../../components/Icon';
 
 const OnboardingScreen = () => {
   const navigate = useNavigate();
@@ -150,28 +151,28 @@ const OnboardingScreen = () => {
           <div className="landing-features-grid">
             {/* Feature 1 */}
             <div className="landing-feature-card" style={{ animationDelay: '0.1s' }}>
-              <div className="landing-feature-icon">📅</div>
+              <div className="landing-feature-icon"><Icon name="calendar" /></div>
               <h3>Smart Schedule Management</h3>
               <p>View, request, approve, and manage gymnasium schedules while keeping activities organized.</p>
             </div>
 
             {/* Feature 2 */}
             <div className="landing-feature-card" style={{ animationDelay: '0.2s' }}>
-              <div className="landing-feature-icon">🏀</div>
+              <div className="landing-feature-icon"><Icon name="wrench" /></div>
               <h3>Equipment Management</h3>
               <p>Monitor equipment, borrowing transactions, availability, reference IDs, and returns in one organized system.</p>
             </div>
 
             {/* Feature 3 */}
             <div className="landing-feature-card" style={{ animationDelay: '0.3s' }}>
-              <div className="landing-feature-icon">🎓</div>
+              <div className="landing-feature-icon"><Icon name="graduationCap" /></div>
               <h3>Student-Athlete Records</h3>
               <p>Manage student-athlete records and requirements efficiently while keeping important information accessible.</p>
             </div>
 
             {/* Feature 4 */}
             <div className="landing-feature-card" style={{ animationDelay: '0.4s' }}>
-              <div className="landing-feature-icon">📊</div>
+              <div className="landing-feature-icon"><Icon name="barChart" /></div>
               <h3>Centralized Management</h3>
               <p>Connect scheduling, equipment management, records, announcements, and other GYMSTAT functions in one platform.</p>
             </div>
@@ -189,7 +190,7 @@ const OnboardingScreen = () => {
           <div className="landing-preview-cards-grid">
             {/* Card 1 - Public Calendar */}
             <div className="landing-preview-card" style={{ animationDelay: '0.1s' }}>
-              <div className="landing-preview-card-icon">📅</div>
+              <div className="landing-preview-card-icon"><Icon name="calendar" /></div>
               <h3>Public Calendar</h3>
               <p>View available gymnasium schedules and activities at a glance. Plan your workouts and activities efficiently.</p>
               <button 
@@ -202,7 +203,7 @@ const OnboardingScreen = () => {
 
             {/* Card 2 - Document Center */}
             <div className="landing-preview-card" style={{ animationDelay: '0.2s' }}>
-              <div className="landing-preview-card-icon">📄</div>
+              <div className="landing-preview-card-icon"><Icon name="document" /></div>
               <h3>Document Center</h3>
               <p>Access important GYMSTAT forms, templates, and documents. Download what you need for your activities.</p>
               <button 
@@ -215,7 +216,7 @@ const OnboardingScreen = () => {
 
             {/* Card 3 - Equipment & Records */}
             <div className="landing-preview-card" style={{ animationDelay: '0.3s' }}>
-              <div className="landing-preview-card-icon">⚙️</div>
+              <div className="landing-preview-card-icon"><Icon name="settings" /></div>
               <h3>Equipment & Records</h3>
               <p>Manage equipment inventory and student-athlete records. Keep track of borrowing transactions and history.</p>
               <button 
