@@ -242,6 +242,12 @@ body {
   stroke-linejoin: round;
 }
 
+.password-match-error {
+  margin: 6px 0 0;
+  color: #b42318;
+  font-size: 12px;
+}
+
 .login-input-wrapper .login-input {
   padding-left: clamp(36px, 3vw, 40px);
 }
