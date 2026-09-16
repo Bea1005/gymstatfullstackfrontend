@@ -29,7 +29,7 @@ const isPublicEndpoint = (endpoint, method = 'GET') => {
     return true;
   }
 
-  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint === '/login' || normalizedEndpoint === '/register') && method === 'POST') {
+  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/register') && method === 'POST') {
     return true;
   }
 
