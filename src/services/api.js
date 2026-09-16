@@ -148,10 +148,24 @@ export const register = async (userData) => {
   });
 };
 
-export const forgotPassword = async ({ id, email, newPassword }) => {
-  return apiRequest('/forgot-password', {
+export const requestPasswordReset = async (email) => {
+  return apiRequest('/forgot-password/request', {
     method: 'POST',
-    body: JSON.stringify({ id, email, newPassword }),
+    body: JSON.stringify({ email }),
+  });
+};
+
+export const verifyPasswordResetOtp = async (email, otp) => {
+  return apiRequest('/forgot-password/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+};
+
+export const resetPassword = async (email, newPassword) => {
+  return apiRequest('/forgot-password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ email, newPassword }),
   });
 };
 

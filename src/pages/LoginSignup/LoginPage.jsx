@@ -1,6 +1,6 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, forgotPassword as resetPassword } from "../../services/api";
+import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword } from "../../services/api";
 import { useNotifications } from "../../components/NotificationProvider";
 import "./LoginPage.css";
 import gymBackground from "../../assets/gym-background.jpg";
@@ -16,12 +16,27 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotId, setForgotId] = useState("");
+  const [forgotStep, setForgotStep] = useState("email");
   const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotOtp, setForgotOtp] = useState("");
   const [forgotPasswordValue, setForgotPasswordValue] = useState("");
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState("");
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
   const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
+  const [forgotValidationError, setForgotValidationError] = useState("");
+  const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (!showForgotModal || forgotStep !== "otp") return undefined;
+
+    const timer = window.setInterval(() => {
+      setOtpSecondsLeft((seconds) => Math.max(0, seconds - 1));
+      setResendSecondsLeft((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [showForgotModal, forgotStep]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -91,50 +106,107 @@ export default function LoginPage() {
     }
   };
 
-  const handleForgotPassword = async (e) => {
+  const resetForgotFlow = () => {
+    setShowForgotModal(false);
+    setForgotStep("email");
+    setForgotEmail("");
+    setForgotOtp("");
+    setForgotPasswordValue("");
+    setForgotConfirmPassword("");
+    setForgotValidationError("");
+    setOtpSecondsLeft(0);
+    setResendSecondsLeft(0);
+    setShowForgotNewPassword(false);
+    setShowForgotConfirmPassword(false);
+  };
+
+  const handleForgotClose = () => {
+    if (!forgotLoading) resetForgotFlow();
+  };
+
+  const handleForgotEmailSubmit = async (e) => {
     e.preventDefault();
-
-    if (!forgotId.trim()) {
-      notify("warning", "Missing ID", "Please provide your ID Number.");
+    const normalizedEmail = forgotEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setForgotValidationError("Please enter a valid email address.");
       return;
     }
-
-    if (!forgotEmail.trim()) {
-      notify("warning", "Missing email", "Please provide the email linked to your account.");
-      return;
-    }
-
-    if (!forgotPasswordValue.trim()) {
-      notify("warning", "Missing password", "Please enter a new password.");
-      return;
-    }
-
-    if (forgotPasswordValue !== forgotConfirmPassword) {
-      notify("warning", "Password mismatch", "The new passwords do not match.");
-      return;
-    }
-
+    setForgotValidationError("");
     setForgotLoading(true);
-
     try {
-      const data = await resetPassword({
-        id: forgotId.trim(),
-        email: forgotEmail.trim(),
-        newPassword: forgotPasswordValue,
-      });
-
-      if (data.success) {
-        notify("success", "Password Updated", data.message || "You can now log in with your new password.");
-        setShowForgotModal(false);
-        setForgotId("");
-        setForgotEmail("");
-        setForgotPasswordValue("");
-        setForgotConfirmPassword("");
-      } else {
-        notify("error", "Reset Failed", data.message || "Unable to reset your password right now.");
-      }
+      await requestPasswordReset(normalizedEmail);
+      setForgotEmail(normalizedEmail);
+      setForgotStep("otp");
+      setOtpSecondsLeft(600);
+      setResendSecondsLeft(60);
     } catch (error) {
-      notify("error", "Reset Failed", error.message || "Unable to reset your password right now.");
+      notify("error", "Unable to send code", error.message || "Please try again later.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(forgotOtp)) {
+      setForgotValidationError("Enter the 6-digit verification code from your email.");
+      return;
+    }
+    setForgotValidationError("");
+    setForgotLoading(true);
+    try {
+      await verifyPasswordResetOtp(forgotEmail, forgotOtp);
+      setForgotStep("password");
+    } catch (error) {
+      notify("error", "Verification failed", error.message || "The code is invalid or expired.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendSecondsLeft > 0 || forgotLoading) return;
+    setForgotLoading(true);
+    try {
+      await requestPasswordReset(forgotEmail);
+      setOtpSecondsLeft(600);
+      setResendSecondsLeft(60);
+      setForgotOtp("");
+      setForgotValidationError("");
+    } catch (error) {
+      notify("error", "Unable to resend code", error.message || "Please try again later.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const validateNewPassword = () => {
+    if (!/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_-]).{8,}$/.test(forgotPasswordValue)) {
+      return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
+    }
+    if (forgotPasswordValue !== forgotConfirmPassword) {
+      return "The new passwords do not match.";
+    }
+    return "";
+  };
+
+  const handleNewPasswordSubmit = async (e) => {
+    e.preventDefault();
+    const validationError = validateNewPassword();
+    if (validationError) {
+      setForgotValidationError(validationError);
+      return;
+    }
+
+    setForgotValidationError("");
+    setForgotLoading(true);
+    try {
+      await resetPassword(forgotEmail, forgotPasswordValue);
+      setForgotStep("success");
+      notify("success", "Password reset successfully", "You can now log in with your new password.");
+      window.setTimeout(resetForgotFlow, 1800);
+    } catch (error) {
+      notify("error", "Reset failed", error.message || "Unable to reset your password right now.");
     } finally {
       setForgotLoading(false);
     }
@@ -261,101 +333,82 @@ export default function LoginPage() {
       </div>
 
       {showForgotModal && (
-        <div className="forgot-modal-backdrop" onClick={() => setShowForgotModal(false)}>
+        <div className="forgot-modal-backdrop" onClick={handleForgotClose}>
           <div className="forgot-modal" onClick={(e) => e.stopPropagation()}>
             <div className="forgot-modal-header">
-              <h3>Reset Password</h3>
-              <button type="button" className="forgot-modal-close" onClick={() => setShowForgotModal(false)}>
+              <h3>{forgotStep === "success" ? "Password Updated" : "Reset Password"}</h3>
+              <button type="button" className="forgot-modal-close" onClick={handleForgotClose} aria-label="Close password reset">
                 <Icon name="close" />
               </button>
             </div>
 
-            <form onSubmit={handleForgotPassword} className="forgot-modal-form">
-              <label className="forgot-modal-field">
-                <span>User ID</span>
-                <input
-                  type="text"
-                  value={forgotId}
-                  onChange={(e) => setForgotId(e.target.value)}
-                  placeholder="Enter your ID Number"
-                />
-              </label>
-
-              <label className="forgot-modal-field">
-                <span>Registered Email</span>
-                <input
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  placeholder="Enter your registered email"
-                />
-              </label>
-
-              <label className="forgot-modal-field">
-                <span>New Password</span>
-                <div className="forgot-password-input-wrapper">
-                  <input
-                    type={showForgotNewPassword ? "text" : "password"}
-                    value={forgotPasswordValue}
-                    onChange={(e) => setForgotPasswordValue(e.target.value)}
-                    placeholder="Enter a new password"
-                  />
-                  <button
-                    type="button"
-                    className="forgot-password-toggle"
-                    onClick={() => setShowForgotNewPassword((prev) => !prev)}
-                    aria-label={showForgotNewPassword ? "Hide password" : "Show password"}
-                  >
-                    {showForgotNewPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 512 512">
-                        <path fill="#000000" fillRule="evenodd" d="m89.752 59.582l138.656 138.656C236.763 194.239 246.12 192 256 192c35.346 0 64 28.654 64 64c0 9.881-2.239 19.239-6.237 27.594l138.656 138.655l-30.17 30.17l-59.207-59.208c-29.128 19.7-64.646 33.456-107.042 33.456C106.667 426.667 42.667 256 42.667 256s22.862-60.965 73.14-110.02L59.583 89.751zm56.355 116.695c-28.73 27.818-47.477 60.904-56.726 79.73C107.404 292.697 161.739 384 256 384c29.106 0 54.406-8.706 76.006-21.823l-48.414-48.414C275.238 317.761 265.881 320 256 320c-35.346 0-64-28.654-64-64c0-9.88 2.24-19.238 6.238-27.592ZM256 85.334C405.334 85.334 469.334 256 469.334 256s-14.239 37.97-44.955 78.09l-30.56-30.567c13.43-18.244 22.99-35.702 28.802-47.53C404.597 219.302 350.262 128 256.001 128c-11.838 0-23.046 1.44-33.631 4.031l-34.04-34.049c20.25-7.905 42.775-12.648 67.67-12.648"/>
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 1024 1024">
-                        <path fill="#000000" d="M515.472 321.408c-106.032 0-192 85.968-192 192c0 106.016 85.968 192 192 192s192-85.968 192-192s-85.968-192-192-192zm0 320c-70.576 0-129.473-58.816-129.473-129.393s57.424-128 128-128c70.592 0 128 57.424 128 128s-55.935 129.393-126.527 129.393zm508.208-136.832c-.368-1.616-.207-3.325-.688-4.91c-.208-.671-.624-1.055-.864-1.647c-.336-.912-.256-1.984-.72-2.864c-93.072-213.104-293.663-335.76-507.423-335.76S95.617 281.827 2.497 494.947c-.4.897-.336 1.824-.657 2.849c-.223.624-.687.975-.895 1.567c-.496 1.616-.304 3.296-.608 4.928c-.591 2.88-1.135 5.68-1.135 8.592c0 2.944.544 5.664 1.135 8.591c.32 1.6.113 3.344.609 4.88c.208.72.672 1.024.895 1.68c.336.88.256 1.968.656 2.848c93.136 213.056 295.744 333.712 509.504 333.712c213.776 0 416.336-120.4 509.44-333.505c.464-.912.369-1.872.72-2.88c.224-.56.655-.976.848-1.6c.496-1.568.336-3.28.687-4.912c.56-2.864 1.088-5.664 1.088-8.624c0-2.816-.528-5.6-1.104-8.497zM512 800.595c-181.296 0-359.743-95.568-447.423-287.681c86.848-191.472 267.68-289.504 449.424-289.504c181.68 0 358.496 98.144 445.376 289.712C872.561 704.53 693.744 800.595 512 800.595z"/>
-                      </svg>
-                    )}
-                  </button>
+            {forgotStep === "email" && (
+              <form onSubmit={handleForgotEmailSubmit} className="forgot-modal-form">
+                <p className="forgot-modal-description">Enter your registered email. If an account is associated with it, we will send a verification code.</p>
+                <label className="forgot-modal-field">
+                  <span>Registered Email</span>
+                  <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="Enter your registered email" autoComplete="email" />
+                </label>
+                {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
+                <div className="forgot-modal-actions">
+                  <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
+                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Continue"}</button>
                 </div>
-              </label>
+              </form>
+            )}
 
-              <label className="forgot-modal-field">
-                <span>Confirm Password</span>
-                <div className="forgot-password-input-wrapper">
-                  <input
-                    type={showForgotConfirmPassword ? "text" : "password"}
-                    value={forgotConfirmPassword}
-                    onChange={(e) => setForgotConfirmPassword(e.target.value)}
-                    placeholder="Confirm your new password"
-                  />
-                  <button
-                    type="button"
-                    className="forgot-password-toggle"
-                    onClick={() => setShowForgotConfirmPassword((prev) => !prev)}
-                    aria-label={showForgotConfirmPassword ? "Hide password" : "Show password"}
-                  >
-                    {showForgotConfirmPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 512 512">
-                        <path fill="#000000" fillRule="evenodd" d="m89.752 59.582l138.656 138.656C236.763 194.239 246.12 192 256 192c35.346 0 64 28.654 64 64c0 9.881-2.239 19.239-6.237 27.594l138.656 138.655l-30.17 30.17l-59.207-59.208c-29.128 19.7-64.646 33.456-107.042 33.456C106.667 426.667 42.667 256 42.667 256s22.862-60.965 73.14-110.02L59.583 89.751zm56.355 116.695c-28.73 27.818-47.477 60.904-56.726 79.73C107.404 292.697 161.739 384 256 384c29.106 0 54.406-8.706 76.006-21.823l-48.414-48.414C275.238 317.761 265.881 320 256 320c-35.346 0-64-28.654-64-64c0-9.88 2.24-19.238 6.238-27.592ZM256 85.334C405.334 85.334 469.334 256 469.334 256s-14.239 37.97-44.955 78.09l-30.56-30.567c13.43-18.244 22.99-35.702 28.802-47.53C404.597 219.302 350.262 128 256.001 128c-11.838 0-23.046 1.44-33.631 4.031l-34.04-34.049c20.25-7.905 42.775-12.648 67.67-12.648"/>
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 1024 1024">
-                        <path fill="#000000" d="M515.472 321.408c-106.032 0-192 85.968-192 192c0 106.016 85.968 192 192 192s192-85.968 192-192s-85.968-192-192-192zm0 320c-70.576 0-129.473-58.816-129.473-129.393s57.424-128 128-128c70.592 0 128 57.424 128 128s-55.935 129.393-126.527 129.393zm508.208-136.832c-.368-1.616-.207-3.325-.688-4.91c-.208-.671-.624-1.055-.864-1.647c-.336-.912-.256-1.984-.72-2.864c-93.072-213.104-293.663-335.76-507.423-335.76S95.617 281.827 2.497 494.947c-.4.897-.336 1.824-.657 2.849c-.223.624-.687.975-.895 1.567c-.496 1.616-.304 3.296-.608 4.928c-.591 2.88-1.135 5.68-1.135 8.592c0 2.944.544 5.664 1.135 8.591c.32 1.6.113 3.344.609 4.88c.208.72.672 1.024.895 1.68c.336.88.256 1.968.656 2.848c93.136 213.056 295.744 333.712 509.504 333.712c213.776 0 416.336-120.4 509.44-333.505c.464-.912.369-1.872.72-2.88c.224-.56.655-.976.848-1.6c.496-1.568.336-3.28.687-4.912c.56-2.864 1.088-5.664 1.088-8.624c0-2.816-.528-5.6-1.104-8.497zM512 800.595c-181.296 0-359.743-95.568-447.423-287.681c86.848-191.472 267.68-289.504 449.424-289.504c181.68 0 358.496 98.144 445.376 289.712C872.561 704.53 693.744 800.595 512 800.595z"/>
-                      </svg>
-                    )}
-                  </button>
+            {forgotStep === "otp" && (
+              <form onSubmit={handleOtpSubmit} className="forgot-modal-form">
+                <p className="forgot-modal-description">Enter the verification code sent to your email.</p>
+                <label className="forgot-modal-field">
+                  <span>Verification Code</span>
+                  <input className="forgot-otp-input" inputMode="numeric" maxLength={6} value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} onPaste={(e) => { e.preventDefault(); setForgotOtp(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); }} placeholder="6-digit code" autoComplete="one-time-code" />
+                </label>
+                <p className="forgot-countdown">Code expires in {Math.floor(otpSecondsLeft / 60)}:{String(otpSecondsLeft % 60).padStart(2, "0")}</p>
+                {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
+                <button type="button" className="forgot-resend-btn" onClick={handleResendOtp} disabled={resendSecondsLeft > 0 || forgotLoading}>
+                  {resendSecondsLeft > 0 ? `Resend code in ${resendSecondsLeft}s` : "Resend code"}
+                </button>
+                <div className="forgot-modal-actions">
+                  <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
+                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Verifying..." : "Verify Code"}</button>
                 </div>
-              </label>
+              </form>
+            )}
 
-              <div className="forgot-modal-actions">
-                <button type="button" className="forgot-cancel-btn" onClick={() => setShowForgotModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>
-                  {forgotLoading ? "Updating..." : "Update Password"}
-                </button>
+            {forgotStep === "password" && (
+              <form onSubmit={handleNewPasswordSubmit} className="forgot-modal-form">
+                <p className="forgot-modal-description">Create a new password for your GYMSTAT account.</p>
+                <label className="forgot-modal-field">
+                  <span>New Password</span>
+                  <div className="forgot-password-input-wrapper">
+                    <input type={showForgotNewPassword ? "text" : "password"} value={forgotPasswordValue} onChange={(e) => setForgotPasswordValue(e.target.value)} placeholder="Enter a new password" autoComplete="new-password" />
+                    <button type="button" className="forgot-password-toggle" onClick={() => setShowForgotNewPassword((prev) => !prev)} aria-label={showForgotNewPassword ? "Hide password" : "Show password"}><Icon name={showForgotNewPassword ? "eye" : "eyeOff"} size={18} /></button>
+                  </div>
+                </label>
+                <label className="forgot-modal-field">
+                  <span>Confirm New Password</span>
+                  <div className="forgot-password-input-wrapper">
+                    <input type={showForgotConfirmPassword ? "text" : "password"} value={forgotConfirmPassword} onChange={(e) => setForgotConfirmPassword(e.target.value)} placeholder="Confirm your new password" autoComplete="new-password" />
+                    <button type="button" className="forgot-password-toggle" onClick={() => setShowForgotConfirmPassword((prev) => !prev)} aria-label={showForgotConfirmPassword ? "Hide password" : "Show password"}><Icon name={showForgotConfirmPassword ? "eye" : "eyeOff"} size={18} /></button>
+                  </div>
+                </label>
+                <p className="forgot-password-hint">At least 8 characters, including uppercase, lowercase, number, and special character.</p>
+                {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
+                <div className="forgot-modal-actions">
+                  <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
+                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Saving..." : "Create Password"}</button>
+                </div>
+              </form>
+            )}
+
+            {forgotStep === "success" && (
+              <div className="forgot-success-state">
+                <Icon name="checkCircle" size={42} />
+                <p>Password reset successfully.</p>
+                <small>Returning you to the login page...</small>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}

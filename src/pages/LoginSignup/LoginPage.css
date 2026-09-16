@@ -255,6 +255,12 @@ body {
   gap: 14px;
 }
 
+.forgot-modal-description {
+  color: #666;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .forgot-modal-field {
   display: flex;
   flex-direction: column;
@@ -291,6 +297,10 @@ body {
   cursor: pointer;
   font-size: 16px;
   padding: 4px;
+  color: #555;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .forgot-password-input-wrapper input {
@@ -302,6 +312,61 @@ body {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 6px;
+}
+
+.forgot-otp-input {
+  text-align: center;
+  letter-spacing: 6px;
+  font-size: 20px !important;
+  font-weight: 700;
+}
+
+.forgot-countdown,
+.forgot-password-hint {
+  color: #666;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.forgot-resend-btn {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: #7a0a0a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.forgot-resend-btn:disabled {
+  color: #999;
+  cursor: not-allowed;
+}
+
+.forgot-validation-error {
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.forgot-success-state {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 34px 22px 38px;
+  color: #7a0a0a;
+  text-align: center;
+}
+
+.forgot-success-state p {
+  color: #333;
+  font-weight: 700;
+}
+
+.forgot-success-state small {
+  color: #666;
 }
 
 .forgot-cancel-btn,
