@@ -128,15 +128,15 @@ body {
   top: 14px;
   right: 14px;
   z-index: 140;
-  background: var(--maroon-dark);
-  color: white;
-  border: none;
-  border-radius: 10px;
+  background: transparent;
+  color: var(--maroon-dark);
+  border: 1px solid currentColor;
+  border-radius: 6px;
   width: 42px;
   height: 42px;
   font-size: 1.3rem;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: none;
 }
 
 .mobile-sidebar-backdrop {
@@ -273,13 +273,13 @@ body {
 }
 
 .topbar-icon-btn {
-  border: none;
-  background-color: var(--gold-primary); /* yellow circle */
-  color: var(--maroon-dark);             /* icon stroke color */
+  border: 1px solid var(--maroon-dark);
+  background-color: transparent;
+  color: var(--maroon-dark);
   cursor: pointer;
   transition: var(--transition);
-  border-radius: 50%;                    /* perfect circle */
-  width: 70px;                           /* fixed size */
+  border-radius: 6px;
+  width: 44px;
   height: 70px;
   display: flex;
   align-items: center;
@@ -287,51 +287,26 @@ body {
 }
 
 .topbar-icon-btn:hover {
-  transform: scale(1.08);
-  background-color: var(--maroon-dark);  /* invert on hover */
-  color: var(--gold-primary);
+  background-color: rgba(128, 0, 0, 0.08);
 }
 
 /* Force SVG stroke to follow button color */
-.topbar-icon-btn.sh-topbar-document svg {
-  width: 24px;
-  height: 24px;
-  stroke: var(--maroon-dark);
-}
-
-.topbar-icon-btn.sh-topbar-document:hover svg {
-  stroke: var(--gold-primary);
-}
-
-.topbar-icon-btn.sh-topbar-document {
-  position: relative;
-}
-
-.topbar-icon-btn.sh-topbar-document .sh-notification-document {
-  position: absolute;
-  right: 17px;
-  bottom: 16px;
-  width: 13px;
-  height: 13px;
-  stroke-width: 2.25;
-  background: var(--gold-primary);
-}
-
 .topbar-icon-btn.sh-topbar-document .sh-notification-bell {
-  width: 25px;
   height: 25px;
+  width: 22px;
+  height: 22px;
 }
 
 .sh-notification-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: -5px;
+  right: -5px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
   background: var(--maroon-dark);
-  color: var(--gold-primary);
+  color: white;
   font-size: 10px;
   line-height: 16px;
   text-align: center;
@@ -2148,13 +2123,13 @@ table tbody tr:has(.badge-declined) {
 }
 
 .topbar-icon-btn {
-  width: clamp(48px, 6vw, 70px);
-  height: clamp(48px, 6vw, 70px);
+  width: clamp(42px, 4vw, 44px);
+  height: clamp(42px, 4vw, 44px);
 }
 
 .topbar-icon-btn.sh-topbar-document svg {
-  width: clamp(18px, 2.3vw, 24px);
-  height: clamp(18px, 2.3vw, 24px);
+  width: 22px;
+  height: 22px;
 }
 
 .sh-welcome-card {

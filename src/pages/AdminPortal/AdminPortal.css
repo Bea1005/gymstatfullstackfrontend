@@ -1132,14 +1132,14 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    border: none;
-    border-radius: 10px;
-    background: var(--dark-maroon);
-    color: #fff;
+    border: 1px solid var(--dark-maroon);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--dark-maroon);
     font-size: 1.35rem;
     line-height: 1;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    box-shadow: none;
   }
 
   .admin-mobile-backdrop {

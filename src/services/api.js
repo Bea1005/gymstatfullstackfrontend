@@ -534,6 +534,13 @@ export const getStudentRequirements = async (filters = {}) => {
   });
 };
 
+export const markStudentRequirementNotificationRead = async (requirementId, participationType) => {
+  return apiRequest(`/student/requirements/${requirementId}/notifications/read`, {
+    method: 'PUT',
+    body: JSON.stringify({ participationType }),
+  });
+};
+
 export const importPreviousYearRequirements = async (payload = {}) => {
   return apiRequest('/student/requirements/import-previous-year', {
     method: 'POST',

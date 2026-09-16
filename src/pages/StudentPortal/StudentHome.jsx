@@ -11,12 +11,40 @@ const UPDATES = [
 
 export default function StudentHomePage() {
   const navigate = useNavigate();
-  const [user, setUser] = useState({ name: "", email: "" });
-  const [announcements, setAnnouncements] = useState([]);
+  const [user] = useState(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) return { name: "Athlete", email: "student@marsu.edu" };
+
+    try {
+      const userData = JSON.parse(storedUser);
+      return {
+        name: userData.fullname || userData.name || "Athlete",
+        email: userData.email || "student@marsu.edu"
+      };
+    } catch {
+      return { name: "Athlete", email: "student@marsu.edu" };
+    }
+  });
   const [stats, setStats] = useState({ pending: 0, approved: 0 });
   const [documentNotifications, setDocumentNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+
+  async function fetchData() {
+    try {
+      await api.getAnnouncements({ limit: 5 });
+      const statsData = await api.getStudentStats();
+      setStats(statsData.data);
+      const requirementsData = await api.getStudentRequirements();
+      const reviewedRequirements = (requirementsData.data || [])
+        .filter((requirement) => ['approved', 'rejected'].includes(String(requirement.status || '').toLowerCase()))
+        .sort((first, second) => new Date(second.reviewedAt || second.updatedAt || 0) - new Date(first.reviewedAt || first.updatedAt || 0));
+      setDocumentNotifications(reviewedRequirements);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setStats({ pending: 0, approved: 0 });
+      setDocumentNotifications([]);
+    }
+  }
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -28,47 +56,44 @@ export default function StudentHomePage() {
       return;
     }
 
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      const userData = JSON.parse(storedUser);
-      setUser({
-        name: userData.fullname || userData.name || "Athlete",
-        email: userData.email || "student@marsu.edu"
-      });
-    } else {
-      setUser({ name: "Athlete", email: "student@marsu.edu" });
-    }
-
-    fetchData();
+    const fetchTimeout = setTimeout(fetchData, 0);
+    return () => clearTimeout(fetchTimeout);
   }, [navigate]);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const announcementsData = await api.getAnnouncements({ limit: 5 });
-      setAnnouncements(announcementsData.data || []);
-      const statsData = await api.getStudentStats();
-      setStats(statsData.data);
-      const requirementsData = await api.getStudentRequirements();
-      const reviewedRequirements = (requirementsData.data || [])
-        .filter((requirement) => ['approved', 'rejected'].includes(String(requirement.status || '').toLowerCase()))
-        .sort((first, second) => new Date(second.reviewedAt || second.updatedAt || 0) - new Date(first.reviewedAt || first.updatedAt || 0));
-      setDocumentNotifications(reviewedRequirements);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      setAnnouncements([]);
-      setStats({ pending: 0, approved: 0 });
-      setDocumentNotifications([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleNav = (key) => {
     navigate(`/student/${key}`);
   };
 
-  const handleNotifications = () => setNotificationsOpen((open) => !open);
+  const isNotificationUnread = (notification) => {
+    const reviewedAt = new Date(notification.reviewedAt || notification.updatedAt || 0).getTime();
+    const readAt = new Date(notification.notificationReadAt || 0).getTime();
+    return !readAt || readAt < reviewedAt;
+  };
+
+  const unreadNotifications = documentNotifications.filter(isNotificationUnread);
+
+  const markNotificationsRead = async (notifications) => {
+    const unread = notifications.filter(isNotificationUnread);
+    if (!unread.length) return;
+
+    const results = await Promise.allSettled(unread.map((notification) => (
+      api.markStudentRequirementNotificationRead(notification._id, notification.participationType)
+    )));
+
+    if (results.some((result) => result.status === 'fulfilled')) {
+      const readAt = new Date().toISOString();
+      const readIds = new Set(unread.map((notification) => notification._id));
+      setDocumentNotifications((current) => current.map((notification) => (
+        readIds.has(notification._id) ? { ...notification, notificationReadAt: readAt } : notification
+      )));
+    }
+  };
+
+  const handleNotifications = () => {
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    if (nextOpen) markNotificationsRead(documentNotifications);
+  };
 
   const handleNotificationClick = () => {
     setNotificationsOpen(false);
@@ -89,14 +114,6 @@ export default function StudentHomePage() {
     return labels[requirement.requirementType] || requirement.fileName || 'Requirement document';
   };
 
-  const handleUpdateClick = (update) => {
-    if (update.type === "requirement") {
-      navigate("/student/requirements");
-    } else {
-      navigate("/student/announcements");
-    }
-  };
-
   return (
     <div className="portal-page-content">
       <div className="portal-topbar">
@@ -108,13 +125,13 @@ export default function StudentHomePage() {
               title="View document notifications"
               aria-label="View document notifications"
               aria-expanded={notificationsOpen}
+              aria-haspopup="dialog"
             >
               <Icon name="bell" className="sh-notification-bell" />
-              <Icon name="document" className="sh-notification-document" />
-              {documentNotifications.length > 0 && <span className="sh-notification-badge">{documentNotifications.length}</span>}
+              {unreadNotifications.length > 0 && <span className="sh-notification-badge">{unreadNotifications.length}</span>}
             </button>
             {notificationsOpen && (
-              <div className="sh-notification-panel" role="status">
+              <div className="sh-notification-panel" role="dialog" aria-label="Document updates">
                 <div className="sh-notification-panel__header">
                   <strong>Document Updates</strong>
                   <button type="button" onClick={() => setNotificationsOpen(false)} aria-label="Close notifications">
