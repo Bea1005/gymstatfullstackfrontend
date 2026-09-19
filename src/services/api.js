@@ -68,8 +68,12 @@ const apiRequest = async (endpoint, options = {}) => {
     const isPublic = isPublicEndpoint(endpoint, options.method || 'GET');
     
     // Only add auth token for non-public endpoints
+    let sessionToken = null;
+    let localToken = null;
     if (!isPublic) {
-      const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+      sessionToken = sessionStorage.getItem('token');
+      localToken = localStorage.getItem('token');
+      const token = sessionToken || localToken;
       if (token && !headers['Authorization']) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -77,10 +81,20 @@ const apiRequest = async (endpoint, options = {}) => {
 
     const fullUrl = `${API_URL}${endpoint}`;
 
-    const response = await fetch(fullUrl, {
+    let response = await fetch(fullUrl, {
       ...options,
       headers,
     });
+
+    if (response.status === 401 && !isPublic && localToken && localToken !== sessionToken) {
+      response = await fetch(fullUrl, {
+        ...options,
+        headers: {
+          ...headers,
+          Authorization: `Bearer ${localToken}`,
+        },
+      });
+    }
     
     let data;
     const contentType = response.headers.get('content-type');
