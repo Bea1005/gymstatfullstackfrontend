@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { register as registerUser } from "../../services/api";
 import { useNotifications } from "../../components/NotificationProvider";
 import Icon from "../../components/Icon";
-import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
 import "./RegisterPage.css";
 
 import gymBackground from "../../assets/gym-background.jpg";
@@ -16,10 +16,7 @@ export default function RegisterPage() {
     fullname: "",
     email: "",
     password: "",
-    role: "student", // Default role
     department: "",
-    yearLevel: "",
-    sport: "",
     id: ""  // ✅ Changed from studentId to id
   });
   
@@ -30,15 +27,6 @@ export default function RegisterPage() {
 
   const set = (key) => (e) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
-
-  const handleRoleChange = (e) => {
-    const nextRole = e.target.value;
-    setForm((prev) => ({
-      ...prev,
-      role: nextRole,
-      ...(nextRole === "coach" ? { sport: "" } : {})
-    }));
-  };
 
   // Password validation function
   const validatePassword = (password) => {
@@ -97,11 +85,6 @@ export default function RegisterPage() {
 
     if (form.password !== confirmPassword) {
       notify("warning", "Passwords Do Not Match", "Passwords do not match.");
-      return;
-    }
-
-    if (form.role === "student" && !form.sport.trim()) {
-      notify("warning", "Missing Sport", "Please enter your sport.");
       return;
     }
 
@@ -282,70 +265,19 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* Role Selection Dropdown */}
             <div className="login-field">
-              <label>Role</label>
+              <label>Department</label>
               <select
                 className="login-input"
-                value={form.role}
-                onChange={handleRoleChange}
-                required
+                value={form.department}
+                onChange={set("department")}
               >
-                <option value="student">Student</option>
-                <option value="coach">Coach</option>
+                <option value="">Select Department</option>
+                {DEPARTMENT_OPTIONS.map((department) => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
               </select>
             </div>
-
-            {/* Department field - shown for both student and coach roles */}
-            {(form.role === "student" || form.role === "coach") && (
-              <div className="login-field">
-                <label>Department</label>
-                <select
-                  className="login-input"
-                  value={form.department}
-                  onChange={set("department")}
-                >
-                  <option value="">Select Department</option>
-                  {DEPARTMENT_OPTIONS.map((department) => (
-                    <option key={department} value={department}>{department}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {form.role === "student" && (
-              <div className="login-field">
-                <label>Year Level</label>
-                <select
-                  className="login-input"
-                  value={form.yearLevel}
-                  onChange={set("yearLevel")}
-                  required
-                >
-                  <option value="">Select year level</option>
-                  {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
-                    <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {form.role === "student" && (
-              <div className="login-field">
-                <label>Sport</label>
-                <select
-                  className="login-input"
-                  value={form.sport}
-                  onChange={set("sport")}
-                  required
-                >
-                  <option value="">Select sport</option>
-                  {SPORT_OPTIONS.map((sport) => (
-                    <option key={sport} value={sport}>{sport}</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             <button type="submit" className="login-submit-btn" disabled={loading}>
               {loading ? "Registering..." : "Sign Up"}

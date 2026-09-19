@@ -174,7 +174,7 @@ const StudentProfile = () => {
                 {isEditing && editable ? (
                 value === "branchCampus" || value === "department" || value === "yearLevel" ? (
                   <select className="student-profile-input" value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))}>
-                    <option value="">{value === "department" ? "Select department" : value === "yearLevel" ? "Select year level" : "Select branch campus"}</option>
+                    <option value="" disabled>{value === "department" ? "Select Department" : value === "yearLevel" ? "Select Year Level" : "Select Branch Campus"}</option>
                     {(value === "department" ? DEPARTMENT_OPTIONS : value === "yearLevel" ? YEAR_LEVEL_OPTIONS : ["Boac Main", "Santa Cruz", "Gasan", "Torrijos"]).map((option) => (
                       <option key={option} value={option}>{option}</option>
                     ))}
