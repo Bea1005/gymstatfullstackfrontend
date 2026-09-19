@@ -123,7 +123,7 @@ const ScreenerPage = () => {
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
-  const [participationType, setParticipationType] = useState('Intrams');
+  const participationType = 'Intrams';
 
   const loadRequirements = async (silent = false) => {
     try {
@@ -212,7 +212,7 @@ const ScreenerPage = () => {
 
   useEffect(() => {
     loadRequirements();
-  }, [notify, participationType]);
+  }, [notify]);
 
   useEffect(() => {
     const refreshInterval = window.setInterval(() => {
@@ -220,7 +220,7 @@ const ScreenerPage = () => {
     }, 10000);
 
     return () => window.clearInterval(refreshInterval);
-  }, [notify, participationType]);
+  }, [notify]);
 
   useEffect(() => {
     const handleRequirementUpdate = () => {
@@ -240,7 +240,7 @@ const ScreenerPage = () => {
       window.removeEventListener('gymstat-requirement-updated', handleRequirementUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
     };
-  }, [notify, participationType]);
+  }, [notify]);
 
   useEffect(() => {
     let cancelled = false;
@@ -491,20 +491,6 @@ const ScreenerPage = () => {
             </select>
           </div>
 
-          <div className="filter-group">
-            <label>Participation Type:</label>
-            <select
-              value={participationType}
-              onChange={(event) => {
-                setParticipationType(event.target.value);
-                setCurrentView('list');
-                setSelectedStudent(null);
-              }}
-            >
-              <option value="Intrams">Intrams</option>
-              <option value="STRASUC">STRASUC</option>
-            </select>
-          </div>
         </div>
 
         {loading ? (

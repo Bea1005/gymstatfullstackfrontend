@@ -192,7 +192,7 @@ export default function StudentRequirements() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSport, setSelectedSport] = useState('General');
-  const [participationType, setParticipationType] = useState('Intrams');
+  const participationType = 'Intrams';
   const [customRequirementCards, setCustomRequirementCards] = useState([]);
   const [customRequirementModal, setCustomRequirementModal] = useState(null);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
@@ -511,9 +511,12 @@ export default function StudentRequirements() {
     }))
     .filter((card, index, list) => list.findIndex((entry) => entry.id === card.id) === index);
 
-  const visibleRequirementCards = participationType === 'Intrams'
-    ? [...requirementTypes, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: 'plus', isAddCard: true }]
-    : [...requirementTypes, { id: 'tor', label: 'TOR – Upload Card', icon: 'document' }, ...persistedCustomRequirementCards, ...customRequirementCards.filter((card) => card.participationType === participationType), { id: 'others-add', label: 'Others – Add Requirement', icon: 'plus', isAddCard: true }];
+  const visibleRequirementCards = [
+    ...requirementTypes,
+    ...persistedCustomRequirementCards,
+    ...customRequirementCards.filter((card) => card.participationType === participationType),
+    { id: 'others-add', label: 'Others – Add Requirement', icon: 'plus', isAddCard: true }
+  ];
 
   const getSubmissionForRequirement = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
     return [...submissions]
@@ -919,6 +922,64 @@ export default function StudentRequirements() {
               <div className="admin-reqs-note">
                 <p><Icon name="info" size={16} /> <strong>Note:</strong> Download required forms and submit your completed documents in the "Upload New" tab.</p>
               </div>
+
+              <div className="admin-requirements-list" style={{ marginTop: '1.5rem' }}>
+                <div className="admin-reqs-header">
+                  <h3>Student Requirements</h3>
+                  <p>Your submitted documents and their current review status</p>
+                </div>
+
+                {submissions.length > 0 ? (
+                  <div className="student-requirements-table-wrapper">
+                    <table className="student-requirements-table">
+                      <thead>
+                        <tr className="student-requirements-table-row">
+                          <th className="student-requirements-table-head">Requirement</th>
+                          <th className="student-requirements-table-head">Status</th>
+                          <th className="student-requirements-table-head">Upload Date &amp; Time</th>
+                          <th className="student-requirements-table-head">Download</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {submissions.map((submission) => (
+                          <tr key={submission._id} className="student-requirements-table-row">
+                            <td className="student-requirements-table-cell">
+                              {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.customRequirementLabel || submission.requirementType || 'Other'}
+                            </td>
+                            <td className="student-requirements-table-cell">
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                <span className={`badge ${submission.status === 'approved' ? 'badge-completed' : submission.status === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
+                                  {submission.status || 'pending'}
+                                </span>
+                                {submission.status === 'rejected' && (
+                                  <span style={{ fontSize: '0.8rem', color: '#c62828', lineHeight: 1.4 }}>
+                                    {submission.remarks || submission.feedback || 'Please upload a corrected copy.'}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.createdAt)}</td>
+                            <td className="student-requirements-table-cell">
+                              <button
+                                type="button"
+                                className="student-requirement-download-btn"
+                                onClick={() => handleDownloadSubmission(submission)}
+                                disabled={loading}
+                                aria-label={`Download ${submission.fileName || 'uploaded document'}`}
+                                title="Download document"
+                              >
+                                <Icon name="download" size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', color: '#666' }}>No uploaded files yet.</div>
+                )}
+              </div>
             </div>
           </section>
         ) : activeTab === 'import' ? (
@@ -1001,31 +1062,6 @@ export default function StudentRequirements() {
                 <p className="section-subtitle">Select a requirement type and upload your document</p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 170 }}>
-                <select
-                  value={participationType}
-                  onChange={(e) => setParticipationType(e.target.value)}
-                  aria-label="Participation type"
-                  style={{
-                    appearance: 'none',
-                    background: '#fff',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 8,
-                    padding: '8px 32px 8px 12px',
-                    fontSize: 14,
-                    color: '#1f2937',
-                    fontWeight: 600,
-                    minWidth: 150,
-                    cursor: 'pointer',
-                    backgroundImage: "url(data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236b7280' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E)",
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 10px center'
-                  }}
-                >
-                  <option value="Intrams">Intrams</option>
-                  <option value="STRASUC">STRASUC</option>
-                </select>
-              </div>
             </div>
 
             <div className="upload-grid">
@@ -1153,68 +1189,6 @@ export default function StudentRequirements() {
               {uploading ? 'Uploading...' : 'Submit Requirements'}
             </button>
 
-            <div className="admin-requirements-list" style={{ marginTop: '1.5rem' }}>
-              <div className="admin-reqs-header">
-                <h3>🗂️ Recent Uploaded Files</h3>
-                <p>Your saved uploads from the database</p>
-              </div>
-
-              {submissions.length > 0 ? (
-                <div className="student-requirements-table-wrapper">
-                  <table className="student-requirements-table">
-                    <thead>
-                      <tr className="student-requirements-table-row">
-                        <th className="student-requirements-table-head">File Name</th>
-                        <th className="student-requirements-table-head">Requirement Type</th>
-                        <th className="student-requirements-table-head">Upload Date & Time</th>
-                        <th className="student-requirements-table-head">Status</th>
-                        <th className="student-requirements-table-head">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {submissions.map((submission) => (
-                        <tr key={submission._id} className="student-requirements-table-row">
-                          <td className="student-requirements-table-cell">{submission.fileName || 'Uploaded file'}</td>
-                          <td className="student-requirements-table-cell">
-                            {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.requirementType || 'Other'}
-                          </td>
-                          <td className="student-requirements-table-cell">
-                            {formatUploadDateTime(submission.uploadDate)}
-                          </td>
-                          <td className="student-requirements-table-cell">
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                              <span className={`badge ${submission.requirementStatus === 'reusable' || submission.status === 'approved' ? 'badge-completed' : submission.requirementStatus === 'expired' || submission.status === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
-                                {submission.requirementStatus || submission.status || 'pending'}
-                              </span>
-                              {submission.requirementStatus && submission.requirementStatus !== submission.status && (
-                                <span style={{ fontSize: '0.72rem', color: '#666' }}>{submission.status === 'approved' ? 'Approval kept for reuse' : 'Current lifecycle state'}</span>
-                              )}
-                              {submission.status === 'rejected' && (
-                                <span style={{ fontSize: '0.8rem', color: '#c62828', lineHeight: 1.4 }}>
-                                  {submission.remarks || submission.feedback || 'Please upload a corrected copy.'}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="student-requirements-table-cell">
-                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                              <button className="submit-single-btn" onClick={() => handleViewSubmission(submission)} disabled={loading}>
-                                View
-                              </button>
-                              <button className="submit-single-btn" onClick={() => handleDownloadSubmission(submission)} disabled={loading}>
-                                Download
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div style={{ padding: '1rem', color: '#666' }}>No uploaded files yet.</div>
-              )}
-            </div>
           </section>
         )}
       </div>

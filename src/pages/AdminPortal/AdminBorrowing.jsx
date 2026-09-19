@@ -552,7 +552,7 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
             <input
               type="text"
               className="bw-form-input"
-              placeholder="Ex. Prof Joel Parenio"
+              placeholder="Ex. Juan Dela Cruz"
               value={form.fullname}
               onChange={e => { setForm(f => ({ ...f, fullname: e.target.value })); setError(''); }}
             />
