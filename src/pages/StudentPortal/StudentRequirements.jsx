@@ -1011,9 +1011,10 @@ export default function StudentRequirements() {
                   <table className="student-requirements-table">
                     <thead>
                       <tr className="student-requirements-table-row">
-                        <th className="student-requirements-table-head">Requirement Type</th>
-                        <th className="student-requirements-table-head">Academic Year</th>
+                        <th className="student-requirements-table-head">Requirement Name</th>
                         <th className="student-requirements-table-head">Status</th>
+                        <th className="student-requirements-table-head">Academic Year</th>
+                        <th className="student-requirements-table-head">Upload Date &amp; Time</th>
                         <th className="student-requirements-table-head">Action</th>
                       </tr>
                     </thead>
@@ -1024,24 +1025,36 @@ export default function StudentRequirements() {
                         return (
                           <tr key={submission._id} className="student-requirements-table-row">
                             <td className="student-requirements-table-cell">
-                              {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.requirementType || 'Other'}
+                              {submission.requirementName || requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.customRequirementLabel || submission.requirementType || 'Other'}
                             </td>
-                            <td className="student-requirements-table-cell">{submission.academicYear || 'N/A'}</td>
                             <td className="student-requirements-table-cell">
                               <span className={`badge ${submission.requirementStatus === 'reusable' ? 'badge-completed' : submission.requirementStatus === 'expired' ? 'badge-declined' : submission.requirementStatus === 'archived' ? 'badge-pending' : 'badge-pending'}`}>
                                 {submission.requirementStatus || submission.status || 'active'}
                               </span>
                             </td>
+                            <td className="student-requirements-table-cell">{submission.academicYear || 'N/A'}</td>
+                            <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.uploadedAt || submission.createdAt)}</td>
                             <td className="student-requirements-table-cell">
-                              {canReplacePsa ? (
-                                <button className="submit-single-btn" onClick={() => { setActiveTab('submission'); setTimeout(() => triggerFileInput(submission.requirementType), 0); }}>
-                                  Replace / Update File
+                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <button className="submit-single-btn" onClick={() => handleViewSubmission(submission)} aria-label={`View ${submission.fileName || 'uploaded document'}`}>
+                                  <Icon name="eye" size={16} /> View
                                 </button>
-                              ) : (
-                                <button className="submit-single-btn" onClick={() => handleViewSubmission(submission)}>
-                                  View
+                                <button
+                                  type="button"
+                                  className="student-requirement-download-btn"
+                                  onClick={() => handleDownloadSubmission(submission)}
+                                  disabled={loading}
+                                  aria-label={`Download ${submission.fileName || 'uploaded document'}`}
+                                  title="Download document"
+                                >
+                                  <Icon name="download" size={18} />
                                 </button>
-                              )}
+                                {canReplacePsa && (
+                                  <button className="submit-single-btn" onClick={() => { setActiveTab('submission'); setTimeout(() => triggerFileInput(submission.requirementType), 0); }}>
+                                    Replace / Update File
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
