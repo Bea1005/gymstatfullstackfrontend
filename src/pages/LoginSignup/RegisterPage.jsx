@@ -140,6 +140,10 @@ export default function RegisterPage() {
 
   return (
     <div className="login-root">
+      <button type="button" className="auth-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
+        <Icon name="arrowLeft" size={18} />
+        <span>Back</span>
+      </button>
       {/* LEFT SIDE */}
       <div
         className="login-left"

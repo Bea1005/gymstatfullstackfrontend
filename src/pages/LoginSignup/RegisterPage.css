@@ -21,6 +21,35 @@ body {
   min-height: 100vh;
   width: 100vw;
   overflow: hidden;
+  position: relative;
+}
+
+.auth-back-btn {
+  position: absolute;
+  top: clamp(16px, 2.5vw, 28px);
+  left: clamp(16px, 2.5vw, 28px);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid rgba(240, 192, 0, 0.9);
+  border-radius: 6px;
+  background: rgba(120, 10, 10, 0.86);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-back-btn:hover {
+  background: #5e0707;
+}
+
+.auth-back-btn:focus-visible {
+  outline: 2px solid #f0c000;
+  outline-offset: 2px;
 }
 
 .login-left {
