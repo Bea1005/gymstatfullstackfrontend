@@ -1095,7 +1095,7 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
               )}
             </div>
             <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px' }}>
-              {!isEditingBorrower ? (
+              {isTransactionOngoing(selectedBorrowerDetails) && !isEditingBorrower ? (
                 <button
                   type="button"
                   onClick={() => openBorrowerEdit(selectedBorrowerDetails)}
@@ -1103,7 +1103,7 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
                 >
                   Edit
                 </button>
-              ) : (
+              ) : isTransactionOngoing(selectedBorrowerDetails) ? (
                 <>
                   <button
                     type="button"
@@ -1120,7 +1120,7 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
                     Save Changes
                   </button>
                 </>
-              )}
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
