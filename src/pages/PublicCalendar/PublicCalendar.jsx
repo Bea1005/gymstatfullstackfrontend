@@ -15,6 +15,7 @@ const TIMES = [
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MAX_REQUEST_FILE_SIZE = 10 * 1024 * 1024;
 
 export default function PublicCalendar() {
   const navigate = useNavigate();
@@ -340,6 +341,12 @@ export default function PublicCalendar() {
     if (!allowedTypes.includes(file.type) && !extOk) {
       setRequestFile({ name: '', type: '', data: '' });
       setFileError('Request letter must be a PDF, DOC, or DOCX file.');
+      return;
+    }
+
+    if (file.size > MAX_REQUEST_FILE_SIZE) {
+      setRequestFile({ name: '', type: '', data: '' });
+      setFileError('Request letter must be 10 MB or smaller.');
       return;
     }
 

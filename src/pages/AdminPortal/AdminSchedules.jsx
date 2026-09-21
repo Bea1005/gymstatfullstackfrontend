@@ -741,7 +741,6 @@ const AdminSchedules = () => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const eventsOnDate = sortEventsByTime(getEventsForDate(dateStr));
     const hasEvent = eventsOnDate.length > 0;
-    const multipleEvents = eventsOnDate.length > 1;
     const hasPublic = eventsOnDate.some((event) => normalizeScheduleSource(event) === 'public');
     const hasInternal = eventsOnDate.some((event) => normalizeScheduleSource(event) === 'internal');
     const sourceClass = hasEvent
@@ -777,9 +776,9 @@ const AdminSchedules = () => {
               const sourceTone = normalizeScheduleSource(event) === 'public' ? 'mini-event--public' : 'mini-event--internal';
               const dotTone = normalizeScheduleSource(event) === 'public' ? 'event-dot--public' : 'event-dot--internal';
               return (
-                <div key={idx} className={`${cls} ${sourceTone}`} title={`${event.event}\n${formatTimeDisplay(event.startTime, event.endTime)}`}>
+                <div key={idx} className={`${cls} ${sourceTone}`} title={`${event.event}\n${event.startTime} – ${event.endTime}`}>
                   <span className="event-name">{event.event.length > 20 ? event.event.substring(0, 18) + '...' : event.event}</span>
-                  <span className="event-time">{multipleEvents ? event.startTime : formatTimeDisplay(event.startTime, event.endTime)}</span>
+                  <span className="event-time">{event.startTime} – {event.endTime}</span>
                 </div>
               );
             })}
@@ -847,7 +846,7 @@ const AdminSchedules = () => {
         
         <div className="calendar-legend">
           <span className="legend-dot legend-dot--internal"></span> Internal
-          <span className="legend-dot legend-dot--public" style={{ marginLeft: 10 }}></span> Public
+          <span className="legend-dot legend-dot--public" style={{ marginLeft: 10 }}></span> External
         </div>
       </div>
 

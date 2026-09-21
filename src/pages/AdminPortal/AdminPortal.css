@@ -338,8 +338,8 @@
   color: #666;
 }
 .legend-dot { width: 12px; height: 12px; background: #4caf50; border-radius: 50%; }
-.legend-dot--internal { background: #2e7d32; }
-.legend-dot--public { background: #a81e4b; }
+.legend-dot--internal { background: #7b1e1e; }
+.legend-dot--public { background: #d4a017; }
 
 .request-panel-overlay {
   position: fixed;

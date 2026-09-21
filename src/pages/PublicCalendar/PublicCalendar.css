@@ -289,6 +289,7 @@
 
 /* Header */
 .pcm-header {
+  background: #7b1e1e;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -303,7 +304,7 @@
 }
 .pcm-sub {
   font-size: 13px;
-  color: #ffdc00;
+  color: #fff;
   margin: 0;
   font-weight: 600;
 }
@@ -358,7 +359,12 @@
    FORM
 ══════════════════════════════════════ */
 .pcm-form {
-  padding: 20px 24px 24px;
+  --pcm-maroon: #7b1e1e;
+  --pcm-maroon-dark: #5a1010;
+  --pcm-gold: #d4a017;
+  background: #fff;
+  color: var(--pcm-maroon);
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -379,15 +385,15 @@
 .pcm-label {
   font-size: 13px;
   font-weight: 700;
-  color: #e0e0e0;
+  color: var(--pcm-maroon);
 }
 
 /* Input base */
 .pcm-input {
-  background: #111;
-  border: 1.5px solid #2e2e2e;
-  border-radius: 10px;
-  color: #fff;
+  background: #fff;
+  border: 1.5px solid var(--pcm-maroon);
+  border-radius: 6px;
+  color: var(--pcm-maroon-dark);
   font-size: 15px;
   padding: 13px 14px;
   outline: none;
@@ -397,7 +403,7 @@
   appearance: none;
   -webkit-appearance: none;
 }
-.pcm-input::placeholder { color: #4a4a4a; }
+.pcm-input::placeholder { color: #8f6464; }
 .pcm-input[type="file"] { padding: 10px 14px; }
 .pcm-textarea {
   min-height: 120px;
@@ -406,32 +412,32 @@
 .pcm-file-help {
   display: block;
   margin-top: 8px;
-  color: #ffdc00;
+  color: var(--pcm-maroon);
   font-size: 12px;
 }
 .pcm-input:focus {
-  border-color: #ffdc00;
-  box-shadow: 0 0 0 3px rgba(255,220,0,0.12);
+  border-color: var(--pcm-gold);
+  box-shadow: 0 0 0 3px rgba(212,160,23,0.2);
 }
 .pcm-input--err { border-color: #e53935; }
 .pcm-input--err:focus { box-shadow: 0 0 0 3px rgba(229,57,53,0.15); }
 
-/* Date picker icon white */
+/* Keep native date controls minimal and aligned with the form palette. */
 .pcm-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-  opacity: 0.6;
+  filter: invert(16%) sepia(22%) saturate(2221%) hue-rotate(315deg) brightness(75%) contrast(96%);
+  opacity: 0.85;
   cursor: pointer;
 }
 
 /* Select arrow */
 .pcm-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23aaa' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%237b1e1e' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
   padding-right: 36px;
   cursor: pointer;
 }
-.pcm-select option { background: #1c1c1c; color: #fff; }
+.pcm-select option { background: #fff; color: var(--pcm-maroon-dark); }
 
 /* Calendar day fixed height with scrollable events */
 .pc-day {
@@ -561,32 +567,33 @@
   gap: 12px;
   justify-content: flex-end;
   margin-top: 4px;
+  padding-top: 2px;
 }
 .pcm-btn {
   padding: 12px 28px;
-  border-radius: 50px;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  border: none;
-  transition: transform 0.15s, opacity 0.2s, background 0.2s;
+  border: 1px solid transparent;
+  transition: transform 0.15s, opacity 0.2s, background 0.2s, border-color 0.2s;
   letter-spacing: 0.3px;
 }
 .pcm-btn:hover  { transform: translateY(-1px); }
 .pcm-btn:active { transform: translateY(0); }
 
 .pcm-btn--cancel {
-  background: rgba(255,255,255,0.07);
-  color: #bbb;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: #fff;
+  color: var(--pcm-maroon);
+  border-color: var(--pcm-maroon);
 }
-.pcm-btn--cancel:hover { background: rgba(255,255,255,0.13); }
+.pcm-btn--cancel:hover { background: #fff8e1; border-color: var(--pcm-gold); color: var(--pcm-maroon-dark); }
 
 .pcm-btn--primary {
-  background: #ffdc00;
-  color: #1a1a1a;
+  background: var(--pcm-maroon);
+  color: #fff;
 }
-.pcm-btn--primary:hover { background: #e6c600; }
+.pcm-btn--primary:hover { background: var(--pcm-gold); color: var(--pcm-maroon-dark); }
 
 /* ══════════════════════════════════════
    SUCCESS STATE
