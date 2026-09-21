@@ -223,7 +223,6 @@ export default function PublicCalendar() {
     sortEventsByTime([
       ...approvedSchedules.filter((schedule) => isDateWithinScheduleWindow(schedule, dateStr)),
       ...pendingRequestEntriesForDate(dateStr),
-      ...rejectedRequestEntriesForDate(dateStr),
     ]);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); };
@@ -520,7 +519,12 @@ export default function PublicCalendar() {
     );
   }
 
-  const modalEvs = clickedDate ? eventsOn(clickedDate) : [];
+  const modalEvs = clickedDate
+    ? sortEventsByTime([
+      ...eventsOn(clickedDate),
+      ...rejectedRequestEntriesForDate(clickedDate),
+    ])
+    : [];
   const [md, mm, my] = clickedDate ? [
     parseInt(clickedDate.split('-')[2]),
     parseInt(clickedDate.split('-')[1]) - 1,
