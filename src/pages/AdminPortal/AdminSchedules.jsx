@@ -148,7 +148,7 @@ const AdminSchedules = () => {
       if (response.success && response.data) {
         const normalized = response.data.map(normalizeScheduleRequest);
         const sortedRequests = [...normalized].sort((a, b) => 
-          new Date(a.createdAt) - new Date(b.createdAt)
+          new Date(b.createdAt) - new Date(a.createdAt)
         );
         setScheduleRequests(sortedRequests);
         localStorage.setItem(REQUESTS_KEY, JSON.stringify(sortedRequests));
@@ -157,7 +157,7 @@ const AdminSchedules = () => {
         if (Array.isArray(stored)) {
           const normalizedStored = stored.map(normalizeScheduleRequest);
           const sortedStored = [...normalizedStored].sort((a, b) => 
-            new Date(a.createdAt) - new Date(b.createdAt)
+            new Date(b.createdAt) - new Date(a.createdAt)
           );
           setScheduleRequests(sortedStored);
         }
@@ -168,7 +168,7 @@ const AdminSchedules = () => {
         const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
         if (Array.isArray(stored)) {
           const sortedStored = [...stored].sort((a, b) => 
-            new Date(a.createdAt) - new Date(b.createdAt)
+            new Date(b.createdAt) - new Date(a.createdAt)
           );
           setScheduleRequests(sortedStored);
         }

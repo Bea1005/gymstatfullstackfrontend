@@ -2084,6 +2084,104 @@ table tbody tr:has(.badge-declined) {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
+.announcement-detail-modal.requirements-upload-modal {
+  color: #3d1e1e;
+  border: 1px solid #8f1d1d;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.requirements-upload-modal .modal-header {
+  background: #8f1d1d;
+  border-bottom-color: #8f1d1d;
+}
+
+.requirements-upload-modal .modal-header h2,
+.requirements-upload-modal .modal-close-btn {
+  color: #fff;
+}
+
+.requirements-upload-modal .modal-close-btn:hover {
+  background: #d4a017;
+  color: #3d1e1e;
+}
+
+.requirements-upload-modal .detail-modal-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.requirements-upload-modal .detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
+.requirements-upload-modal .detail-close-btn,
+.requirements-upload-modal .upload-action-btn {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.requirements-upload-modal .detail-close-btn {
+  background: #fff;
+  color: #8f1d1d;
+  border: 1px solid #8f1d1d;
+}
+
+.requirements-upload-modal .detail-close-btn:hover {
+  background: #fff8e1;
+  border-color: #d4a017;
+  color: #5e1414;
+}
+
+.requirements-upload-modal .upload-action-btn {
+  background: #8f1d1d;
+  color: #fff;
+  border: 1px solid #8f1d1d;
+}
+
+.requirements-upload-modal .upload-action-btn:hover:not(:disabled) {
+  background: #d4a017;
+  border-color: #d4a017;
+  color: #3d1e1e;
+}
+
+.requirements-assurance {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  background: #fff;
+  border: 1px solid #e5d0d0;
+  border-left: 3px solid #d4a017;
+  border-radius: 8px;
+  color: #3d1e1e;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.requirements-assurance label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+}
+
+.requirements-assurance input {
+  width: 17px;
+  height: 17px;
+  margin-top: 0.15rem;
+  accent-color: #8f1d1d;
+  flex: 0 0 auto;
+}
+
+.requirements-assurance__terms {
+  display: block;
+  margin-top: 0.35rem;
+  color: #5e3b3b;
+}
+
 .detail-modal-body {
   padding: 1.5rem;
   overflow-y: auto;

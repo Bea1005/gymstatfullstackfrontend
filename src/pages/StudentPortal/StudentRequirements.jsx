@@ -693,6 +693,24 @@ export default function StudentRequirements() {
     }
   };
 
+  const requirementsAssuranceSection = (
+    <div className="requirements-assurance">
+      <label>
+        <input
+          type="checkbox"
+          checked={requirementsAssuranceAccepted}
+          onChange={(e) => setRequirementsAssuranceAccepted(e.target.checked)}
+        />
+        <span>
+          <strong>I certify that the requirements I am submitting are true, valid, and belong to me. I understand that submitting false, invalid, or unauthorized documents may result in the rejection of my requirements.</strong>
+          <span className="requirements-assurance__terms">
+            By submitting these requirements, you agree to the system’s Terms of Service and Privacy Policy and confirm that the information and documents provided are accurate.
+          </span>
+        </span>
+      </label>
+    </div>
+  );
+
   return (
     <div className="requirements-page gymstat-page">
       {/* Notification Bell Icon */}
@@ -724,7 +742,7 @@ export default function StudentRequirements() {
 
       {confirmUpload && (
         <div className="modal-overlay" onClick={handleUndoUpload}>
-          <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="announcement-detail-modal requirements-upload-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Confirm Upload</h2>
               <button className="modal-close-btn" onClick={handleUndoUpload}><Icon name="close" /></button>
@@ -740,6 +758,7 @@ export default function StudentRequirements() {
                   )}
                 </div>
               )}
+              {requirementsAssuranceSection}
               <div className="detail-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                 <button className="detail-close-btn" onClick={handleUndoUpload}>Undo / Replace</button>
                 <button className="upload-action-btn" onClick={handleConfirmUpload} disabled={uploading}>
@@ -1180,23 +1199,7 @@ export default function StudentRequirements() {
                 );
               })}
             </div>
-            <div style={{ marginTop: '1rem', marginBottom: '1rem', padding: '1rem 1.1rem', border: '1px solid #e5d0d0', borderRadius: '10px', background: '#fffaf9' }}>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', color: '#3d1e1e', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                <input
-                  type="checkbox"
-                  checked={requirementsAssuranceAccepted}
-                  onChange={(e) => setRequirementsAssuranceAccepted(e.target.checked)}
-                  style={{ marginTop: '0.2rem', width: '18px', height: '18px', accentColor: '#8f1d1d', cursor: 'pointer' }}
-                />
-                <span>
-                  <strong>I certify that the requirements I am submitting are true, valid, and belong to me. I understand that submitting false, invalid, or unauthorized documents may result in the rejection of my requirements.</strong>
-                  <br />
-                  <span style={{ display: 'block', marginTop: '0.35rem', color: '#5e3b3b' }}>
-                    By submitting these requirements, you agree to the system’s Terms of Service and Privacy Policy and confirm that the information and documents provided are accurate.
-                  </span>
-                </span>
-              </label>
-            </div>
+            {!confirmUpload && requirementsAssuranceSection}
 
             <button className="submit-all-btn" onClick={handleSubmitAll} disabled={uploading || !requirementsAssuranceAccepted}>
               {uploading ? 'Uploading...' : 'Submit Requirements'}

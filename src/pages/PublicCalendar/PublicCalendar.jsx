@@ -532,6 +532,10 @@ export default function PublicCalendar() {
       ...rejectedRequestEntriesForDate(clickedDate),
     ])
     : [];
+  const warnEvs = modalEvs.filter((event) => {
+    const status = String(event.status || '').toLowerCase();
+    return !status || ['pending', 'approved', 'active'].includes(status);
+  });
   const [md, mm, my] = clickedDate ? [
     parseInt(clickedDate.split('-')[2]),
     parseInt(clickedDate.split('-')[1]) - 1,
@@ -585,27 +589,14 @@ export default function PublicCalendar() {
               <button className="pcm-close" onClick={() => setModal(false)}><Icon name="close" /></button>
             </div>
 
-            {modalEvs.filter((ev) => ev.status !== 'rejected').length > 0 && (
+            {warnEvs.length > 0 && (
               <div className="pcm-warn">
                 <p className="pcm-warn__label">⚠️ Existing bookings for this day:</p>
-                {modalEvs.filter((ev) => ev.status !== 'rejected').map(ev => (
-                  <div key={ev.id} className={`pcm-warn__item pcm-warn__item--${normalizeScheduleSource(ev)}`}>
+                {warnEvs.map((ev, index) => (
+                  <div key={ev.id || ev._id || `${ev.event}-${ev.startDate}-${ev.startTime}-${index}`} className={`pcm-warn__item pcm-warn__item--${normalizeScheduleSource(ev)}`}>
                     <span className="pcm-warn__name">{ev.event}</span>
                     <span className="pcm-warn__meta">{normalizeScheduleSource(ev) === 'public' ? 'Public Request' : 'Internal Event'}</span>
                     <span className="pcm-warn__time">{ev.startTime} – {ev.endTime}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {modalEvs.filter((ev) => ev.status === 'rejected').length > 0 && (
-              <div className="pcm-warn pcm-warn--rejected">
-                <p className="pcm-warn__label"><Icon name="xCircle" size={16} /> Disapproved request(s):</p>
-                {modalEvs.filter((ev) => ev.status === 'rejected').map(ev => (
-                  <div key={ev.id} className="pcm-warn__item pcm-warn__item--rejected">
-                    <span className="pcm-warn__name">{ev.event}</span>
-                    <span className="pcm-warn__meta">Disapproved</span>
-                    <span className="pcm-warn__time">{ev.rejectionReason || 'Rejected by admin'}</span>
                   </div>
                 ))}
               </div>

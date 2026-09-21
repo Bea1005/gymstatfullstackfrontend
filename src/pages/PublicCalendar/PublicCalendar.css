@@ -328,15 +328,19 @@
 /* Warning banner */
 .pcm-warn {
   margin: 16px 24px 0;
-  background: rgba(255,193,7,0.1);
-  border: 1px solid rgba(255,193,7,0.35);
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: white;
+  border: 1px solid #7b1e1e;
+  border-left: 4px solid #d4a017;
+  border-radius: 6px;
+  padding: 14px;
 }
 .pcm-warn__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 700;
-  color: #ffdc00;
+  color: #7b1e1e;
   margin: 0 0 8px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -345,15 +349,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(255,255,255,0.05);
+  background: #fff;
+  border: 1px solid rgba(123,30,30,0.22);
   border-radius: 6px;
   padding: 6px 10px;
   margin-bottom: 4px;
   gap: 8px;
 }
 .pcm-warn__item:last-child { margin-bottom: 0; }
-.pcm-warn__name  { font-size: 13px; font-weight: 600; color: #fff; }
-.pcm-warn__time  { font-size: 12px; color: rgba(255,255,255,0.5); white-space: nowrap; }
+.pcm-warn__item:hover { border-color: #d4a017; background: #fffdf5; }
+.pcm-warn__name  { font-size: 13px; font-weight: 600; color: #7b1e1e; min-width: 0; }
+.pcm-warn__meta  { font-size: 11px; color: #7b1e1e; }
+.pcm-warn__time  { font-size: 12px; color: #5a1010; white-space: nowrap; }
+.pcm-warn--rejected { border-left-color: #7b1e1e; }
 
 /* ══════════════════════════════════════
    FORM
@@ -599,6 +607,8 @@
    SUCCESS STATE
 ══════════════════════════════════════ */
 .pcm-success {
+  background: #fff;
+  color: #7b1e1e;
   padding: 36px 24px;
   text-align: center;
   display: flex;
@@ -606,10 +616,21 @@
   align-items: center;
   gap: 12px;
 }
-.pcm-success__icon  { font-size: 52px; }
-.pcm-success__title { font-size: 22px; font-weight: 800; color: #fff; margin: 0; }
-.pcm-success__msg   { font-size: 14px; color: rgba(255,255,255,0.65); line-height: 1.6; margin: 0 0 8px; }
-.pcm-success strong { color: #ffdc00; }
+.pcm-success__icon  { font-size: 52px; color: #7b1e1e; }
+.pcm-success__title { font-size: 22px; font-weight: 800; color: #7b1e1e; margin: 0; }
+.pcm-success__msg   { font-size: 14px; color: #5a1010; line-height: 1.6; margin: 0 0 8px; }
+.pcm-success__details {
+  width: 100%;
+  max-width: 440px;
+  padding: 14px 16px;
+  border: 1px solid rgba(123,30,30,0.25);
+  border-radius: 6px;
+  color: #5a1010;
+  text-align: left;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.pcm-success strong { color: #7b1e1e; }
 
 /* ══════════════════════════════════════
    ANIMATIONS
