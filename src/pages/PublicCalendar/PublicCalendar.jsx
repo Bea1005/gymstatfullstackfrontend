@@ -123,6 +123,36 @@ export default function PublicCalendar() {
     return 'internal';
   };
 
+  const normalizePublicEventStatus = (event) => {
+    const status = String(event?.status || '').toLowerCase();
+    if (status === 'pending') return 'pending';
+    if (status === 'rejected') return 'rejected';
+    return 'approved';
+  };
+
+  const pendingRequestEntriesForDate = (dateStr) => {
+    return scheduleRequests
+      .filter((request) => String(request.status || '').toLowerCase() === 'pending')
+      .filter((request) => isDateWithinScheduleWindow(
+        {
+          startDate: request.startDate,
+          endDate: request.endDate,
+          prepDays: request.prepDays || 0,
+        },
+        dateStr
+      ))
+      .map((request) => ({
+        ...request,
+        id: request.id || request._id,
+        event: request.eventName || request.event || 'Pending Schedule Request',
+        startTime: request.startTime || '08:00 AM',
+        endTime: request.endTime || '12:00 PM',
+        status: 'pending',
+        source: 'public',
+        fromRequest: true,
+      }));
+  };
+
   const rejectedRequestEntriesForDate = (dateStr) => {
     return scheduleRequests
       .filter((request) => String(request.status || '').toLowerCase() === 'rejected')
@@ -192,6 +222,7 @@ export default function PublicCalendar() {
   const eventsOn = (dateStr) =>
     sortEventsByTime([
       ...approvedSchedules.filter((schedule) => isDateWithinScheduleWindow(schedule, dateStr)),
+      ...pendingRequestEntriesForDate(dateStr),
       ...rejectedRequestEntriesForDate(dateStr),
     ]);
 
@@ -234,6 +265,60 @@ export default function PublicCalendar() {
       setErrors(e => ({ ...e, [k]: '' }));
     }
   };
+
+  const getAvailableEndTimes = (startTime = form.startTime, startDate = form.startDate, endDate = form.endDate) => {
+    if (!startDate || !endDate) return TIMES;
+
+    return TIMES.filter((endTime) => {
+      if (startDate === endDate && toMinutes(endTime) <= toMinutes(startTime)) return false;
+
+      return !approvedSchedules.some((schedule) => getScheduleConflict({
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+      }, schedule));
+    });
+  };
+
+  const getAvailableStartTimes = (startDate = form.startDate, endDate = form.endDate, endTime = form.endTime) => {
+    if (!startDate || !endDate) return TIMES;
+
+    return TIMES.filter((startTime, index) => {
+      const nextTime = TIMES[index + 1] || '11:59 PM';
+      const slotEndTime = nextTime === '11:59 PM' ? '11:59 PM' : nextTime;
+      const slotIsOccupied = approvedSchedules.some((schedule) => getScheduleConflict({
+        startDate,
+        endDate,
+        startTime,
+        endTime: slotEndTime,
+      }, schedule));
+
+      return !slotIsOccupied && (
+        getAvailableEndTimes(startTime, startDate, endDate)
+          .some((availableEndTime) => toMinutes(availableEndTime) === toMinutes(endTime))
+        || getAvailableEndTimes(startTime, startDate, endDate).length > 0
+      );
+    });
+  };
+
+  const availableStartTimes = getAvailableStartTimes();
+  const availableEndTimes = getAvailableEndTimes();
+
+  useEffect(() => {
+    setForm((current) => {
+      const nextStartTime = availableStartTimes.includes(current.startTime)
+        ? current.startTime
+        : (availableStartTimes[0] || current.startTime);
+      const nextEndTimes = getAvailableEndTimes(nextStartTime, current.startDate, current.endDate);
+      const nextEndTime = nextEndTimes.includes(current.endTime)
+        ? current.endTime
+        : (nextEndTimes[0] || current.endTime);
+
+      if (nextStartTime === current.startTime && nextEndTime === current.endTime) return current;
+      return { ...current, startTime: nextStartTime, endTime: nextEndTime };
+    });
+  }, [approvedSchedules, form.startDate, form.endDate, availableStartTimes, availableEndTimes]);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -418,16 +503,14 @@ export default function PublicCalendar() {
         {hasEvents && (
           <div className={`pc-event-list ${evs.length >= 3 ? 'pc-event-list--scroll' : ''}`}>
             {evs.map((ev, i) => {
-              const sourceClass = `pc-event-chip--${normalizeScheduleSource(ev)}`;
-              const sourceLabel = normalizeScheduleSource(ev) === 'rejected' ? 'Disapproved' : normalizeScheduleSource(ev) === 'public' ? 'Public' : 'Internal';
+              const statusClass = `pc-event-chip--${normalizePublicEventStatus(ev)}`;
               const chipTitle = normalizeScheduleSource(ev) === 'rejected'
                 ? `${ev.event}\n${ev.rejectionReason || 'Rejected by admin'}\n${ev.startTime} - ${ev.endTime}`
                 : `${ev.event}\n${ev.startTime} - ${ev.endTime}`;
               return (
-                <div key={i} className={`pc-event-chip ${sourceClass}`} title={chipTitle}>
+                <div key={i} className={`pc-event-chip ${statusClass}`} title={chipTitle}>
                   <span className="pc-event-chip__name">{ev.event.length > 18 ? ev.event.slice(0, 16)+'…' : ev.event}</span>
-                  <span className="pc-event-chip__source">{sourceLabel}</span>
-                  <span className="pc-event-chip__time">{ev.startTime}</span>
+                  <span className="pc-event-chip__time">{ev.startTime} – {ev.endTime}</span>
                 </div>
               );
             })}
@@ -474,10 +557,6 @@ export default function PublicCalendar() {
           </div>
           <div className="pc-cal-grid">{cells}</div>
           <div className="pc-legend">
-            <span className="pc-legend__dot pc-legend__dot--internal" /> Internal booking
-            <span className="pc-legend__dot pc-legend__dot--public" style={{marginLeft:14}} /> Public request
-            <span className="pc-legend__dot pc-legend__dot--rejected" style={{marginLeft:14}} /> Disapproved
-            <span className="pc-legend__dot pc-legend__dot--today" style={{marginLeft:14}} /> Today
             <span className="pc-legend__hint">· Click a day to request a schedule for an open time slot</span>
           </div>
         </div>
@@ -613,14 +692,33 @@ export default function PublicCalendar() {
                       type="date"
                       className={`pcm-input${errors.startDate ? ' pcm-input--err' : ''}`}
                       value={form.startDate}
-                      onChange={e => set('startDate', e.target.value)}
+                      onChange={e => {
+                        const nextDate = e.target.value;
+                        setForm((current) => ({ ...current, startDate: nextDate }));
+                        setErrors((current) => ({ ...current, startDate: '', endDate: '' }));
+                      }}
                     />
                     {errors.startDate && <span className="pcm-err">{errors.startDate}</span>}
                   </div>
                   <div className="pcm-group">
                     <label className="pcm-label">Start Time *</label>
-                    <select className="pcm-input pcm-select" value={form.startTime} onChange={e => set('startTime', e.target.value)}>
-                      {TIMES.map(t => <option key={t}>{t}</option>)}
+                    <select
+                      className="pcm-input pcm-select"
+                      value={form.startTime}
+                      onChange={e => {
+                        const nextStartTime = e.target.value;
+                        const nextEndTimes = getAvailableEndTimes(nextStartTime, form.startDate, form.endDate);
+                        setForm((current) => ({
+                          ...current,
+                          startTime: nextStartTime,
+                          endTime: nextEndTimes.includes(current.endTime) ? current.endTime : (nextEndTimes[0] || current.endTime),
+                        }));
+                        setErrors((current) => ({ ...current, startDate: '', endDate: '' }));
+                      }}
+                    >
+                      {TIMES.map(t => (
+                        <option key={t} value={t} disabled={!availableStartTimes.includes(t)}>{t}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -633,14 +731,20 @@ export default function PublicCalendar() {
                       type="date"
                       className={`pcm-input${errors.endDate ? ' pcm-input--err' : ''}`}
                       value={form.endDate}
-                      onChange={e => set('endDate', e.target.value)}
+                      onChange={e => {
+                        const nextDate = e.target.value;
+                        setForm((current) => ({ ...current, endDate: nextDate }));
+                        setErrors((current) => ({ ...current, startDate: '', endDate: '' }));
+                      }}
                     />
                     {errors.endDate && <span className="pcm-err">{errors.endDate}</span>}
                   </div>
                   <div className="pcm-group">
                     <label className="pcm-label">End Time *</label>
                     <select className="pcm-input pcm-select" value={form.endTime} onChange={e => set('endTime', e.target.value)}>
-                      {TIMES.map(t => <option key={t}>{t}</option>)}
+                      {TIMES.map(t => (
+                        <option key={t} value={t} disabled={!availableEndTimes.includes(t)}>{t}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

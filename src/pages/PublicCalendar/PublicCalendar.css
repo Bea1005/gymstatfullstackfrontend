@@ -166,13 +166,13 @@
 .pc-day--booked .pc-event-chip {
   border: 1px solid rgba(0,0,0,0.06);
 }
-.pc-day--booked .pc-event-chip--internal {
+.pc-day--booked .pc-event-chip--approved {
   background: #e8f5e9;
   border-color: #2e7d32;
 }
-.pc-day--booked .pc-event-chip--public {
-  background: #fce4ec;
-  border-color: #a81e4b;
+.pc-day--booked .pc-event-chip--pending {
+  background: #fff3e0;
+  border-color: #ef6c00;
 }
 .pc-day--booked .pc-event-chip--rejected {
   background: #fdecea;
@@ -190,6 +190,14 @@
 }
 .pc-day--booked .pc-event-chip__time {
   color: #374151;
+}
+.pc-day--booked .pc-event-chip--approved .pc-event-chip__source,
+.pc-day--booked .pc-event-chip--approved .pc-event-chip__time {
+  color: #2e7d32;
+}
+.pc-day--booked .pc-event-chip--pending .pc-event-chip__source,
+.pc-day--booked .pc-event-chip--pending .pc-event-chip__time {
+  color: #ef6c00;
 }
 
 .pc-day__num {
@@ -478,11 +486,11 @@
 
 .pc-event-chip {
   background: #fefefe;
-  color: rgb(253, 251, 251);
+  color: #374151;
   padding: 1px 3px;
   border-radius: 12px;
   object-fit: cover;
-  outline: 2.2px solid #eefb36;
+  outline: none;
   font-size: 9px;
   display: flex;
   justify-content: space-between;
