@@ -12,7 +12,6 @@ const AdminSettings = () => {
     email: '',
     notifications: true
   });
-  const [loading, setLoading] = useState(true);
   const [newPassword, setNewPassword] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -113,8 +112,6 @@ const AdminSettings = () => {
         }
       } catch (error) {
         showToast(error.message || 'Unable to load profile.', 'error');
-      } finally {
-        setLoading(false);
       }
     };
 

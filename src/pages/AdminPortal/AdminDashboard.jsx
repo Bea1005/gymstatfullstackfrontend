@@ -14,7 +14,6 @@ const AdminDashboard = () => {
   });
   const [activities, setActivities] = useState([]);
   const [schedules, setSchedules] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -47,8 +46,6 @@ const AdminDashboard = () => {
         console.warn('Admin dashboard fetch error:', error);
         setActivities(DEMO_ACTIVITIES);
         setSchedules([]);
-      } finally {
-        if (mounted) setLoading(false);
       }
     };
 
@@ -76,15 +73,6 @@ const AdminDashboard = () => {
     };
   }, []);
 
-
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner" />
-        <p>Loading dashboard…</p>
-      </div>
-    );
-  }
 
   return (
     <div className="db-root">

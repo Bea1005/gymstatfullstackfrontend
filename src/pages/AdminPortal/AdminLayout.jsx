@@ -143,7 +143,7 @@ const AdminLayout = () => {
 
         {/* Logout Button */}
         <button className="logout-btn" onClick={handleLogout}>
-          Log out 
+          Log out <span className="logout-icon"><Icon name="logout" size={16} /></span>
         </button>
       </aside>
 

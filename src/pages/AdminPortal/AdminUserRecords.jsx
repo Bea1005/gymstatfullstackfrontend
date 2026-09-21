@@ -108,7 +108,6 @@ export default function AdminUserRecords() {
   const [studentDept,    setStudentDept]    = useState('All');
   const [studentAccountStatus, setStudentAccountStatus] = useState('active');
   const [selStudents,    setSelStudents]    = useState([]);
-  const [loadingStudents, setLoadingStudents] = useState(true);
 
   /* ── Screener state ── */
   const [screeners,      setScreeners]      = useState([]);
@@ -119,7 +118,6 @@ export default function AdminUserRecords() {
   const [scrForm,        setScrForm]        = useState({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
   const [scrPwShow,      setScrPwShow]      = useState(false);
   const [scrError,       setScrError]       = useState('');
-  const [loadingScreeners, setLoadingScreeners] = useState(true);
   const [toast,          setToast]          = useState({ message: '', type: 'success' });
   const [confirmDialog,  setConfirmDialog]  = useState({ open: false, message: '', action: null });
 
@@ -135,7 +133,6 @@ export default function AdminUserRecords() {
   /* ── Fetch students from MongoDB ── */
   const fetchStudents = async () => {
     try {
-      setLoadingStudents(true);
       const data = await getAdminStudents(studentAccountStatus);
       const studentsData = parseUserListResponse(data)
         .filter((user) => (user?.role || 'student').toLowerCase() === 'student')
@@ -145,15 +142,12 @@ export default function AdminUserRecords() {
       console.error('Error fetching students:', error);
       showToast('Failed to load students', 'error');
       setStudents([]);
-    } finally {
-      setLoadingStudents(false);
     }
   };
 
   /* ── Fetch screeners from MongoDB ── */
   const fetchScreeners = async () => {
     try {
-      setLoadingScreeners(true);
       const data = await getAdminScreeners(screenerAccountStatus);
       const screenersData = parseUserListResponse(data)
         .filter((user) => (user?.role || 'screener').toLowerCase() === 'screener')
@@ -163,8 +157,6 @@ export default function AdminUserRecords() {
       console.error('Error fetching screeners:', error);
       showToast('Failed to load screeners', 'error');
       setScreeners([]);
-    } finally {
-      setLoadingScreeners(false);
     }
   };
 
@@ -370,10 +362,6 @@ export default function AdminUserRecords() {
   /* ── Current search value for the input ── */
   const searchVal = tab === 'student' ? studentSearch : screenerSearch;
   const setSearch = tab === 'student' ? setStudentSearch : setScreenerSearch;
-
-  if (loadingStudents || loadingScreeners) {
-    return <div className="ur-root"><div className="loading">Loading records...</div></div>;
-  }
 
   return (
     <div className="ur-root">

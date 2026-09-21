@@ -64,7 +64,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
-  const [loading, setLoading] = useState(true);
   const [selectedBorrowerDetails, setSelectedBorrowerDetails] = useState(null);
   const [isEditingBorrower, setIsEditingBorrower] = useState(false);
   const [borrowerEditForm, setBorrowerEditForm] = useState({
@@ -87,8 +86,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   // Fetch equipment and borrowing data from MongoDB
   const fetchData = async () => {
     try {
-      setLoading(true);
-
       const equipmentResponse = await getEquipment();
       const equipmentPayload = equipmentResponse?.data || equipmentResponse || [];
       const equipmentList = Array.isArray(equipmentPayload)
@@ -141,8 +138,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
       setRecords([]);
       setEquipmentWithRefs({});
       setAllEquipment([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -513,10 +508,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
 
   // Keep the field in ISO format so the native date picker can display it correctly.
   const formattedDate = form.date || todayStr();
-
-  if (loading) {
-    return <div className="bw-root"><div className="loading">Loading borrowing records...</div></div>;
-  }
 
   return (
     <div className="bw-root">

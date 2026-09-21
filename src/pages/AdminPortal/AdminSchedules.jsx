@@ -53,7 +53,6 @@ const AdminSchedules = () => {
   const APPROVED_KEY = 'gymstatApprovedSchedules';
   const REQUESTS_KEY = 'gymstatScheduleRequests';
   const [confirmAction, setConfirmAction] = useState(null);
-  const [loadingRequests, setLoadingRequests] = useState(false);
   const [selectedRejectReason, setSelectedRejectReason] = useState('');
   const [additionalRejectReason, setAdditionalRejectReason] = useState('');
   const [deletingRequestId, setDeletingRequestId] = useState(null);
@@ -144,7 +143,6 @@ const AdminSchedules = () => {
   // Load schedule requests from MongoDB
   const loadScheduleRequests = async () => {
     try {
-      setLoadingRequests(true);
       const response = await api.getScheduleRequests();
       
       if (response.success && response.data) {
@@ -179,7 +177,6 @@ const AdminSchedules = () => {
         setScheduleRequests([]);
       }
     } finally {
-      setLoadingRequests(false);
     }
   };
 
@@ -781,7 +778,6 @@ const AdminSchedules = () => {
               const dotTone = normalizeScheduleSource(event) === 'public' ? 'event-dot--public' : 'event-dot--internal';
               return (
                 <div key={idx} className={`${cls} ${sourceTone}`} title={`${event.event}\n${formatTimeDisplay(event.startTime, event.endTime)}`}>
-                  <span className={`event-dot ${dotTone}`}>●</span>
                   <span className="event-name">{event.event.length > 20 ? event.event.substring(0, 18) + '...' : event.event}</span>
                   <span className="event-time">{multipleEvents ? event.startTime : formatTimeDisplay(event.startTime, event.endTime)}</span>
                 </div>
@@ -1068,9 +1064,7 @@ const AdminSchedules = () => {
             </div>
 
             <div className="requests-list-container">
-              {loadingRequests ? (
-                <div className="loading-placeholder">Loading requests...</div>
-              ) : scheduleRequests.length > 0 ? (
+              {scheduleRequests.length > 0 ? (
                 scheduleRequests.map((req) => {
                   const isExpanded = expandedRequestId === req.id;
                   return (

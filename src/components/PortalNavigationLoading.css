@@ -1,0 +1,30 @@
+.portal-navigation-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(91, 18, 18, 0.96);
+}
+
+.portal-navigation-spinner {
+  width: clamp(42px, 8vw, 60px);
+  height: clamp(42px, 8vw, 60px);
+  border: clamp(4px, 0.7vw, 6px) solid rgba(255, 215, 0, 0.3);
+  border-top-color: #ffd700;
+  border-radius: 50%;
+  animation: portal-navigation-spin 0.9s linear infinite;
+}
+
+@keyframes portal-navigation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-navigation-spinner {
+    animation-duration: 1.8s;
+  }
+}

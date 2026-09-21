@@ -331,11 +331,7 @@ const AdminRequirements = () => {
           <p>Click on any form to view details or download</p>
         </div>
 
-        {loading && uploadedReqs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-            <p>Loading requirements...</p>
-          </div>
-        ) : uploadedReqs.length === 0 ? (
+        {uploadedReqs.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
                 <p><Icon name="folder" size={18} /> No requirements published yet</p>
           </div>

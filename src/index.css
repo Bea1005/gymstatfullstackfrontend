@@ -46,6 +46,8 @@ h1 {
 }
 
 button {
+  box-sizing: border-box;
+  max-width: 100%;
   border-radius: 8px;
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
@@ -55,9 +57,23 @@ button {
   background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
+
+button svg {
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
 button:hover {
-  border-color: #646cff;
+  border-color: var(--gold);
 }
 button:focus,
 button:focus-visible {
@@ -74,5 +90,12 @@ button:focus-visible {
   }
   button {
     background-color: #f9f9f9;
+  }
+}
+
+@media (max-width: 600px) {
+  button {
+    max-width: 100%;
+    padding-inline: 0.85em;
   }
 }
