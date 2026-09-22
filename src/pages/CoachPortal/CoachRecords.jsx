@@ -172,6 +172,9 @@ export default function CoachRecord() {
   const [athletes, setAthletes] = useState([]);
   const [studentDirectory, setStudentDirectory] = useState([]);
   const [studentDirectorySearch, setStudentDirectorySearch] = useState('');
+  const [studentSearchResults, setStudentSearchResults] = useState([]);
+  const [studentSearchLoading, setStudentSearchLoading] = useState(false);
+  const studentSearchTimerRef = useRef(null);
   const [announcements, setAnnouncements] = useState([]);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -736,6 +739,8 @@ export default function CoachRecord() {
     setIsAddingAthlete(true);
     setEditingAthlete(null);
     setStudentDirectorySearch('');
+    setStudentSearchResults([]);
+    setStudentSearchLoading(false);
     setEditForm({
       studentId: '',
       fullname: '',
@@ -765,6 +770,7 @@ export default function CoachRecord() {
       setEditingAthlete(null);
       setIsAddingAthlete(false);
       setStudentDirectorySearch('');
+      setStudentSearchResults([]);
       await fetchCoachData(coachProfile.mainSport);
       setToast({ message: 'Student added successfully.', type: 'success' });
     } catch (error) {
@@ -1279,28 +1285,40 @@ export default function CoachRecord() {
                   <input
                     type="text"
                     value={studentDirectorySearch}
-                    onChange={(event) => setStudentDirectorySearch(event.target.value)}
-                    placeholder="Search by name, student ID, or username"
+                    onChange={(event) => {
+                      const val = event.target.value;
+                      setStudentDirectorySearch(val);
+                      if (studentSearchTimerRef.current) clearTimeout(studentSearchTimerRef.current);
+                      if (!val.trim()) { setStudentSearchResults([]); setStudentSearchLoading(false); return; }
+                      setStudentSearchLoading(true);
+                      studentSearchTimerRef.current = setTimeout(async () => {
+                        try {
+                          const results = await api.searchCoachStudents(val.trim(), coachProfile.mainSport);
+                          setStudentSearchResults(Array.isArray(results) ? results : []);
+                        } catch { setStudentSearchResults([]); }
+                        finally { setStudentSearchLoading(false); }
+                      }, 280);
+                    }}
+                    placeholder="Search by Student ID or Full Name"
+                    autoComplete="off"
                     style={{
                       width: '100%',
                       padding: '8px 10px',
-                      margin: '5px 0 8px',
+                      margin: '5px 0 4px',
                       fontSize: '12px',
                       boxSizing: 'border-box',
                     }}
                   />
-                  {studentDirectorySearch.trim() && (
+                  {studentSearchLoading && (
+                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>Searching...</p>
+                  )}
+                  {!studentSearchLoading && studentDirectorySearch.trim() && studentSearchResults.length === 0 && (
+                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>No matching students found.</p>
+                  )}
+                  {studentSearchResults.length > 0 && (
                     <div className="coach-category-options">
-                      {studentDirectory
+                      {studentSearchResults
                         .filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id)))
-                        .filter((student) => {
-                          const search = studentDirectorySearch.trim().toLowerCase();
-                          return [student.fullname, student.id, student.studentId, student._id]
-                            .filter(Boolean)
-                            .join(' ')
-                            .toLowerCase()
-                            .includes(search);
-                        })
                         .map((student) => (
                           <button
                             key={student._id || student.id}
@@ -1309,9 +1327,12 @@ export default function CoachRecord() {
                             onClick={() => handleSelectDirectoryStudent(student)}
                             disabled={isSaving}
                           >
-                            {student.id || student.studentId || student._id} - {student.fullname || ''}
+                            {student.id || String(student._id)} - {student.fullname || ''}
                           </button>
                         ))}
+                      {studentSearchResults.every((student) => athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id))) && (
+                        <p style={{ fontSize: '11px', color: '#888', padding: '4px 8px' }}>All matching students are already in the grid.</p>
+                      )}
                     </div>
                   )}
                 </label>

@@ -757,6 +757,16 @@ export const getCoachStudentDirectory = async (sport) => {
   });
 };
 
+// Search students by ID or name for the coach modal add-student flow.
+// Only returns results when a query string is provided (no auto-load).
+// No screener requirement gate - any registered student can appear.
+export const searchCoachStudents = async (q, sport) => {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (sport) params.set('sport', sport);
+  return apiRequest('/coach/student-search?' + params, { method: 'GET' });
+};
+
 export const updateCoachAthlete = async (athleteId, athleteData) => {
   return apiRequest(`/coach/athletes/${athleteId}`, {
     method: 'PUT',
@@ -940,6 +950,8 @@ export default {
   getCoachAthletes,
   updateCoachAthlete,
   updateAthleteStatus,
+  getCoachStudentDirectory,
+  searchCoachStudents,
   // Schedule Requests
   createScheduleRequest,
   getScheduleRequests,
