@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import NotificationToast from '../../components/NotificationToast';
+import Icon from '../../components/Icon';
 import './StudentPortal.css';
 
 const StudentSettings = () => {
@@ -69,7 +70,7 @@ const StudentSettings = () => {
 
           <div className="student-settings-page__row">
             <div>
-              <p className="student-settings-page__row-title">🔐 Change Password</p>
+              <p className="student-settings-page__row-title"><Icon name="shield" size={16} /> Change Password</p>
               <p className="student-settings-page__row-description">
                 Update your account password
               </p>

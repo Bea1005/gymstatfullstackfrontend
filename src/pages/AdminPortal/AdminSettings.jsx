@@ -119,7 +119,7 @@ const AdminSettings = () => {
   }, []);
 
   return (
-    <div className="admin-page-content">
+    <div className="admin-page-content admin-settings-page">
       <div style={{ maxWidth: "600px", margin: "0 auto" }}>
         <h1 style={{ fontSize: "28px", marginBottom: "20px", color: "#333" }}>Settings</h1>
 
@@ -132,7 +132,7 @@ const AdminSettings = () => {
           {/* Change Password - Updated style */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #eee" }}>
             <div>
-              <p style={{ fontWeight: "600", marginBottom: "4px" }}>🔐 Change Password</p>
+              <p className="admin-settings-page__row-title" style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="shield" size={16} /> Change Password</p>
               <p style={{ fontSize: "12px", color: "#888" }}>Update your account password</p>
             </div>
             <button 
@@ -146,7 +146,7 @@ const AdminSettings = () => {
           {/* Email Address */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #eee" }}>
             <div>
-              <p style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="mail" size={16} /> Email Address</p>
+              <p className="admin-settings-page__row-title" style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="mail" size={16} /> Email Address</p>
               <p style={{ fontSize: "12px", color: "#888" }}>{adminInfo.email || 'Not set'}</p>
             </div>
             <button 
@@ -160,7 +160,7 @@ const AdminSettings = () => {
           {/* Notifications */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
             <div>
-              <p style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="bell" size={16} /> Notifications</p>
+              <p className="admin-settings-page__row-title" style={{ fontWeight: "600", marginBottom: "4px" }}><Icon name="bell" size={16} /> Notifications</p>
               <p style={{ fontSize: "12px", color: "#888" }}>Receive system updates</p>
             </div>
             <button

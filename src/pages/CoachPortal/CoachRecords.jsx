@@ -375,10 +375,14 @@ export default function CoachRecord() {
           if (student.mainSport && String(student.mainSport).toLowerCase() === sportLower) return true;
 
           // Common array fields
-          const arrayProps = ['sports', 'registeredSports', 'participations', 'sportParticipation', 'sportsParticipated'];
+          const arrayProps = ['sports', 'registeredSports', 'participations', 'sportParticipation', 'sportsParticipated', 'assignedSports'];
           for (const prop of arrayProps) {
             const val = student[prop];
-            if (Array.isArray(val) && val.some((s) => String(s).toLowerCase() === sportLower)) return true;
+            if (Array.isArray(val) && val.some((s) => (
+              typeof s === 'object'
+                ? String(s?.sport || s?.name || s?.category || '').toLowerCase() === sportLower
+                : String(s).toLowerCase() === sportLower
+            ))) return true;
           }
 
           // Some backends store a combined string — check for a token match (safe fallback)
@@ -414,36 +418,46 @@ export default function CoachRecord() {
 
   useEffect(() => {
     let cancelled = false;
+    let refreshInFlight = false;
+    let lastRefreshAt = Date.now();
+    const refreshIntervalMs = 30 * 1000;
 
     const refreshAthleteStatuses = async () => {
-      const latestAthletes = await api.getCoachAthletes(coachProfile.mainSport).catch(() => []);
-      if (cancelled || !Array.isArray(latestAthletes)) return;
+      if (cancelled || document.hidden || refreshInFlight || Date.now() - lastRefreshAt < refreshIntervalMs) return;
+      refreshInFlight = true;
+      lastRefreshAt = Date.now();
 
-      const latestPhotos = await Promise.all(latestAthletes.map(async (athlete) => {
-        if (!athlete.profilePhotoUrl) return ['', String(athlete._id || athlete.id)];
-        try {
-          return [await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl), String(athlete._id || athlete.id)];
-        } catch {
-          return ['', String(athlete._id || athlete.id)];
-        }
-      }));
-      const latestPhotoById = new Map(latestPhotos.map(([photo, id]) => [id, photo]));
-      const latestStatuses = new Map(latestAthletes.map((athlete) => [
-        String(athlete._id || athlete.id),
-        normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
-      ]));
+      try {
+        const latestAthletes = await api.getCoachAthletes(coachProfile.mainSport).catch(() => []);
+        if (cancelled || !Array.isArray(latestAthletes)) return;
 
-      setAthletes((currentAthletes) => currentAthletes.map((athlete) => {
-        const latestStatus = latestStatuses.get(String(athlete.id));
-        const latestPhoto = latestPhotoById.get(String(athlete.id));
-        return latestStatus ? { ...athlete, status: latestStatus, photo: latestPhoto || athlete.photo } : athlete;
-      }));
+        const latestPhotos = await Promise.all(latestAthletes.map(async (athlete) => {
+          if (!athlete.profilePhotoUrl) return ['', String(athlete._id || athlete.id)];
+          try {
+            return [await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl), String(athlete._id || athlete.id)];
+          } catch {
+            return ['', String(athlete._id || athlete.id)];
+          }
+        }));
+        const latestPhotoById = new Map(latestPhotos.map(([photo, id]) => [id, photo]));
+        const latestStatuses = new Map(latestAthletes.map((athlete) => [
+          String(athlete._id || athlete.id),
+          normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
+        ]));
+
+        setAthletes((currentAthletes) => currentAthletes.map((athlete) => {
+          const latestStatus = latestStatuses.get(String(athlete.id));
+          const latestPhoto = latestPhotoById.get(String(athlete.id));
+          return latestStatus ? { ...athlete, status: latestStatus, photo: latestPhoto || athlete.photo } : athlete;
+        }));
+      } finally {
+        refreshInFlight = false;
+      }
     };
 
-    refreshAthleteStatuses();
     window.addEventListener('focus', refreshAthleteStatuses);
     document.addEventListener('visibilitychange', refreshAthleteStatuses);
-    const refreshTimer = window.setInterval(refreshAthleteStatuses, 5000);
+    const refreshTimer = window.setInterval(refreshAthleteStatuses, refreshIntervalMs);
     return () => {
       cancelled = true;
       window.clearInterval(refreshTimer);
@@ -735,6 +749,28 @@ export default function CoachRecord() {
     setIsDobEditing(false);
     setImagePreview(placeholderImg);
     setSelectedFile(null);
+  };
+
+  const handleSelectDirectoryStudent = async (student) => {
+    const studentId = student?._id || student?.id;
+    if (!studentId || athletes.some((athlete) => String(athlete.userId || athlete.id) === String(studentId))) {
+      setToast({ message: 'This student is already in the grid.', type: 'error' });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await api.createCoachAthlete({ studentId, sport: coachProfile.mainSport });
+      setEditingAthlete(null);
+      setIsAddingAthlete(false);
+      setStudentDirectorySearch('');
+      await fetchCoachData(coachProfile.mainSport);
+      setToast({ message: 'Student added successfully.', type: 'success' });
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to add student.', type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const openRemoveModal = (type, id, name) => (e) => {
@@ -1252,56 +1288,30 @@ export default function CoachRecord() {
                       boxSizing: 'border-box',
                     }}
                   />
-                  <select
-                    value={editForm.studentId || ''}
-                    onChange={(event) => {
-                      const selectedStudent = studentDirectory.find((student) => String(student._id || student.id) === event.target.value);
-                      if (!selectedStudent) return;
-                      setEditForm((current) => ({
-                        ...current,
-                        studentId: event.target.value,
-                        fullname: selectedStudent.fullname || '',
-                        dob: selectedStudent.dateOfBirth || selectedStudent.dob || '',
-                        course: [selectedStudent.department, selectedStudent.yearLevel].filter(Boolean).join(' - '),
-                        location: selectedStudent.branchCampus || '',
-                        email: selectedStudent.email || '',
-                        photo: placeholderImg,
-                      }));
-                      setImagePreview(placeholderImg);
-                      if (selectedStudent.profilePhotoUrl) {
-                        api.getProtectedImageObjectUrl(selectedStudent.profilePhotoUrl)
-                          .then((photoUrl) => {
-                            setEditForm((current) => ({ ...current, photo: photoUrl }));
-                            setImagePreview(photoUrl);
-                          })
-                          .catch(() => {});
-                      }
-                    }}
-                    style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px', boxSizing: 'border-box' }}
-                    required
-                  >
-                    <option value="">{studentDirectorySearch ? 'Choose a matching student' : 'Choose a student from MongoDB'}</option>
+                  <div className="coach-category-options">
                     {studentDirectory
                       .filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id)))
                       .filter((student) => {
                         const search = studentDirectorySearch.trim().toLowerCase();
                         if (!search) return true;
-                        const searchableText = [
-                          student.fullname,
-                          student.id,
-                          student.username,
-                          student.studentId,
-                          student.email,
-                          student._id,
-                        ].filter(Boolean).join(' ').toLowerCase();
-                        return searchableText.includes(search);
+                        return [student.fullname, student.id, student.studentId, student._id]
+                          .filter(Boolean)
+                          .join(' ')
+                          .toLowerCase()
+                          .includes(search);
                       })
                       .map((student) => (
-                        <option key={student._id || student.id} value={student._id || student.id}>
-                          {student.fullname} {student.id ? `(${student.id})` : ''}{student.username ? ` • ${student.username}` : ''}
-                        </option>
+                        <button
+                          key={student._id || student.id}
+                          type="button"
+                          className="coach-category-option"
+                          onClick={() => handleSelectDirectoryStudent(student)}
+                          disabled={isSaving}
+                        >
+                          {student.id || student.studentId || student._id} - {student.fullname || ''}
+                        </button>
                       ))}
-                  </select>
+                  </div>
                 </label>
               )}
               <label>

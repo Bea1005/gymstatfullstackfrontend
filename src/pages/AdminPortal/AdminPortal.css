@@ -801,6 +801,19 @@
   border-radius: 16px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
+
+.admin-settings-page__row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7b1e1e;
+}
+
+.admin-settings-page__row-title svg {
+  flex: 0 0 auto;
+  color: #7b1e1e;
+  stroke-width: 1.75;
+}
 .admin-reqs-header { margin-bottom: 25px; }
 .admin-reqs-header h3 { font-size: 18px; color: #7b1e1e; margin-bottom: 8px; }
 .admin-reqs-header p  { color: #666; font-size: 13px; }
@@ -859,13 +872,16 @@
 
 /* Requirements download modal */
 .minimal-modal {
-  width: 400px;
-  max-width: 90%;
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-  animation: fadeInModal 0.3s ease;
+  width: min(400px, calc(100vw - 32px));
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #6b0000;
+  border-radius: 8px;
+  color: #6b0000;
+  box-shadow: 0 8px 24px rgba(107, 0, 0, 0.14);
+  animation: fadeInModal 0.2s ease;
 }
 @keyframes fadeInModal {
   from { opacity: 0; transform: scale(0.95); }
@@ -875,46 +891,51 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 16px 20px;
-  background: #7b1e1e;
-  color: white;
+  background: #fff;
+  border-bottom: 1px solid #6b0000;
+  color: #6b0000;
 }
-.minimal-modal-header h3 { font-size: 16px; margin: 0; font-weight: 500; }
-.minimal-close { background: none; border: none; color: white; font-size: 20px; cursor: pointer; opacity: 0.7; transition: opacity 0.3s; }
-.minimal-close:hover { opacity: 1; }
-.minimal-modal-body { padding: 20px; text-align: center; }
-.minimal-modal-body p { margin: 0 0 10px; font-size: 14px; color: #333; }
-.file-info { font-size: 12px; color: #888; }
-.file-description { font-size: 12px; color: #666; margin-top: 10px !important; }
+.minimal-modal-header h3 { min-width: 0; margin: 0; color: #6b0000; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.minimal-close { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 32px; height: 32px; padding: 0; background: #fff; border: 1px solid #6b0000; border-radius: 6px; color: #6b0000; cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s; }
+.minimal-close:hover, .minimal-close:focus-visible { background: #fff8e1; border-color: #d4a017; color: #6b0000; }
+.minimal-modal-body { padding: 20px; text-align: left; }
+.minimal-modal-body p { margin: 0 0 10px; font-size: 14px; color: #6b0000; overflow-wrap: anywhere; }
+.file-info { display: flex; align-items: center; gap: 6px; color: #6b0000 !important; font-size: 12px !important; }
+.file-info svg { flex: 0 0 auto; }
+.file-description { font-size: 12px !important; color: #6b0000 !important; margin-top: 10px !important; }
 .minimal-modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
   padding: 16px 20px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #6b0000;
 }
 .minimal-cancel {
-  background: #f5f5f5; color: #666; border: none;
-  padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.3s;
+  background: #fff; color: #6b0000; border: 1px solid #6b0000;
+  padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
-.minimal-cancel:hover { background: #e0e0e0; }
+.minimal-cancel:hover, .minimal-cancel:focus-visible { background: #fff8e1; border-color: #d4a017; color: #6b0000; }
 .minimal-download {
-  background: #4caf50; color: white; border: none;
-  padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.3s;
+  background: #6b0000; color: white; border: 1px solid #6b0000;
+  padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
-.minimal-download:hover { background: #45a049; transform: translateY(-2px); }
+.minimal-download:hover, .minimal-download:focus-visible { background: #d4a017; border-color: #d4a017; color: #3d1e1e; }
 .minimal-delete {
-  background: #dc3545; color: white; border: none;
-  padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.3s;
+  background: #fff; color: #6b0000; border: 1px solid #6b0000;
+  padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
-.minimal-delete:hover { background: #c82333; transform: translateY(-2px); }
-.minimal-delete:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+.minimal-delete:hover:not(:disabled), .minimal-delete:focus-visible { background: #fff8e1; border-color: #d4a017; color: #6b0000; }
+.minimal-delete:disabled { background: #f5f5f5; border-color: #c9b5b5; color: #9b7777; cursor: not-allowed; }
 
 @media (max-width: 768px) {
   .requirements-boxes-grid { grid-template-columns: 1fr; }
   .requirement-box-arrow   { display: none; }
-  .minimal-modal           { width: 95%; }
-  .minimal-modal-footer    { flex-direction: column; }
+  .minimal-modal           { width: min(100%, 420px); }
+  .minimal-modal-footer    { align-items: stretch; flex-direction: column; }
   .minimal-cancel, .minimal-download, .minimal-delete { width: 100%; text-align: center; }
 }
 

@@ -238,7 +238,7 @@ const AdminRequirements = () => {
       <div className="upload-section-panel">
         <div className="upload-maroon-card">
           <div className="card-header-inner">
-            <span className="icon-badge">📁</span>
+            <span className="icon-badge"><Icon name="folder" size={20} /></span>
             <h3>Upload New Requirement</h3>
           </div>
           
@@ -372,11 +372,11 @@ const AdminRequirements = () => {
           <div className="modal-content minimal-modal" onClick={(e) => e.stopPropagation()}>
             <div className="minimal-modal-header">
               <h3>{selectedRequirement.title}</h3>
-              <button className="minimal-close" onClick={() => setShowModal(false)}>×</button>
+              <button className="minimal-close" onClick={() => setShowModal(false)} aria-label="Close requirement details"><Icon name="close" size={18} /></button>
             </div>
             <div className="minimal-modal-body">
               <p>Ready to download "{selectedRequirement.title}"</p>
-              <p className="file-info">📁 {selectedRequirement.fileType} • {selectedRequirement.fileSize}</p>
+              <p className="file-info"><Icon name="document" size={15} /> {selectedRequirement.fileType} • {selectedRequirement.fileSize}</p>
               <p className="file-description">{selectedRequirement.description}</p>
             </div>
             <div className="minimal-modal-footer">

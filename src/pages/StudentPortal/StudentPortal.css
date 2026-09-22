@@ -1946,9 +1946,18 @@ table tbody tr:has(.badge-declined) {
 }
 
 .student-settings-page__row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   margin: 0;
   font-weight: 600;
   font-size: clamp(0.92rem, 1.05vw, 1rem);
+}
+
+.student-settings-page__row-title svg {
+  flex: 0 0 auto;
+  color: #7b1e1e;
+  stroke-width: 1.75;
 }
 
 .student-settings-page__row-description {
