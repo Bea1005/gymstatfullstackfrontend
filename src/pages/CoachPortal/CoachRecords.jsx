@@ -735,6 +735,7 @@ export default function CoachRecord() {
     setHasActivatedGrid(true);
     setIsAddingAthlete(true);
     setEditingAthlete(null);
+    setStudentDirectorySearch('');
     setEditForm({
       studentId: '',
       fullname: '',
@@ -1288,30 +1289,31 @@ export default function CoachRecord() {
                       boxSizing: 'border-box',
                     }}
                   />
-                  <div className="coach-category-options">
-                    {studentDirectory
-                      .filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id)))
-                      .filter((student) => {
-                        const search = studentDirectorySearch.trim().toLowerCase();
-                        if (!search) return true;
-                        return [student.fullname, student.id, student.studentId, student._id]
-                          .filter(Boolean)
-                          .join(' ')
-                          .toLowerCase()
-                          .includes(search);
-                      })
-                      .map((student) => (
-                        <button
-                          key={student._id || student.id}
-                          type="button"
-                          className="coach-category-option"
-                          onClick={() => handleSelectDirectoryStudent(student)}
-                          disabled={isSaving}
-                        >
-                          {student.id || student.studentId || student._id} - {student.fullname || ''}
-                        </button>
-                      ))}
-                  </div>
+                  {studentDirectorySearch.trim() && (
+                    <div className="coach-category-options">
+                      {studentDirectory
+                        .filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id)))
+                        .filter((student) => {
+                          const search = studentDirectorySearch.trim().toLowerCase();
+                          return [student.fullname, student.id, student.studentId, student._id]
+                            .filter(Boolean)
+                            .join(' ')
+                            .toLowerCase()
+                            .includes(search);
+                        })
+                        .map((student) => (
+                          <button
+                            key={student._id || student.id}
+                            type="button"
+                            className="coach-category-option"
+                            onClick={() => handleSelectDirectoryStudent(student)}
+                            disabled={isSaving}
+                          >
+                            {student.id || student.studentId || student._id} - {student.fullname || ''}
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </label>
               )}
               <label>
