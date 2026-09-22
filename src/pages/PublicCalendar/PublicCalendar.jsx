@@ -547,7 +547,7 @@ export default function PublicCalendar() {
       <div className="pc-bg" style={{ backgroundImage: `url(${gymBackground})` }} />
       <div className="pc-overlay" />
 
-      <button className="pc-back-btn" onClick={() => navigate('/onboarding')}>← Back</button>
+      <button className="pc-back-btn" onClick={() => navigate('/landingpage')}>← Back</button>
 
       <div className="pc-card">
         <div className="pc-card__header">

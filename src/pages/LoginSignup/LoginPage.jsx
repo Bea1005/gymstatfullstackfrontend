@@ -214,7 +214,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-root">
-      <button type="button" className="auth-back-btn" onClick={() => navigate('/onboarding', { replace: true })} aria-label="Go back">
+      <button type="button" className="auth-back-btn" onClick={() => navigate('/landingpage', { replace: true })} aria-label="Go back">
         <Icon name="arrowLeft" size={18} />
         <span>Back</span>
       </button>

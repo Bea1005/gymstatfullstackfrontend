@@ -28,7 +28,7 @@ const DocumentCenter = () => {
 
   return (
     <div className="document-center-container">
-      <button className="back-btn" onClick={() => navigate('/onboarding')}>
+      <button className="back-btn" onClick={() => navigate('/landingpage')}>
         ← Back to Onboarding
       </button>
 

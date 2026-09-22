@@ -5,7 +5,7 @@ import gymBackground from "../../assets/gym-background.jpg";
 import logoImage from "../../assets/logo.png";
 import Icon from '../../components/Icon';
 
-const OnboardingScreen = () => {
+const LandingPage = () => {
   const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -285,4 +285,4 @@ const OnboardingScreen = () => {
   );
 };
 
-export default OnboardingScreen;
+export default LandingPage;

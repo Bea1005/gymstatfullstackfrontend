@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SplashScreen from "./pages/SplashScreen/SplashScreen";
-import OnboardingScreen from "./pages/SplashScreen/OnboardingScreen";
+import LandingPage from "./pages/SplashScreen/LandingPage";
 import LoginPage from "./pages/LoginSignup/LoginPage";
 import RegisterPage from "./pages/LoginSignup/RegisterPage";
 import DocumentCenter from "./pages/SplashScreen/DocumentCenter";
@@ -41,7 +41,7 @@ function App() {
             <Routes location={displayLocation}>
         {/* Public Routes */}
         <Route path="/" element={<SplashScreen />} />
-        <Route path="/onboarding" element={<OnboardingScreen />} />
+        <Route path="/landingpage" element={<LandingPage />} />
         {/* role selection removed - onboarding now goes to login */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />

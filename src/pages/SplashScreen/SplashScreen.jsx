@@ -19,7 +19,7 @@ export default function SplashScreen() {
       clearTimeout(timerRef.current);
     }
 
-    navigate("/onboarding");
+    navigate("/landingpage");
   };
 
   useEffect(() => {
