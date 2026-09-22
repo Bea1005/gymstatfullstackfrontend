@@ -1287,17 +1287,42 @@ export default function CoachRecord() {
                     value={studentDirectorySearch}
                     onChange={(event) => {
                       const val = event.target.value;
+                      const trimmed = val.trim();
                       setStudentDirectorySearch(val);
+
                       if (studentSearchTimerRef.current) clearTimeout(studentSearchTimerRef.current);
-                      if (!val.trim()) { setStudentSearchResults([]); setStudentSearchLoading(false); return; }
+
+                      if (!trimmed) {
+                        setStudentSearchResults([]);
+                        setStudentSearchLoading(false);
+                        return;
+                      }
+
                       setStudentSearchLoading(true);
+                      setStudentSearchResults([]);
+
                       studentSearchTimerRef.current = setTimeout(async () => {
                         try {
-                          const results = await api.searchCoachStudents(val.trim(), coachProfile.mainSport);
-                          setStudentSearchResults(Array.isArray(results) ? results : []);
-                        } catch { setStudentSearchResults([]); }
-                        finally { setStudentSearchLoading(false); }
-                      }, 280);
+                          const results = await api.searchCoachStudents(trimmed, coachProfile.mainSport);
+                          const normalizedResults = Array.isArray(results)
+                            ? results.filter((student) => {
+                                const studentId = String(student?._id || student?.id || '');
+                                const studentName = String(student?.fullname || '');
+                                const query = trimmed.toLowerCase();
+                                return (
+                                  studentId.toLowerCase().includes(query) ||
+                                  studentName.toLowerCase().includes(query)
+                                );
+                              })
+                            : [];
+
+                          setStudentSearchResults(normalizedResults);
+                        } catch {
+                          setStudentSearchResults([]);
+                        } finally {
+                          setStudentSearchLoading(false);
+                        }
+                      }, 220);
                     }}
                     placeholder="Search by Student ID or Full Name"
                     autoComplete="off"
@@ -1318,10 +1343,13 @@ export default function CoachRecord() {
                   {studentSearchResults.length > 0 && (
                     <div className="coach-category-options">
                       {studentSearchResults
-                        .filter((student) => !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id)))
+                        .filter((student) => {
+                          const studentId = String(student?._id || student?.id || '');
+                          return !athletes.some((athlete) => String(athlete.userId || athlete.id) === String(studentId));
+                        })
                         .map((student) => (
                           <button
-                            key={student._id || student.id}
+                            key={String(student?._id || student?.id || student?.studentId || Math.random())}
                             type="button"
                             className="coach-category-option"
                             onClick={() => handleSelectDirectoryStudent(student)}
@@ -1330,7 +1358,10 @@ export default function CoachRecord() {
                             {student.id || String(student._id)} - {student.fullname || ''}
                           </button>
                         ))}
-                      {studentSearchResults.every((student) => athletes.some((athlete) => String(athlete.userId || athlete.id) === String(student._id || student.id))) && (
+                      {studentSearchResults.every((student) => {
+                        const studentId = String(student?._id || student?.id || '');
+                        return athletes.some((athlete) => String(athlete.userId || athlete.id) === String(studentId));
+                      }) && (
                         <p style={{ fontSize: '11px', color: '#888', padding: '4px 8px' }}>All matching students are already in the grid.</p>
                       )}
                     </div>
