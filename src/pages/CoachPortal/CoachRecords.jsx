@@ -350,13 +350,13 @@ export default function CoachRecord() {
                 }
               }
               return {
-              id: athlete._id || athlete.id,
-              userId: athlete._id || athlete.id,
+              id: athlete._id || athlete.studentId || athlete.id,
+              userId: athlete._id || athlete.studentId || athlete.id,
               fullname: athlete.fullname || '',
               email: athlete.email || '',
-              course: [athlete.department || athlete.course, athlete.yearLevel].filter(Boolean).join(' - '),
+              course: [athlete.department, athlete.yearLevel].filter(Boolean).join(' - '),
               sport: athlete.sport || selectedSport || 'Volleyball Women',
-              location: athlete.branchCampus || athlete.location || '',
+              location: athlete.branchCampus || '',
               dob: athlete.dateOfBirth || athlete.dob || '',
               photo,
               status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
@@ -833,7 +833,7 @@ export default function CoachRecord() {
           setToast({ message: 'Student profile added successfully.', type: 'success' });
           setIsAddingAthlete(false);
         } catch (error) {
-          const message = error?.message || 'This student-athlete cannot be added yet because their requirements are not complete.';
+          const message = error?.message || 'Unable to add the selected student.';
           setToast({ message, type: 'error' });
           return;
         }
@@ -1283,8 +1283,14 @@ export default function CoachRecord() {
                 <label>
                   Select Existing Student
                   <input
-                    type="text"
+                    type="search"
                     value={studentDirectorySearch}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }
+                    }}
                     onChange={(event) => {
                       const val = event.target.value;
                       const trimmed = val.trim();

@@ -2079,6 +2079,22 @@
   font-size: 14px;
 }
 
+.status-badge.text-rejected {
+  color: #d93025;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-weight: 700;
+  font-style: italic;
+  font-size: 14px;
+}
+
+.status-badge.text-approved {
+  color: #2e7d32;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-weight: 700;
+  font-style: italic;
+  font-size: 14px;
+}
+
 /* Green Details button */
 .btn-details-toggle {
   background-color: #c2f0c2;
