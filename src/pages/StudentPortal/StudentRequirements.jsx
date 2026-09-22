@@ -772,22 +772,26 @@ export default function StudentRequirements() {
 
       {previewModal && (
         <div className="modal-overlay" onClick={closePreviewModal}>
-          <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="announcement-detail-modal requirement-preview-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{previewModal.filename || 'File Preview'}</h2>
               <button className="modal-close-btn" onClick={closePreviewModal}><Icon name="close" /></button>
             </div>
             <div className="detail-modal-body">
               {previewModal.fileType?.startsWith('image/') ? (
-                <img src={previewModal.url} alt="Preview" style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+                <div className="requirement-preview-frame">
+                  <img className="requirement-preview-image" src={previewModal.url} alt="Preview" />
+                </div>
               ) : previewModal.fileType?.includes('pdf') ? (
-                <iframe title="file-preview" src={previewModal.url} style={{ width: '100%', height: '70vh', border: 'none' }} />
+                <div className="requirement-preview-frame">
+                  <iframe className="requirement-preview-document" title="file-preview" src={previewModal.url} />
+                </div>
               ) : (
-                <div style={{ padding: '1rem', color: '#666' }}>Preview is not supported for this file type. You can still download it.</div>
+                <div className="requirement-preview-unavailable">Preview is not supported for this file type. You can still download it.</div>
               )}
-              <div className="detail-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button className="detail-close-btn" onClick={closePreviewModal}>Close</button>
-                <button className="upload-action-btn" onClick={() => handleDownloadSubmission(previewModal.submission)} disabled={loading}>
+              <div className="requirement-preview-actions">
+                <button className="requirement-preview-cancel" onClick={closePreviewModal}>Cancel</button>
+                <button className="requirement-preview-download" onClick={() => handleDownloadSubmission(previewModal.submission)} disabled={loading}>
                   {loading ? 'Downloading...' : 'Download'}
                 </button>
               </div>
@@ -949,8 +953,8 @@ export default function StudentRequirements() {
                 </div>
 
                 {submissions.length > 0 ? (
-                  <div className="student-requirements-table-wrapper">
-                    <table className="student-requirements-table">
+                  <div className="student-requirements-table-wrapper my-submissions-table-wrapper">
+                    <table className="student-requirements-table my-submissions-table">
                       <thead>
                         <tr className="student-requirements-table-row">
                           <th className="student-requirements-table-head">Requirement</th>
@@ -966,7 +970,7 @@ export default function StudentRequirements() {
                               {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.customRequirementLabel || submission.requirementType || 'Other'}
                             </td>
                             <td className="student-requirements-table-cell">
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              <div className="my-submissions-status-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                                 <span className={`badge ${submission.status === 'approved' ? 'badge-completed' : submission.status === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
                                   {submission.status || 'pending'}
                                 </span>
@@ -1026,8 +1030,8 @@ export default function StudentRequirements() {
               </div>
 
               {submissions.filter((submission) => submission.requirementStatus === 'reusable' || submission.requirementStatus === 'expired' || submission.importedFromPreviousYear || submission.academicYear).length ? (
-                <div className="student-requirements-table-wrapper">
-                  <table className="student-requirements-table">
+                <div className="student-requirements-table-wrapper import-records-table-wrapper">
+                  <table className="student-requirements-table import-records-table">
                     <thead>
                       <tr className="student-requirements-table-row">
                         <th className="student-requirements-table-head">Requirement Name</th>
@@ -1047,14 +1051,14 @@ export default function StudentRequirements() {
                               {submission.requirementName || requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.customRequirementLabel || submission.requirementType || 'Other'}
                             </td>
                             <td className="student-requirements-table-cell">
-                              <span className={`badge ${submission.requirementStatus === 'reusable' ? 'badge-completed' : submission.requirementStatus === 'expired' ? 'badge-declined' : submission.requirementStatus === 'archived' ? 'badge-pending' : 'badge-pending'}`}>
+                              <span className={`import-records-status-badge badge ${submission.requirementStatus === 'reusable' ? 'badge-completed' : submission.requirementStatus === 'expired' ? 'badge-declined' : submission.requirementStatus === 'archived' ? 'badge-pending' : 'badge-pending'}`}>
                                 {submission.requirementStatus || submission.status || 'active'}
                               </span>
                             </td>
                             <td className="student-requirements-table-cell">{submission.academicYear || 'N/A'}</td>
                             <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.uploadedAt || submission.createdAt)}</td>
                             <td className="student-requirements-table-cell">
-                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                              <div className="import-records-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <button className="submit-single-btn" onClick={() => handleViewSubmission(submission)} aria-label={`View ${submission.fileName || 'uploaded document'}`}>
                                   <Icon name="eye" size={16} /> View
                                 </button>
