@@ -1260,32 +1260,148 @@ table tbody tr:has(.badge-declined) {
   display: none;
 }
 
-.upload-action-btn {
+.upload-card .upload-action-btn {
   width: 100%;
-
-  border: none;
-  border-radius: 10px;
-
-  background: #ffdc00;
-  color: #000;
-
-  padding: 12px 18px;
-
+  min-height: 42px;
+  padding: 0.65rem 1rem;
+  border: 1px solid #6b0000;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b0000;
+  font: inherit;
   font-weight: 700;
-  font-size: 1rem;
+  line-height: 1.2;
   cursor: pointer;
-
-  transition: var(--transition);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.upload-action-btn:hover:not(:disabled) {
-  background: #ffea00;
-  transform: translateY(-2px);
+.upload-card .upload-action-btn:hover:not(:disabled),
+.upload-card .upload-action-btn:focus-visible {
+  background: #fff8e1;
+  border-color: #d4a017;
+  color: #6b0000;
+  transform: none;
 }
 
-.upload-action-btn:disabled {
+.upload-card .upload-action-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.custom-requirement-modal {
+  width: min(92vw, 430px);
+  max-width: 430px;
+  color: #6b0000;
+  background: #fff;
+  border: 1px solid #6b0000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.custom-requirement-modal .modal-header {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border-bottom: 1px solid #6b0000;
+}
+
+.custom-requirement-modal .modal-header h2,
+.custom-requirement-modal .modal-close-btn,
+.custom-requirement-field label {
+  color: #6b0000;
+}
+
+.custom-requirement-modal .modal-close-btn {
+  border: 1px solid transparent;
+}
+
+.custom-requirement-modal .modal-close-btn:hover,
+.custom-requirement-modal .modal-close-btn:focus-visible {
+  background: #fff8e1;
+  border-color: #d4a017;
+  color: #6b0000;
+}
+
+.custom-requirement-modal .detail-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  color: #6b0000;
+}
+
+.custom-requirement-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.custom-requirement-field label {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.custom-requirement-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #6b0000;
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+  color: #6b0000;
+  font: inherit;
+}
+
+.custom-requirement-field input:focus {
+  border-color: #d4a017;
+  box-shadow: 0 0 0 2px rgba(212, 160, 23, 0.2);
+}
+
+.custom-requirement-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.custom-requirement-actions button {
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0.65rem 1rem;
+  border: 1px solid #6b0000;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b0000;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.custom-requirement-actions button:hover:not(:disabled),
+.custom-requirement-actions button:focus-visible {
+  background: #fff8e1;
+  border-color: #d4a017;
+  color: #6b0000;
+}
+
+.custom-requirement-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .custom-requirement-modal .detail-modal-body {
+    padding: 1rem;
+  }
+
+  .custom-requirement-actions {
+    justify-content: stretch;
+  }
 }
 
 /* File Preview */

@@ -1117,7 +1117,6 @@ export default function StudentRequirements() {
                 const canReplaceReusable = isReusable && !isRejected;
                 const rejectionReason = submission?.remarks || submission?.feedback || 'The screener marked this file as rejected. Please upload a corrected copy.';
                 const rejectionDate = submission?.reviewedAt ? new Date(submission.reviewedAt).toLocaleDateString() : 'Recently';
-                const reviewerName = submission?.reviewedBy?.fullname || 'Screener';
                 const savedFileName = uploadedFiles[req.id]?.name || submission?.fileName || req.savedFileName || '';
 
                 return (
@@ -1149,7 +1148,7 @@ export default function StudentRequirements() {
                         <span className="rejection-pill"><Icon name="xCircle" size={16} /> Rejected</span>
                         <p className="rejection-reason"><strong>Reason:</strong> {rejectionReason}</p>
                         <p className="rejection-detail" style={{ fontSize: '0.75rem', color: '#6b1c1c', marginTop: '0.35rem' }}>
-                          Reviewed by {reviewerName} on {rejectionDate}
+                          Rejected on {rejectionDate}
                         </p>
                       </div>
                     )}
