@@ -170,11 +170,13 @@ export default function CoachRecord() {
   });
 
   const [athletes, setAthletes] = useState([]);
-  const [studentDirectory, setStudentDirectory] = useState([]);
   const [studentDirectorySearch, setStudentDirectorySearch] = useState('');
   const [studentSearchResults, setStudentSearchResults] = useState([]);
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const studentSearchTimerRef = useRef(null);
+  const athleteCacheRef = useRef(new Map());
+  const athleteRequestRef = useRef(new Map());
+  const activeSportRef = useRef(coachProfile.mainSport);
   const [announcements, setAnnouncements] = useState([]);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -286,14 +288,57 @@ export default function CoachRecord() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
+  const normalizeCoachAthletes = async (athletesData, selectedSport) => (
+    Array.isArray(athletesData)
+      ? Promise.all(athletesData.map(async (athlete) => {
+          let photo = '';
+          if (athlete.profilePhotoUrl) {
+            try {
+              photo = await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl);
+            } catch {
+              photo = '';
+            }
+          }
+          return {
+            id: athlete._id || athlete.studentId || athlete.id,
+            userId: athlete._id || athlete.studentId || athlete.id,
+            fullname: athlete.fullname || '',
+            email: athlete.email || '',
+            course: [athlete.department, athlete.yearLevel].filter(Boolean).join(' - '),
+            sport: athlete.sport || selectedSport || 'Volleyball Women',
+            location: athlete.branchCampus || '',
+            dob: athlete.dateOfBirth || athlete.dob || '',
+            photo,
+            status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
+          };
+        }))
+      : []
+  );
+
+  const refreshAthletesForSport = async (selectedSport) => {
+    if (athleteRequestRef.current.has(selectedSport)) {
+      return athleteRequestRef.current.get(selectedSport);
+    }
+
+    const request = api.getCoachAthletes(selectedSport)
+      .then((athletesData) => normalizeCoachAthletes(athletesData, selectedSport))
+      .then((normalizedAthletes) => {
+        athleteCacheRef.current.set(selectedSport, normalizedAthletes);
+        return normalizedAthletes;
+      })
+      .finally(() => athleteRequestRef.current.delete(selectedSport));
+
+    athleteRequestRef.current.set(selectedSport, request);
+    return request;
+  };
+
   const fetchCoachData = async (selectedSport = coachProfile.mainSport) => {
     try {
       if (selectedSport === coachProfile.mainSport) setLoading(true);
       else setCategoryLoading(true);
-      const [profileData, athletesData, directoryData, updatesData, facultyData] = await Promise.all([
+      const [profileData, athletesData, updatesData, facultyData] = await Promise.all([
         api.getCoachProfile().catch(() => null),
         api.getCoachAthletes(selectedSport).catch(() => []),
-        api.getCoachStudentDirectory(selectedSport).catch(() => []),
         api.getCoachUpdates().catch(() => []),
         api.getFacultyMembers().catch(() => []),
       ]);
@@ -339,62 +384,10 @@ export default function CoachRecord() {
         : [];
       if (Array.isArray(facultyData)) setStaff(normalizeStaffMembers(normalizedFaculty));
 
-      const normalizedAthletes = Array.isArray(athletesData)
-          ? await Promise.all(athletesData.map(async (athlete) => {
-              let photo = '';
-              if (athlete.profilePhotoUrl) {
-                try {
-                  photo = await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl);
-                } catch {
-                  photo = '';
-                }
-              }
-              return {
-              id: athlete._id || athlete.studentId || athlete.id,
-              userId: athlete._id || athlete.studentId || athlete.id,
-              fullname: athlete.fullname || '',
-              email: athlete.email || '',
-              course: [athlete.department, athlete.yearLevel].filter(Boolean).join(' - '),
-              sport: athlete.sport || selectedSport || 'Volleyball Women',
-              location: athlete.branchCampus || '',
-              dob: athlete.dateOfBirth || athlete.dob || '',
-              photo,
-              status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
-              };
-            }))
-          : [];
+      const normalizedAthletes = await normalizeCoachAthletes(athletesData, selectedSport);
 
+      athleteCacheRef.current.set(selectedSport, normalizedAthletes);
       setAthletes(normalizedAthletes);
-      // Prefer server-side filtering, but fall back to client-side filtering
-      const rawDirectory = Array.isArray(directoryData) ? directoryData : [];
-      let filteredDirectory = rawDirectory;
-      if (selectedSport) {
-        const sportLower = String(selectedSport).toLowerCase();
-        filteredDirectory = rawDirectory.filter((student) => {
-          if (!student) return false;
-          // Common single-value fields
-          if (student.sport && String(student.sport).toLowerCase() === sportLower) return true;
-          if (student.registeredSport && String(student.registeredSport).toLowerCase() === sportLower) return true;
-          if (student.mainSport && String(student.mainSport).toLowerCase() === sportLower) return true;
-
-          // Common array fields
-          const arrayProps = ['sports', 'registeredSports', 'participations', 'sportParticipation', 'sportsParticipated', 'assignedSports'];
-          for (const prop of arrayProps) {
-            const val = student[prop];
-            if (Array.isArray(val) && val.some((s) => (
-              typeof s === 'object'
-                ? String(s?.sport || s?.name || s?.category || '').toLowerCase() === sportLower
-                : String(s).toLowerCase() === sportLower
-            ))) return true;
-          }
-
-          // Some backends store a combined string — check for a token match (safe fallback)
-          if (student.sports && typeof student.sports === 'string' && student.sports.toLowerCase().split(/[,;|]/).map(s => s.trim()).includes(sportLower)) return true;
-
-          return false;
-        });
-      }
-      setStudentDirectory(filteredDirectory);
       setHasActivatedGrid(
         normalizedAthletes.length > 0
         || Boolean(normalizedFaculty.some((member) => member.fullname || member.phone || member.email))
@@ -764,20 +757,43 @@ export default function CoachRecord() {
       return;
     }
 
-    try {
-      setIsSaving(true);
-      await api.createCoachAthlete({ studentId, sport: coachProfile.mainSport });
-      setEditingAthlete(null);
-      setIsAddingAthlete(false);
-      setStudentDirectorySearch('');
-      setStudentSearchResults([]);
-      await fetchCoachData(coachProfile.mainSport);
-      setToast({ message: 'Student added successfully.', type: 'success' });
-    } catch (error) {
-      setToast({ message: error.message || 'Unable to add student.', type: 'error' });
-    } finally {
-      setIsSaving(false);
+    const selectedSport = coachProfile.mainSport;
+    const optimisticAthlete = {
+      id: studentId,
+      userId: studentId,
+      fullname: student.fullname || '',
+      email: student.email || '',
+      course: [student.department, student.yearLevel].filter(Boolean).join(' - '),
+      sport: student.sport || selectedSport,
+      location: student.branchCampus || '',
+      dob: student.dateOfBirth || student.dob || '',
+      photo: '',
+      status: normalizeAthleteStatus(student.athleteStatus || student.status),
+    };
+
+    const nextAthletes = [...athletes, optimisticAthlete];
+    athleteCacheRef.current.set(selectedSport, nextAthletes);
+    setAthletes(nextAthletes);
+    setHasActivatedGrid(true);
+    setEditingAthlete(null);
+    setIsAddingAthlete(false);
+    setStudentDirectorySearch('');
+    setStudentSearchResults([]);
+    setToast({ message: 'Student added successfully.', type: 'success' });
+
+    if (student.profilePhotoUrl) {
+      api.getProtectedImageObjectUrl(student.profilePhotoUrl).then((photo) => {
+        setAthletes((currentAthletes) => currentAthletes.map((athlete) => (
+          String(athlete.userId || athlete.id) === String(studentId) ? { ...athlete, photo } : athlete
+        )));
+      }).catch(() => {});
     }
+
+    api.createCoachAthlete({ studentId }).catch((error) => {
+      athleteCacheRef.current.set(selectedSport, athletes);
+      setAthletes((currentAthletes) => currentAthletes.filter((athlete) => String(athlete.userId || athlete.id) !== String(studentId)));
+      setToast({ message: error.message || 'Unable to add student.', type: 'error' });
+    });
   };
 
   const openRemoveModal = (type, id, name) => (e) => {
@@ -796,7 +812,9 @@ export default function CoachRecord() {
       const { type, id } = removeTarget;
       if (type === 'athlete') {
         await api.deleteCoachAthlete(id);
-        await fetchCoachData();
+        const nextAthletes = athletes.filter((athlete) => String(athlete.id) !== String(id));
+        athleteCacheRef.current.set(coachProfile.mainSport, nextAthletes);
+        setAthletes(nextAthletes);
         setToast({ message: 'Student removed.', type: 'success' });
       } else if (type === 'faculty') {
         await api.deleteFacultyMember(id);
@@ -909,14 +927,49 @@ export default function CoachRecord() {
       facultyData.append('contactNumber', staffForm.phone || '');
       facultyData.append('email', staffForm.email || '');
       if (selectedStaffFile) facultyData.append('profilePhoto', selectedStaffFile);
+      let savedMember;
       if (isAddingStaff) {
-        await api.createFacultyMember(facultyData);
+        savedMember = await api.createFacultyMember(facultyData);
       } else if (currentMember?.facultyId || currentMember?.id) {
-        await api.updateFacultyMember(currentMember.facultyId || currentMember.id, facultyData);
+        savedMember = await api.updateFacultyMember(currentMember.facultyId || currentMember.id, facultyData);
       } else {
         throw new Error('Faculty member ID is missing. Refresh the Coach Portal and try again.');
       }
-      await fetchCoachData();
+
+      const normalizedMember = {
+        ...(currentMember || createDefaultStaffMember(role)),
+        ...savedMember,
+        id: savedMember?.id || savedMember?.facultyId || currentMember?.id,
+        facultyId: savedMember?.facultyId || savedMember?.id || currentMember?.facultyId || currentMember?.id,
+        role: savedMember?.role || role,
+        fullname: savedMember?.fullname || savedMember?.name || staffForm.fullname.trim(),
+        age: savedMember?.age || staffForm.age || '',
+        phone: savedMember?.phone || savedMember?.contactNumber || staffForm.phone || '',
+        email: savedMember?.email || staffForm.email || '',
+        photo: selectedStaffFile ? staffForm.photo : (savedMember?.photo || currentMember?.photo || placeholderImg),
+      };
+
+      setStaff((currentStaff) => {
+        if (isAddingStaff) {
+          const emptyIndex = currentStaff.findIndex((member) => !member.fullname && !member.phone && !member.email);
+          if (emptyIndex >= 0) {
+            return currentStaff.map((member, index) => (index === emptyIndex ? normalizedMember : member));
+          }
+          return [...currentStaff, normalizedMember];
+        }
+        return currentStaff.map((member, index) => (index === editingStaffIndex ? normalizedMember : member));
+      });
+
+      if (savedMember?.profilePhotoUrl && !selectedStaffFile) {
+        api.getProtectedImageObjectUrl(savedMember.profilePhotoUrl).then((photo) => {
+          setStaff((currentStaff) => currentStaff.map((member) => (
+            String(member.facultyId || member.id) === String(normalizedMember.facultyId)
+              ? { ...member, photo }
+              : member
+          )));
+        }).catch(() => {});
+      }
+
       setEditingStaffIndex(null);
       setIsAddingStaff(false);
       setSelectedStaffFile(null);
@@ -940,11 +993,22 @@ export default function CoachRecord() {
   };
 
   const handleSelectSport = async (sport) => {
+    activeSportRef.current = sport;
     setCoachProfile((prev) => ({ ...prev, mainSport: sport }));
     setShowSportDropdown(false);
-    setAthletes([]);
-    setHasActivatedGrid(false);
-    await fetchCoachData(sport);
+    const cachedAthletes = athleteCacheRef.current.get(sport);
+    setAthletes(cachedAthletes || []);
+    setHasActivatedGrid(true);
+    setCategoryLoading(false);
+
+    refreshAthletesForSport(sport)
+      .then((normalizedAthletes) => {
+        if (sport === activeSportRef.current) {
+          setAthletes(normalizedAthletes);
+          setHasActivatedGrid(true);
+        }
+      })
+      .catch(() => {});
   };
 
   const handleLogout = () => setShowLogoutModal(true);
