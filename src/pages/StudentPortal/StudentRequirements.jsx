@@ -802,14 +802,14 @@ export default function StudentRequirements() {
 
       {customRequirementModal && (
         <div className="modal-overlay" onClick={() => setCustomRequirementModal(null)}>
-          <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '430px' }}>
+          <div className="announcement-detail-modal custom-requirement-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add Requirement</h2>
               <button className="modal-close-btn" onClick={() => setCustomRequirementModal(null)}><Icon name="close" /></button>
             </div>
             <div className="detail-modal-body">
-              <div style={{ marginBottom: '1rem' }}>
-                <label htmlFor="custom-requirement-name" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#3d1e1e' }}>
+              <div className="custom-requirement-field">
+                <label htmlFor="custom-requirement-name">
                   Requirement Name
                 </label>
                 <input
@@ -818,25 +818,16 @@ export default function StudentRequirements() {
                   value={customRequirementModal.requirementName}
                   onChange={(e) => setCustomRequirementModal((prev) => ({ ...prev, requirementName: e.target.value }))}
                   placeholder="Enter requirement name"
-                  style={{
-                    width: '100%',
-                    padding: '0.8rem 0.9rem',
-                    border: '1px solid #d5d7db',
-                    borderRadius: '8px',
-                    fontSize: '0.98rem',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
                   autoFocus
                 />
               </div>
 
-              <div className="detail-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                <button className="detail-close-btn" onClick={() => setCustomRequirementModal(null)}>
+              <div className="custom-requirement-actions">
+                <button className="custom-requirement-cancel" onClick={() => setCustomRequirementModal(null)}>
                   Cancel
                 </button>
                 <button
-                  className="upload-action-btn"
+                  className="custom-requirement-continue"
                   onClick={addCustomRequirementCard}
                   disabled={!customRequirementModal.requirementName?.trim()}
                 >
