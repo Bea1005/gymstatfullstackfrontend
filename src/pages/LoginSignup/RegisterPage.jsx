@@ -54,12 +54,18 @@ export default function RegisterPage() {
 
   const validateIdForRoleDetection = (value) => {
     const trimmedValue = value.trim();
+    const isAdminId = trimmedValue.toLowerCase().startsWith("admin");
+    const isSixCharacterAdminId = trimmedValue.length === 6;
 
     if (!trimmedValue) {
       return "Please enter your ID.";
     }
 
-    if (trimmedValue.length < 7) {
+    if (isAdminId && trimmedValue.length !== 6) {
+      return "Admin ID must be exactly 6 characters long.";
+    }
+
+    if (!isAdminId && !isSixCharacterAdminId && trimmedValue.length < 7) {
       return "ID must be at least 7 characters long.";
     }
 
