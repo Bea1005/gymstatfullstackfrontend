@@ -174,6 +174,8 @@ export default function CoachRecord() {
   const [studentSearchResults, setStudentSearchResults] = useState([]);
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const studentSearchTimerRef = useRef(null);
+  const studentSearchCacheRef = useRef(new Map());
+  const studentSearchRequestRef = useRef(0);
   const athleteCacheRef = useRef(new Map());
   const athleteRequestRef = useRef(new Map());
   const activeSportRef = useRef(coachProfile.mainSport);
@@ -1358,6 +1360,9 @@ export default function CoachRecord() {
                     onChange={(event) => {
                       const val = event.target.value;
                       const trimmed = val.trim();
+                      const queryKey = `${coachProfile.mainSport}\u0000${trimmed.toLowerCase()}`;
+                      const requestId = studentSearchRequestRef.current + 1;
+                      studentSearchRequestRef.current = requestId;
                       setStudentDirectorySearch(val);
 
                       if (studentSearchTimerRef.current) clearTimeout(studentSearchTimerRef.current);
@@ -1368,8 +1373,9 @@ export default function CoachRecord() {
                         return;
                       }
 
-                      setStudentSearchLoading(true);
-                      setStudentSearchResults([]);
+                      const cachedResults = studentSearchCacheRef.current.get(queryKey);
+                      setStudentSearchResults(cachedResults || []);
+                      setStudentSearchLoading(!cachedResults);
 
                       studentSearchTimerRef.current = setTimeout(async () => {
                         try {
@@ -1386,13 +1392,17 @@ export default function CoachRecord() {
                               })
                             : [];
 
-                          setStudentSearchResults(normalizedResults);
+                          studentSearchCacheRef.current.set(queryKey, normalizedResults);
+                          if (studentSearchCacheRef.current.size > 100) {
+                            studentSearchCacheRef.current.delete(studentSearchCacheRef.current.keys().next().value);
+                          }
+                          if (studentSearchRequestRef.current === requestId) setStudentSearchResults(normalizedResults);
                         } catch {
-                          setStudentSearchResults([]);
+                          if (studentSearchRequestRef.current === requestId) setStudentSearchResults([]);
                         } finally {
-                          setStudentSearchLoading(false);
+                          if (studentSearchRequestRef.current === requestId) setStudentSearchLoading(false);
                         }
-                      }, 220);
+                      }, 60);
                     }}
                     placeholder="Search by Student ID or Full Name"
                     autoComplete="off"
