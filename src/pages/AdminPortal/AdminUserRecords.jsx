@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminScreeners, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
@@ -160,9 +160,12 @@ export default function AdminUserRecords() {
     }
   };
 
+  const fetchStudentsEvent = useEffectEvent(fetchStudents);
+  const fetchScreenersEvent = useEffectEvent(fetchScreeners);
+
   useEffect(() => {
-    fetchStudents();
-    fetchScreeners();
+    fetchStudentsEvent();
+    fetchScreenersEvent();
   }, [studentAccountStatus, screenerAccountStatus]);
 
   /* ── Generic checkbox helpers ── */

@@ -10,6 +10,8 @@
   padding: clamp(20px, 3vw, 40px);
   background-color: #fafafa;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
 }
 
@@ -180,11 +182,16 @@
 
 /* Tabular Presentation */
 .table-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1.5px solid #a0a0a0;
   border-radius: 16px;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
   background: #ffffff;
 }
 
@@ -606,6 +613,10 @@
     gap: 12px;
   }
 
+  .screener-header {
+    flex-wrap: wrap;
+  }
+
   .logout-btn,
   .back-portal-btn {
     padding: 8px 14px;
@@ -625,7 +636,7 @@
   }
 
   .screener-table {
-    min-width: 900px;
+    min-width: 840px;
   }
 
   .screener-table th,
@@ -681,7 +692,11 @@
   }
 
   .status-cell {
-    min-width: 110px;
+    min-width: 80px;
+  }
+
+  .athlete-name {
+    padding-left: 12px !important;
   }
 
   .screener-table th,

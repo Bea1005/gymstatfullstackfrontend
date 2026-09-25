@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as api from "../../services/api";
-import { useNotifications } from "../../components/NotificationProvider";
+import { useNotifications } from "../../components/useNotifications";
 import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import "./StudentProfile.css";
 

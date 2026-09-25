@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import RejectModal from '../../components/RejectModal';
-import { useNotifications } from '../../components/NotificationProvider';
+import { useNotifications } from '../../components/useNotifications';
 import DocumentViewer from '../../components/DocumentViewer';
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
@@ -47,11 +47,10 @@ const getRequirementFileUrl = (entry) => {
 };
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const resolvedUrl = resolveAttachmentUrl(fileUrl);
   const response = await fetch(resolvedUrl, {
     cache: 'no-store',
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -87,6 +86,7 @@ const ScreenerPage = () => {
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -102,20 +102,20 @@ const ScreenerPage = () => {
   const hasLoadedSuccessfullyRef = useRef(false);
 
   useEffect(() => {
-    const sessionToken = sessionStorage.getItem('token');
-    const localToken = localStorage.getItem('token');
-    const token = sessionToken || localToken;
-    const role = (sessionToken ? sessionStorage.getItem('role') : localStorage.getItem('role')) || sessionStorage.getItem('role') || localStorage.getItem('role') || '';
-    const normalizedRole = role.toString().trim().toLowerCase();
+    let active = true;
+    api.getCurrentUser()
+      .then((user) => {
+        const role = String(user?.role || '').toLowerCase();
+        // Screener and admin may access the screening portal.
+        if (role !== 'screener' && role !== 'admin') {
+          navigate('/login', { replace: true });
+          return;
+        }
+        if (active) setAuthReady(true);
+      })
+      .catch((error) => console.warn('[AUTH] Screener auth check failed', { status: error.status }));
 
-    // Allow both screener and admin (backend also permits admin). Normalize role.
-    if (!token || (normalizedRole !== 'screener' && normalizedRole !== 'admin')) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* storage may be unavailable */ }
-      navigate('/login', { replace: true });
-    }
+    return () => { active = false; };
   }, [navigate]);
   
   // Search and Filter States
@@ -166,6 +166,8 @@ const ScreenerPage = () => {
     }
   };
 
+  const loadRequirementsEvent = useEffectEvent(loadRequirements);
+
   const markResubmissionViewed = async (submissionId) => {
     if (!submissionId) return;
 
@@ -211,20 +213,20 @@ const ScreenerPage = () => {
   };
 
   useEffect(() => {
-    loadRequirements();
-  }, [notify]);
+    loadRequirementsEvent();
+  }, []);
 
   useEffect(() => {
     const refreshInterval = window.setInterval(() => {
-      loadRequirements(true);
+      loadRequirementsEvent(true);
     }, 10000);
 
     return () => window.clearInterval(refreshInterval);
-  }, [notify]);
+  }, []);
 
   useEffect(() => {
     const handleRequirementUpdate = () => {
-      loadRequirements(true);
+      loadRequirementsEvent(true);
     };
 
     const handleStorageUpdate = (event) => {
@@ -240,7 +242,7 @@ const ScreenerPage = () => {
       window.removeEventListener('gymstat-requirement-updated', handleRequirementUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
     };
-  }, [notify]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -315,9 +317,9 @@ const ScreenerPage = () => {
     setShowLogoutModal(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutModal(false);
-    localStorage.removeItem('token');
+    await api.logout();
     localStorage.removeItem('role');
     localStorage.removeItem('user');
     navigate('/login');
@@ -397,6 +399,8 @@ const ScreenerPage = () => {
   };
 
   // --- VIEW 1: REQUIREMENTS SCREENING PORTAL DASHBOARD LIST ---
+  if (!authReady) return null;
+
   if (currentView === 'list') {
     return (
       <div className="screener-container">

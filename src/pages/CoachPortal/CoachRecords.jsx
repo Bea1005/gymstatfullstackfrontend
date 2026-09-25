@@ -175,9 +175,11 @@ export default function CoachRecord() {
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const studentSearchTimerRef = useRef(null);
   const studentSearchCacheRef = useRef(new Map());
+  const studentSearchInFlightRef = useRef(new Map());
   const studentSearchRequestRef = useRef(0);
   const athleteCacheRef = useRef(new Map());
   const athleteRequestRef = useRef(new Map());
+  const studentPhotoCacheRef = useRef(new Map());
   const activeSportRef = useRef(coachProfile.mainSport);
   const [announcements, setAnnouncements] = useState([]);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
@@ -257,25 +259,6 @@ export default function CoachRecord() {
   const [removeTarget, setRemoveTarget] = useState({ type: null, id: null, name: '' });
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
-
-    if (!token || role !== 'coach') {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('user');
-      try {
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('role');
-        sessionStorage.removeItem('user');
-      } catch {
-        navigate('/login', { replace: true });
-        return;
-      }
-      navigate('/login', { replace: true });
-      return;
-    }
-
     const storedUser = JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
     setCoachProfile((prev) => ({
       ...prev,
@@ -290,32 +273,81 @@ export default function CoachRecord() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
-  const normalizeCoachAthletes = async (athletesData, selectedSport) => (
+  const normalizeCoachAthletes = (athletesData, selectedSport) => (
     Array.isArray(athletesData)
-      ? Promise.all(athletesData.map(async (athlete) => {
-          let photo = '';
-          if (athlete.profilePhotoUrl) {
-            try {
-              photo = await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl);
-            } catch {
-              photo = '';
-            }
-          }
-          return {
-            id: athlete._id || athlete.studentId || athlete.id,
-            userId: athlete._id || athlete.studentId || athlete.id,
-            fullname: athlete.fullname || '',
-            email: athlete.email || '',
-            course: [athlete.department, athlete.yearLevel].filter(Boolean).join(' - '),
-            sport: athlete.sport || selectedSport || 'Volleyball Women',
-            location: athlete.branchCampus || '',
-            dob: athlete.dateOfBirth || athlete.dob || '',
-            photo,
-            status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
-          };
+      ? athletesData.map((athlete) => ({
+          id: athlete._id || athlete.studentId || athlete.id,
+          userId: athlete._id || athlete.studentId || athlete.id,
+          fullname: athlete.fullname || '',
+          email: athlete.email || '',
+          course: [athlete.department, athlete.yearLevel].filter(Boolean).join(' - '),
+          sport: athlete.sport || selectedSport || 'Volleyball Women',
+          location: athlete.branchCampus || '',
+          dob: athlete.dateOfBirth || athlete.dob || '',
+          photo: '',
+          profilePhotoUrl: athlete.profilePhotoUrl || '',
+          status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
         }))
       : []
   );
+
+  const loadStudentPhoto = (photoUrl) => {
+    if (!photoUrl) return Promise.resolve('');
+    if (!studentPhotoCacheRef.current.has(photoUrl)) {
+      const request = api.getProtectedImageObjectUrl(photoUrl).catch(() => {
+        studentPhotoCacheRef.current.delete(photoUrl);
+        return '';
+      });
+      studentPhotoCacheRef.current.set(photoUrl, request);
+    }
+    return studentPhotoCacheRef.current.get(photoUrl);
+  };
+
+  const getStudentSearchResults = (query, sport) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const queryKey = `${sport}\u0000${normalizedQuery}`;
+    const cachedResults = studentSearchCacheRef.current.get(queryKey);
+    if (cachedResults) return Promise.resolve(cachedResults);
+
+    const existingRequest = studentSearchInFlightRef.current.get(queryKey);
+    if (existingRequest) return existingRequest;
+
+    const request = api.searchCoachStudents(query, sport)
+      .then((results) => (Array.isArray(results) ? results : []).filter((student) => {
+        const studentId = String(student?._id || student?.id || '').toLowerCase();
+        const studentName = String(student?.fullname || '').toLowerCase();
+        return studentId.includes(normalizedQuery) || studentName.includes(normalizedQuery);
+      }))
+      .then((results) => {
+        studentSearchCacheRef.current.set(queryKey, results);
+        if (studentSearchCacheRef.current.size > 100) {
+          studentSearchCacheRef.current.delete(studentSearchCacheRef.current.keys().next().value);
+        }
+        return results;
+      })
+      .finally(() => studentSearchInFlightRef.current.delete(queryKey));
+
+    studentSearchInFlightRef.current.set(queryKey, request);
+    return request;
+  };
+
+  const hydrateAthletePhotos = async (sport, athleteList) => {
+    const photoEntries = await Promise.all(athleteList.map(async (athlete) => ([
+      String(athlete.userId || athlete.id),
+      await loadStudentPhoto(athlete.profilePhotoUrl),
+    ])));
+    const photosByStudentId = new Map(photoEntries);
+    const withPhotos = (athletesToUpdate) => athletesToUpdate.map((athlete) => ({
+      ...athlete,
+      photo: photosByStudentId.get(String(athlete.userId || athlete.id)) || athlete.photo || '',
+    }));
+
+    const cachedAthletes = athleteCacheRef.current.get(sport) || athleteList;
+    athleteCacheRef.current.set(sport, withPhotos(cachedAthletes));
+    if (activeSportRef.current === sport) {
+      setAthletes((currentAthletes) => withPhotos(currentAthletes));
+    }
+  };
 
   const refreshAthletesForSport = async (selectedSport) => {
     if (athleteRequestRef.current.has(selectedSport)) {
@@ -323,9 +355,10 @@ export default function CoachRecord() {
     }
 
     const request = api.getCoachAthletes(selectedSport)
-      .then((athletesData) => normalizeCoachAthletes(athletesData, selectedSport))
-      .then((normalizedAthletes) => {
+      .then((athletesData) => {
+        const normalizedAthletes = normalizeCoachAthletes(athletesData, selectedSport);
         athleteCacheRef.current.set(selectedSport, normalizedAthletes);
+        void hydrateAthletePhotos(selectedSport, normalizedAthletes);
         return normalizedAthletes;
       })
       .finally(() => athleteRequestRef.current.delete(selectedSport));
@@ -371,6 +404,16 @@ export default function CoachRecord() {
         }
       }
 
+      const normalizedAthletes = normalizeCoachAthletes(athletesData, selectedSport);
+      athleteCacheRef.current.set(selectedSport, normalizedAthletes);
+      setAthletes(normalizedAthletes);
+      setHasActivatedGrid(
+        normalizedAthletes.length > 0
+        || Boolean(facultyData.some?.((member) => member.fullname || member.phone || member.email))
+        || Boolean(profileData?.staffMembers?.some((member) => member.fullname || member.phone || member.email))
+      );
+      void hydrateAthletePhotos(selectedSport, normalizedAthletes);
+
       const normalizedFaculty = Array.isArray(facultyData)
         ? await Promise.all(facultyData.map(async (member) => {
             let photo = '';
@@ -385,16 +428,6 @@ export default function CoachRecord() {
           }))
         : [];
       if (Array.isArray(facultyData)) setStaff(normalizeStaffMembers(normalizedFaculty));
-
-      const normalizedAthletes = await normalizeCoachAthletes(athletesData, selectedSport);
-
-      athleteCacheRef.current.set(selectedSport, normalizedAthletes);
-      setAthletes(normalizedAthletes);
-      setHasActivatedGrid(
-        normalizedAthletes.length > 0
-        || Boolean(normalizedFaculty.some((member) => member.fullname || member.phone || member.email))
-        || Boolean(profileData?.staffMembers?.some((member) => member.fullname || member.phone || member.email))
-      );
 
       const normalizedUpdates = Array.isArray(updatesData)
         ? updatesData.map((update) => ({
@@ -783,19 +816,21 @@ export default function CoachRecord() {
     setStudentSearchResults([]);
     setToast({ message: 'Student added successfully.', type: 'success' });
 
-    if (student.profilePhotoUrl) {
-      api.getProtectedImageObjectUrl(student.profilePhotoUrl).then((photo) => {
-        setAthletes((currentAthletes) => currentAthletes.map((athlete) => (
+    api.createCoachAthlete({ studentId })
+      .then(() => loadStudentPhoto(`/coach/students/${studentId}/profile-photo`))
+      .then((photo) => {
+        if (!photo) return;
+        const updatePhoto = (currentAthletes) => currentAthletes.map((athlete) => (
           String(athlete.userId || athlete.id) === String(studentId) ? { ...athlete, photo } : athlete
-        )));
-      }).catch(() => {});
-    }
-
-    api.createCoachAthlete({ studentId }).catch((error) => {
-      athleteCacheRef.current.set(selectedSport, athletes);
-      setAthletes((currentAthletes) => currentAthletes.filter((athlete) => String(athlete.userId || athlete.id) !== String(studentId)));
-      setToast({ message: error.message || 'Unable to add student.', type: 'error' });
-    });
+        ));
+        athleteCacheRef.current.set(selectedSport, updatePhoto(athleteCacheRef.current.get(selectedSport) || nextAthletes));
+        if (activeSportRef.current === selectedSport) setAthletes(updatePhoto);
+      })
+      .catch((error) => {
+        athleteCacheRef.current.set(selectedSport, athletes);
+        setAthletes((currentAthletes) => currentAthletes.filter((athlete) => String(athlete.userId || athlete.id) !== String(studentId)));
+        setToast({ message: error.message || 'Unable to add student.', type: 'error' });
+      });
   };
 
   const openRemoveModal = (type, id, name) => (e) => {
@@ -1003,6 +1038,8 @@ export default function CoachRecord() {
     setHasActivatedGrid(true);
     setCategoryLoading(false);
 
+    if (cachedAthletes) return;
+
     refreshAthletesForSport(sport)
       .then((normalizedAthletes) => {
         if (sport === activeSportRef.current) {
@@ -1015,9 +1052,9 @@ export default function CoachRecord() {
 
   const handleLogout = () => setShowLogoutModal(true);
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutModal(false);
-    localStorage.removeItem('token');
+    await api.logout();
     localStorage.removeItem('role');
     localStorage.removeItem('user');
     navigate('/login', { replace: true });
@@ -1379,23 +1416,7 @@ export default function CoachRecord() {
 
                       studentSearchTimerRef.current = setTimeout(async () => {
                         try {
-                          const results = await api.searchCoachStudents(trimmed, coachProfile.mainSport);
-                          const normalizedResults = Array.isArray(results)
-                            ? results.filter((student) => {
-                                const studentId = String(student?._id || student?.id || '');
-                                const studentName = String(student?.fullname || '');
-                                const query = trimmed.toLowerCase();
-                                return (
-                                  studentId.toLowerCase().includes(query) ||
-                                  studentName.toLowerCase().includes(query)
-                                );
-                              })
-                            : [];
-
-                          studentSearchCacheRef.current.set(queryKey, normalizedResults);
-                          if (studentSearchCacheRef.current.size > 100) {
-                            studentSearchCacheRef.current.delete(studentSearchCacheRef.current.keys().next().value);
-                          }
+                          const normalizedResults = await getStudentSearchResults(trimmed, coachProfile.mainSport);
                           if (studentSearchRequestRef.current === requestId) setStudentSearchResults(normalizedResults);
                         } catch {
                           if (studentSearchRequestRef.current === requestId) setStudentSearchResults([]);

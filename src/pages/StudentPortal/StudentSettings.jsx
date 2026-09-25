@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import Icon from '../../components/Icon';
+import * as api from '../../services/api';
+import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from '../../constants/passwordPolicy';
 import './StudentPortal.css';
 
 const StudentSettings = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
   const [settingsError, setSettingsError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
 
@@ -26,20 +30,21 @@ const StudentSettings = () => {
 
   const closePasswordModal = () => {
     setShowPasswordModal(false);
+    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setSettingsError('');
   };
 
-  const handleSavePassword = () => {
-    if (!newPassword || !confirmPassword) {
+  const handleSavePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
       setSettingsError('Please enter and confirm your new password.');
       setToast({ message: 'Please enter and confirm your new password.', type: 'error' });
       return;
     }
-    if (newPassword.length < 8) {
-      setSettingsError('Password must be at least 8 characters.');
-      setToast({ message: 'Password must be at least 8 characters.', type: 'error' });
+    if (!isPasswordValid(newPassword)) {
+      setSettingsError(PASSWORD_POLICY_MESSAGE);
+      setToast({ message: PASSWORD_POLICY_MESSAGE, type: 'error' });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -48,8 +53,19 @@ const StudentSettings = () => {
       return;
     }
 
-    closePasswordModal();
-    setToast({ message: 'Password changed successfully.', type: 'success' });
+    setSavingPassword(true);
+    setSettingsError('');
+    try {
+      await api.updateProfile({ currentPassword, newPassword });
+      closePasswordModal();
+      setToast({ message: 'Password changed successfully.', type: 'success' });
+    } catch (error) {
+      const message = error.message || 'Unable to change password. Please try again.';
+      setSettingsError(message);
+      setToast({ message, type: 'error' });
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   const handleContactSupport = () => {
@@ -130,9 +146,18 @@ const StudentSettings = () => {
               <input
                 type="password"
                 className="modal-input"
+                placeholder="Current password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <input
+                type="password"
+                className="modal-input"
                 placeholder="New password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
               />
               <input
                 type="password"
@@ -140,12 +165,15 @@ const StudentSettings = () => {
                 placeholder="Confirm new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
               />
               {settingsError && <p className="modal-error">{settingsError}</p>}
             </div>
             <div className="modal-actions">
-              <button className="modal-btn modal-cancel" onClick={closePasswordModal}>Cancel</button>
-              <button className="modal-btn modal-confirm" onClick={handleSavePassword}>Save Password</button>
+              <button className="modal-btn modal-cancel" onClick={closePasswordModal} disabled={savingPassword}>Cancel</button>
+              <button className="modal-btn modal-confirm" onClick={handleSavePassword} disabled={savingPassword}>
+                {savingPassword ? 'Saving...' : 'Save Password'}
+              </button>
             </div>
           </div>
         </div>

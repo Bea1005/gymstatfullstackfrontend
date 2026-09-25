@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
-import ConfirmModal from '../../components/ConfirmModal';
 import {
   getEquipment,
   getBorrowingRecords,
   createBorrowingRecord,
   updateBorrowingRecord,
-  returnBorrowedEquipment,
-  deleteBorrowingRecord,
 } from '../../services/api';
 import './AdminPortal.css';
 
@@ -54,7 +51,7 @@ const EMPTY_FORM = {
   endTime: ''
 };
 
-export default function AdminBorrowing({ equipmentInventory = [], onBorrowingChange }) {
+export default function AdminBorrowing({ onBorrowingChange }) {
   const [records, setRecords] = useState([]);
   const [equipmentWithRefs, setEquipmentWithRefs] = useState({});
   const [allEquipment, setAllEquipment] = useState([]);
@@ -62,7 +59,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
   const [selectedBorrowerDetails, setSelectedBorrowerDetails] = useState(null);
   const [isEditingBorrower, setIsEditingBorrower] = useState(false);
@@ -71,7 +67,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
     contactNo: '',
     facebookAccount: ''
   });
-  const dateInputRef = useRef(null);
 
   const normalizeEquipmentForBorrowing = (item) => {
     const availableQuantity = Math.max(0, Number(item.available ?? item.total ?? item.totalStock ?? 1) || 0);
@@ -141,8 +136,10 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
     }
   };
 
+  const fetchDataOnMount = useEffectEvent(fetchData);
+
   useEffect(() => {
-    fetchData();
+    fetchDataOnMount();
   }, []);
 
   useEffect(() => {
@@ -169,10 +166,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
   const getAvailableQuantity = (equipmentName) => {
     const availableRefs = getAvailableReferenceIds(equipmentName);
     return availableRefs.length;
-  };
-
-  const getCalculatedQuantity = () => {
-    return form.selectedReferenceIds ? form.selectedReferenceIds.length : 0;
   };
 
   const toggleExpandRow = (id) => {
@@ -289,13 +282,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
       }
     });
     setError('');
-  };
-
-  // Function to open date picker when calendar icon is clicked
-  const openDatePicker = () => {
-    if (dateInputRef.current) {
-      dateInputRef.current.showPicker();
-    }
   };
 
   const handleConfirm = async (e) => {
@@ -456,26 +442,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
       console.error('Error updating borrower details:', error);
       setToast({ message: error.message || 'Failed to update borrower details.', type: 'error' });
     }
-  };
-
-  const handleDelete = (id) => {
-    setConfirmDeleteId(id);
-  };
-
-  const confirmDelete = async () => {
-    try {
-      await deleteBorrowingRecord(confirmDeleteId);
-      await fetchData();
-      setToast({ message: 'Borrowing record deleted successfully.', type: 'success' });
-      setConfirmDeleteId(null);
-    } catch (error) {
-      console.error('Error deleting borrowing:', error);
-      setToast({ message: 'Failed to delete borrowing record', type: 'error' });
-    }
-  };
-
-  const cancelDelete = () => {
-    setConfirmDeleteId(null);
   };
 
   const getConditionBadge = (condition) => {
@@ -655,7 +621,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
               <label className="bw-form-label">DATE</label>
               <div style={{ position: 'relative', width: '100%' }}>
                 <input
-                  ref={dateInputRef}
                   type="date"
                   className="bw-form-input"
                   value={formattedDate}
@@ -946,15 +911,6 @@ export default function AdminBorrowing({ equipmentInventory = [], onBorrowingCha
       </div>
 
       <NotificationToast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
-      <ConfirmModal
-        isOpen={Boolean(confirmDeleteId)}
-        title="Delete Borrowing Record"
-        message="Are you sure you want to delete this borrowing record?"
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
-      />
       
       {/* Borrower Details Modal */}
       {selectedBorrowerDetails && (

@@ -5,7 +5,7 @@ import LandingPage from "./pages/SplashScreen/LandingPage";
 import LoginPage from "./pages/LoginSignup/LoginPage";
 import RegisterPage from "./pages/LoginSignup/RegisterPage";
 import DocumentCenter from "./pages/SplashScreen/DocumentCenter";
-import PortalNavigationLoading from "./components/PortalNavigationLoading";
+import PortalNavigationLoading, { PortalNavigationReady } from "./components/PortalNavigationLoading";
 
 // Student Portal Pages
 const PublicCalendar = lazy(() => import("./pages/PublicCalendar/PublicCalendar"));
@@ -36,8 +36,12 @@ function App() {
   return (
     <Router>
       <PortalNavigationLoading>
-        {(displayLocation) => (
+        {({ displayLocation, markLocationRendered }) => (
           <Suspense fallback={null}>
+            <PortalNavigationReady
+              locationKey={`${displayLocation.pathname}${displayLocation.search}${displayLocation.hash}`}
+              onReady={markLocationRendered}
+            >
             <Routes location={displayLocation}>
         {/* Public Routes */}
         <Route path="/" element={<SplashScreen />} />
@@ -84,6 +88,7 @@ function App() {
         {/* Catch-all route for 404 */}
         <Route path="*" element={<Navigate to="/" />} />
             </Routes>
+            </PortalNavigationReady>
           </Suspense>
         )}
       </PortalNavigationLoading>

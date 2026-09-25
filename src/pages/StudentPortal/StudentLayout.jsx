@@ -1,37 +1,48 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import StudentSidebar from './StudentSidebar';
+import * as api from '../../services/api';
 import './StudentPortal.css';
 
 const StudentLayout = () => {
   const navigate = useNavigate();
+  const [authReady, setAuthReady] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
+    let active = true;
+    api.getCurrentUser()
+      .then((user) => {
+        if (String(user?.role || '').toLowerCase() !== 'student') {
+          navigate('/login', { replace: true });
+          return;
+        }
+        if (active) {
+          setAuthenticatedUser(user);
+          setAuthReady(true);
+        }
+      })
+      .catch((error) => console.warn('[AUTH] Student auth check failed', { status: error.status }));
 
-    if (!token || role !== 'student') {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
-      navigate('/login', { replace: true });
-    }
+    return () => { active = false; };
   }, [navigate]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
+  const handleLogout = async () => {
+    await api.logout();
     localStorage.removeItem('role');
     localStorage.removeItem('user');
-    try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
+    sessionStorage.removeItem('role');
+    sessionStorage.removeItem('user');
     navigate('/login');
   };
+
+  if (!authReady) return null;
 
   return (
     <div className="portal-container">
       <StudentSidebar onLogout={handleLogout} />
       <main className="main-content">
-        <Outlet />
+        <Outlet context={{ user: authenticatedUser }} />
       </main>
     </div>
   );

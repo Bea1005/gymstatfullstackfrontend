@@ -7,11 +7,117 @@ if (import.meta.env.PROD && /^http:\/\//i.test(configuredApiUrl)) {
 }
 
 const API_URL = configuredApiUrl;
+const configuredTimeout = Number(import.meta.env.VITE_API_TIMEOUT_MS);
+const API_TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+  ? configuredTimeout
+  : 15000;
+
+const isSafeMethod = (method) => ['GET', 'HEAD', 'OPTIONS'].includes(String(method || 'GET').toUpperCase());
+
+const createApiError = (message, code, details = {}) => {
+  const error = new Error(message);
+  error.code = code;
+  Object.assign(error, details);
+  return error;
+};
+
+const fetchWithTimeout = async (url, options = {}) => {
+  const timeoutController = new AbortController();
+  const externalSignal = options.signal;
+  let timeoutId;
+  let externalAbortHandler;
+
+  if (externalSignal?.aborted) {
+    throw createApiError('Request was cancelled.', 'REQUEST_ABORTED');
+  }
+
+  const requestSignal = typeof AbortSignal !== 'undefined'
+    && typeof AbortSignal.any === 'function'
+    && externalSignal
+    ? AbortSignal.any([externalSignal, timeoutController.signal])
+    : timeoutController.signal;
+
+  if (externalSignal && requestSignal === timeoutController.signal) {
+    externalAbortHandler = () => timeoutController.abort();
+    externalSignal.addEventListener('abort', externalAbortHandler, { once: true });
+  }
+
+  timeoutId = window.setTimeout(() => timeoutController.abort(), API_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: requestSignal,
+    });
+  } catch (error) {
+    if (externalSignal?.aborted) {
+      throw createApiError('Request was cancelled.', 'REQUEST_ABORTED', { cause: error });
+    }
+    if (timeoutController.signal.aborted) {
+      throw createApiError('The request timed out. Please try again.', 'REQUEST_TIMEOUT', { cause: error });
+    }
+    if (error?.name === 'AbortError') {
+      throw createApiError('Request was cancelled.', 'REQUEST_ABORTED', { cause: error });
+    }
+    throw createApiError('Unable to reach the server. Please check your connection and try again.', 'NETWORK_ERROR', { cause: error });
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (externalSignal && externalAbortHandler) {
+      externalSignal.removeEventListener('abort', externalAbortHandler);
+    }
+  }
+};
+
+const getCookie = (name) => {
+  if (typeof document === 'undefined') return '';
+  const prefix = `${name}=`;
+  return document.cookie.split('; ').find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) || '';
+};
+
+const clearClientSession = () => {
+  console.warn('[AUTH] Clearing client session');
+  localStorage.removeItem('role');
+  localStorage.removeItem('user');
+  sessionStorage.removeItem('role');
+  sessionStorage.removeItem('user');
+  localStorage.removeItem('token');
+  sessionStorage.removeItem('token');
+};
+
+let refreshPromise = null;
+
+const refreshSessionRequest = async () => {
+  const csrfToken = getCookie('csrfToken');
+
+  if (!refreshPromise) {
+    refreshPromise = fetchWithTimeout(`${API_URL}/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+    })
+      .then(async (response) => {
+        console.info('[AUTH] Refresh response', { status: response.status });
+        if (!response.ok) {
+          const error = new Error('Session expired');
+          error.status = response.status;
+          throw error;
+        }
+        return response.json();
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+};
 
 // List of public endpoints that don't require authentication
 const PUBLIC_ENDPOINTS = [
   '/login',
   '/register',
+  '/refresh',
+  '/logout',
   '/forgot-password',
   '/student/announcements',
   '/health',
@@ -29,7 +135,7 @@ const isPublicEndpoint = (endpoint, method = 'GET') => {
     return true;
   }
 
-  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/register') && method === 'POST') {
+  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/register' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
     return true;
   }
 
@@ -67,33 +173,34 @@ const apiRequest = async (endpoint, options = {}) => {
     // Check if this is a public endpoint
     const isPublic = isPublicEndpoint(endpoint, options.method || 'GET');
     
-    // Only add auth token for non-public endpoints
-    let sessionToken = null;
-    let localToken = null;
-    if (!isPublic) {
-      sessionToken = sessionStorage.getItem('token');
-      localToken = localStorage.getItem('token');
-      const token = sessionToken || localToken;
-      if (token && !headers['Authorization']) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-
     const fullUrl = `${API_URL}${endpoint}`;
 
-    let response = await fetch(fullUrl, {
+    let response = await fetchWithTimeout(fullUrl, {
       ...options,
+      credentials: 'include',
       headers,
     });
 
-    if (response.status === 401 && !isPublic && localToken && localToken !== sessionToken) {
-      response = await fetch(fullUrl, {
-        ...options,
-        headers: {
-          ...headers,
-          Authorization: `Bearer ${localToken}`,
-        },
-      });
+    if (response.status === 401 && !isPublic && !options.skipRefresh && isSafeMethod(options.method)) {
+      console.warn('[AUTH] Protected request returned 401', { endpoint });
+      try {
+        await refreshSessionRequest();
+        response = await fetchWithTimeout(fullUrl, {
+          ...options,
+          credentials: 'include',
+          headers,
+        });
+      } catch (error) {
+        if (error.status === 401 || error.status === 403) {
+          console.warn('[AUTH] Session is invalid; redirecting to login', { endpoint });
+          clearClientSession();
+          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            window.location.assign('/login?session=expired');
+          }
+        } else {
+          console.warn('[AUTH] Session refresh unavailable; preserving client session', { endpoint });
+        }
+      }
     }
     
     let data;
@@ -110,24 +217,14 @@ const apiRequest = async (endpoint, options = {}) => {
     }
     
     if (!response.ok) {
-      if (response.status === 401 && !isPublic && typeof window !== 'undefined') {
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('role');
-        sessionStorage.removeItem('user');
-        localStorage.removeItem('token');
-        localStorage.removeItem('role');
-        localStorage.removeItem('user');
-        if (window.location.pathname !== '/login') {
-          window.location.assign('/login?session=expired');
-        }
-      }
-
       const serverMessage = typeof data === 'object' && data !== null
         ? data.message || data.error
         : '';
-      throw new Error(serverMessage || (response.status >= 500
+      throw createApiError(serverMessage || (response.status >= 500
         ? 'The service is temporarily unavailable. Please try again.'
-        : `Request failed (${response.status}). Please check your information and try again.`));
+        : `Request failed (${response.status}). Please check your information and try again.`), 'API_ERROR', {
+        status: response.status,
+      });
     }
     
     return data;
@@ -143,6 +240,26 @@ export const login = async (id, password) => {
     method: 'POST',
     body: JSON.stringify({ id, password }),
   });
+};
+
+export const getCurrentUser = async () => {
+  const response = await apiRequest('/profile', { method: 'GET' });
+  return response.user;
+};
+
+export const logout = async () => {
+  const csrfToken = getCookie('csrfToken');
+  try {
+    await apiRequest('/logout', {
+      method: 'POST',
+      skipRefresh: true,
+      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+    });
+  } catch {
+    // Clear local UI state even if the server session is already unavailable.
+  } finally {
+    clearClientSession();
+  }
 };
 
 // Register with ID-based authentication
@@ -398,21 +515,16 @@ export const updateProfile = async (userData) => {
   });
 };
 
-export const getProtectedImageObjectUrl = async (endpoint) => {
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+export const getProtectedImageObjectUrl = async (endpoint, options = {}) => {
+  const response = await fetchWithTimeout(`${API_URL}${endpoint}`, {
+    ...options,
+    credentials: 'include',
   });
-  if (!response.ok) throw new Error('Unable to load profile photo');
+  if (!response.ok) {
+    throw createApiError('Unable to load profile photo', 'API_ERROR', { status: response.status });
+  }
   const blob = await response.blob();
   return URL.createObjectURL(blob);
-};
-
-// Get all students (for screener/admin)
-export const getStudents = async () => {
-  return apiRequest('/screener/students', {
-    method: 'GET',
-  });
 };
 
 // Verify student requirement (for screener)
@@ -586,20 +698,15 @@ export const deleteRequirement = async (requirementId) => {
 // Download a requirement file
 export const downloadRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
   try {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const headers = {
-      'Authorization': token ? `Bearer ${token}` : undefined
-    };
-
     const fullUrl = `${API_URL}/student/requirements/${requirementId}/download?participationType=${encodeURIComponent(participationType)}`;
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithTimeout(fullUrl, {
       method: 'GET',
-      headers: Object.fromEntries(Object.entries(headers).filter(([_, v]) => v != null))
+      credentials: 'include'
     });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to download file');
+      throw createApiError(errorData.message || 'Failed to download file', 'API_ERROR', { status: response.status });
     }
 
     const contentDisposition = response.headers.get('content-disposition');
@@ -629,20 +736,15 @@ export const downloadRequirement = async (requirementId, filename = 'requirement
 
 export const viewRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
   try {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const headers = {
-      'Authorization': token ? `Bearer ${token}` : undefined
-    };
-
     const fullUrl = `${API_URL}/student/requirements/${requirementId}/download?participationType=${encodeURIComponent(participationType)}`;
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithTimeout(fullUrl, {
       method: 'GET',
-      headers: Object.fromEntries(Object.entries(headers).filter(([_, v]) => v != null))
+      credentials: 'include'
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to open file');
+      throw createApiError(errorData.message || 'Failed to open file', 'API_ERROR', { status: response.status });
     }
 
     const blob = await response.blob();
@@ -787,21 +889,38 @@ export const deleteCoachAthlete = async (athleteId) => {
   });
 };
 
-// Update athlete status
-export const updateAthleteStatus = async (athleteId, status) => {
-  return apiRequest(`/coach/athletes/${athleteId}/status`, {
-    method: 'PUT',
-    body: JSON.stringify({ status }),
-  });
-};
-
 // ========== SCHEDULE REQUEST ENDPOINTS ==========
 
 // Create a new schedule request (PUBLIC - no auth required)
 export const createScheduleRequest = async (requestData) => {
+  const formData = new FormData();
+  const scalarFields = [
+    'eventName', 'requesterName', 'requesterEmail', 'requesterPhone',
+    'organization', 'purpose', 'details', 'startDate', 'startTime',
+    'endDate', 'endTime', 'prepDays', 'website', 'formStartedAt',
+  ];
+
+  scalarFields.forEach((key) => {
+    const value = requestData[key];
+    if (value !== undefined && value !== null) formData.set(key, String(value));
+  });
+
+  const file = requestData.file;
+  if (file instanceof Blob) {
+    formData.set('file', file, file.name || 'request-letter');
+  } else if (file?.data && typeof atob === 'function') {
+    const binary = atob(file.data);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const fileBlob = new Blob([bytes], { type: file.type || 'application/octet-stream' });
+    formData.set('file', fileBlob, file.name || 'request-letter');
+  }
+
+  if (!formData.has('website')) formData.append('website', '');
+  if (!formData.has('formStartedAt')) formData.append('formStartedAt', String(Date.now() - 1000));
+
   return apiRequest('/schedule-requests', {
     method: 'POST',
-    body: JSON.stringify(requestData),
+    body: formData,
   });
 };
 
@@ -816,6 +935,12 @@ export const getScheduleRequests = async (filters = {}) => {
 // Get schedule request by ID (Admin only)
 export const getScheduleRequestById = async (id) => {
   return apiRequest(`/schedule-requests/${id}`, {
+    method: 'GET',
+  });
+};
+
+export const getScheduleRequestFile = async (id) => {
+  return apiRequest(`/schedule-requests/${id}/file`, {
     method: 'GET',
   });
 };
@@ -923,7 +1048,6 @@ export default {
   updateUserArchiveStatus,
   archiveUsers,
   // Students
-  getStudents,
   verifyStudent,
   // Admin Requirements
   createRequirement,
@@ -949,7 +1073,6 @@ export default {
   getCoachUpdates,
   getCoachAthletes,
   updateCoachAthlete,
-  updateAthleteStatus,
   getCoachStudentDirectory,
   searchCoachStudents,
   // Schedule Requests

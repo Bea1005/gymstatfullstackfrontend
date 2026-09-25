@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
 import '../../components/ConfirmModal.css';
 import './AdminPortal.css';
 import { getProfile, updateProfile } from '../../services/api';
 import Icon from '../../components/Icon';
+import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from '../../constants/passwordPolicy';
 
 const AdminSettings = () => {
-  const navigate = useNavigate();
   const [adminInfo, setAdminInfo] = useState({
     email: '',
     notifications: true
   });
-  const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [settingsError, setSettingsError] = useState('');
@@ -24,7 +24,9 @@ const AdminSettings = () => {
   const closeToast = () => setToast({ message: '', type: 'success' });
 
   const openPasswordModal = () => {
+    setCurrentPassword('');
     setPasswordInput('');
+    setConfirmPassword('');
     setSettingsError('');
     setShowPasswordModal(true);
   };
@@ -36,23 +38,30 @@ const AdminSettings = () => {
   };
 
   const handleSavePassword = async () => {
-    if (!passwordInput) {
-      setSettingsError('Password is required.');
-      showToast('Password is required.', 'error');
+    if (!currentPassword || !passwordInput || !confirmPassword) {
+      setSettingsError('Current password, new password, and confirmation are required.');
+      showToast('Current password, new password, and confirmation are required.', 'error');
       return;
     }
 
-    if (passwordInput.length < 8) {
-      setSettingsError('Password must be at least 8 characters');
-      showToast('Password must be at least 8 characters', 'error');
+    if (!isPasswordValid(passwordInput)) {
+      setSettingsError(PASSWORD_POLICY_MESSAGE);
+      showToast(PASSWORD_POLICY_MESSAGE, 'error');
+      return;
+    }
+
+    if (passwordInput !== confirmPassword) {
+      setSettingsError('Passwords do not match.');
+      showToast('Passwords do not match.', 'error');
       return;
     }
 
     try {
-      const response = await updateProfile({ newPassword: passwordInput });
+      const response = await updateProfile({ currentPassword, newPassword: passwordInput });
       if (response.success) {
-        setNewPassword('');
+        setCurrentPassword('');
         setPasswordInput('');
+        setConfirmPassword('');
         setShowPasswordModal(false);
         setSettingsError('');
         showToast(response.message || 'Password changed successfully!', 'success');
@@ -220,6 +229,15 @@ const AdminSettings = () => {
             </div>
             <p className="modal-message">Enter a new password to update your account credentials.</p>
             <div className="modal-body">
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: 600 }}>Current Password</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="modal-input"
+                placeholder="Enter current password"
+                autoComplete="current-password"
+              />
               <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: 600 }}>New Password</label>
               <input
                 type="password"
@@ -227,6 +245,16 @@ const AdminSettings = () => {
                 onChange={(e) => setPasswordInput(e.target.value)}
                 className="modal-input"
                 placeholder="Enter new password"
+                autoComplete="new-password"
+              />
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: 600 }}>Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="modal-input"
+                placeholder="Confirm new password"
+                autoComplete="new-password"
               />
               {settingsError && <p className="modal-error">{settingsError}</p>}
             </div>

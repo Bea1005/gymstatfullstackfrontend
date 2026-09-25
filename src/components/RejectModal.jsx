@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ConfirmModal from './ConfirmModal';
 
 const predefinedReasons = [
@@ -10,15 +10,13 @@ const predefinedReasons = [
 ];
 
 export default function RejectModal({ isOpen, onCancel, onConfirm }) {
+  if (!isOpen) return null;
+  return <RejectModalDialog onCancel={onCancel} onConfirm={onConfirm} />;
+}
+
+function RejectModalDialog({ onCancel, onConfirm }) {
   const [reason, setReason] = useState('');
   const [remarks, setRemarks] = useState('');
-
-  useEffect(() => {
-    if (!isOpen) {
-      setReason('');
-      setRemarks('');
-    }
-  }, [isOpen]);
 
   const confirmAllowed = reason.trim().length > 0 || remarks.trim().length > 0;
 
@@ -29,7 +27,7 @@ export default function RejectModal({ isOpen, onCancel, onConfirm }) {
 
   return (
     <ConfirmModal
-      isOpen={isOpen}
+      isOpen
       title="Reject Requirement"
       message="Please select a reason for rejection and provide additional remarks (optional)."
       confirmText="Reject"

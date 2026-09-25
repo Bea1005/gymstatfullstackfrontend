@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getEquipment, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
@@ -43,6 +43,27 @@ const SPORTS_EQUIPMENT_OPTIONS = [
   'Volleyball Mikasa',
   'Racket'
 ];
+
+const calculateAvailable = (equipmentName, equipmentItems, borrowingRecords) => {
+  const activeEquipmentItems = (equipmentItems || []).filter(
+    (item) => (item?.condition || 'Good') !== 'Damaged'
+  );
+
+  if (!borrowingRecords || borrowingRecords.length === 0) {
+    return activeEquipmentItems.length;
+  }
+
+  const borrowedCount = borrowingRecords
+    .filter((record) => record.status === 'Out' && record.equipment === equipmentName)
+    .reduce((sum, record) => {
+      if (record.referenceIds && record.referenceIds.length) {
+        return sum + record.referenceIds.length;
+      }
+      return sum + (record.qty || 0);
+    }, 0);
+
+  return Math.max(0, activeEquipmentItems.length - borrowedCount);
+};
 
 export default function AdminEquipments({ borrowingRecords = [], onUpdateInventory }) {
   const [items, setItems] = useState([]);
@@ -167,30 +188,10 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
     }
   };
 
-  // Calculate available count (items not on loan)
-  const calculateAvailable = (equipmentName, equipmentItems) => {
-    const activeEquipmentItems = (equipmentItems || []).filter(
-      (item) => (item?.condition || 'Good') !== 'Damaged'
-    );
-
-    if (!borrowingRecords || borrowingRecords.length === 0) {
-      return activeEquipmentItems.length;
-    }
-
-    const borrowedCount = borrowingRecords
-      .filter(r => r.status === 'Out' && r.equipment === equipmentName)
-      .reduce((sum, r) => {
-        if (r.referenceIds && r.referenceIds.length) {
-          return sum + r.referenceIds.length;
-        }
-        return sum + (r.qty || 0);
-      }, 0);
-
-    return Math.max(0, activeEquipmentItems.length - borrowedCount);
-  };
+  const loadEquipmentFromServerEvent = useEffectEvent(loadEquipmentFromServer);
 
   useEffect(() => {
-    loadEquipmentFromServer();
+    loadEquipmentFromServerEvent();
   }, []);
 
   // Sync inventory with borrowing records
@@ -199,7 +200,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       setItems(prevItems => 
         prevItems.map(equipment => ({
           ...equipment,
-          available: calculateAvailable(equipment.name, equipment.items)
+          available: calculateAvailable(equipment.name, equipment.items, borrowingRecords)
         }))
       );
     }
@@ -330,7 +331,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
     if (equipment.available !== undefined) {
       return equipment.available;
     }
-    return calculateAvailable(equipment.name, equipment.items);
+    return calculateAvailable(equipment.name, equipment.items, borrowingRecords);
   };
 
   const generateEquipmentReport = async (filter) => {

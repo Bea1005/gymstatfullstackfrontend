@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
 import * as api from '../../services/api';
@@ -15,7 +15,6 @@ const TIMES = [
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const MAX_REQUEST_FILE_SIZE = 10 * 1024 * 1024;
 
 export default function PublicCalendar() {
   const navigate = useNavigate();
@@ -305,20 +304,25 @@ export default function PublicCalendar() {
   const availableStartTimes = getAvailableStartTimes();
   const availableEndTimes = getAvailableEndTimes();
 
-  useEffect(() => {
+  const synchronizeAvailableTimes = useEffectEvent(() => {
     setForm((current) => {
-      const nextStartTime = availableStartTimes.includes(current.startTime)
+      const validStartTimes = getAvailableStartTimes(current.startDate, current.endDate, current.endTime);
+      const nextStartTime = validStartTimes.includes(current.startTime)
         ? current.startTime
-        : (availableStartTimes[0] || current.startTime);
-      const nextEndTimes = getAvailableEndTimes(nextStartTime, current.startDate, current.endDate);
-      const nextEndTime = nextEndTimes.includes(current.endTime)
+        : (validStartTimes[0] || current.startTime);
+      const validEndTimes = getAvailableEndTimes(nextStartTime, current.startDate, current.endDate);
+      const nextEndTime = validEndTimes.includes(current.endTime)
         ? current.endTime
-        : (nextEndTimes[0] || current.endTime);
+        : (validEndTimes[0] || current.endTime);
 
       if (nextStartTime === current.startTime && nextEndTime === current.endTime) return current;
       return { ...current, startTime: nextStartTime, endTime: nextEndTime };
     });
-  }, [approvedSchedules, form.startDate, form.endDate, availableStartTimes, availableEndTimes]);
+  });
+
+  useEffect(() => {
+    synchronizeAvailableTimes();
+  }, [approvedSchedules, form.startDate, form.endDate, form.startTime, form.endTime]);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -341,12 +345,6 @@ export default function PublicCalendar() {
     if (!allowedTypes.includes(file.type) && !extOk) {
       setRequestFile({ name: '', type: '', data: '' });
       setFileError('Request letter must be a PDF, DOC, or DOCX file.');
-      return;
-    }
-
-    if (file.size > MAX_REQUEST_FILE_SIZE) {
-      setRequestFile({ name: '', type: '', data: '' });
-      setFileError('Request letter must be 10 MB or smaller.');
       return;
     }
 
@@ -446,7 +444,7 @@ export default function PublicCalendar() {
         endDate: form.endDate,
         endTime: form.endTime,
         prepDays: prepDaysValue,
-        file: requestFile
+        file: requestFile,
       };
 
       // Use the API function from api.js (PUBLIC endpoint - no auth needed)

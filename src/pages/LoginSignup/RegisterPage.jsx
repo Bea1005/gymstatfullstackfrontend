@@ -1,9 +1,10 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { register as registerUser } from "../../services/api";
-import { useNotifications } from "../../components/NotificationProvider";
+import { useNotifications } from "../../components/useNotifications";
 import Icon from "../../components/Icon";
 import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./RegisterPage.css";
 
 import gymBackground from "../../assets/gym-background.jpg";
@@ -30,42 +31,21 @@ export default function RegisterPage() {
 
   // Password validation function
   const validatePassword = (password) => {
-    if (password.length < 8) {
-      return "Password must be at least 8 characters long";
-    }
-    if (!/[A-Z]/.test(password)) {
-      return "Password must contain at least one uppercase letter";
-    }
-    if (!/[a-z]/.test(password)) {
-      return "Password must contain at least one lowercase letter";
-    }
-    if (!/[0-9]/.test(password)) {
-      return "Password must contain at least one number";
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      return "Password must contain at least one special character (!@#$%^&* etc.)";
-    }
-    return null;
+    return isPasswordValid(password) ? null : PASSWORD_POLICY_MESSAGE;
   };
 
   const handlePasswordChange = (e) => {
     setForm((prev) => ({ ...prev, password: e.target.value }));
   };
 
-  const validateIdForRoleDetection = (value) => {
+  const validateRegistrationId = (value) => {
     const trimmedValue = value.trim();
-    const isAdminId = trimmedValue.toLowerCase().startsWith("admin");
-    const isSixCharacterAdminId = trimmedValue.length === 6;
 
     if (!trimmedValue) {
       return "Please enter your ID.";
     }
 
-    if (isAdminId && trimmedValue.length !== 6) {
-      return "Admin ID must be exactly 6 characters long.";
-    }
-
-    if (!isAdminId && !isSixCharacterAdminId && trimmedValue.length < 7) {
+    if (trimmedValue.length < 7) {
       return "ID must be at least 7 characters long.";
     }
 
@@ -94,7 +74,7 @@ export default function RegisterPage() {
       return;
     }
 
-    const idValidationError = validateIdForRoleDetection(form.id);
+    const idValidationError = validateRegistrationId(form.id);
     if (idValidationError) {
       notify("warning", "Invalid ID", idValidationError);
       return;

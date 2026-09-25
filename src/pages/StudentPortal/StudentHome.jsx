@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import * as api from "../../services/api";
 import Icon from "../../components/Icon";
 import "./StudentPortal.css";
@@ -11,20 +11,11 @@ const UPDATES = [
 
 export default function StudentHomePage() {
   const navigate = useNavigate();
-  const [user] = useState(() => {
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return { name: "Athlete", email: "student@marsu.edu" };
-
-    try {
-      const userData = JSON.parse(storedUser);
-      return {
-        name: userData.fullname || userData.name || "Athlete",
-        email: userData.email || "student@marsu.edu"
-      };
-    } catch {
-      return { name: "Athlete", email: "student@marsu.edu" };
-    }
-  });
+  const { user: authenticatedUser } = useOutletContext();
+  const user = {
+    name: authenticatedUser?.fullname || "Athlete",
+    email: authenticatedUser?.email || "student@marsu.edu",
+  };
   const [stats, setStats] = useState({ pending: 0, approved: 0 });
   const [documentNotifications, setDocumentNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -47,15 +38,6 @@ export default function StudentHomePage() {
   }
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-
-    if (!token || role !== "student") {
-      alert("Unauthorized access. Please login.");
-      navigate("/login");
-      return;
-    }
-
     const fetchTimeout = setTimeout(fetchData, 0);
     return () => clearTimeout(fetchTimeout);
   }, [navigate]);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../../services/api';
-import { useNotifications } from '../../components/NotificationProvider';
+import { useNotifications } from '../../components/useNotifications';
 import Icon from '../../components/Icon';
 import './StudentPortal.css';
 
@@ -217,20 +217,6 @@ export default function StudentRequirements() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
-
-    if (!token || role !== 'student') {
-      // clear both storages on invalid auth
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* storage may be unavailable */ }
-      alert('Unauthorized access. Please login.');
-      navigate('/login');
-      return;
-    }
-
     fetchData();
   }, [navigate]);
 
@@ -259,11 +245,6 @@ export default function StudentRequirements() {
   }, []);
 
   const fetchData = async () => {
-    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
-    if (role !== 'student') {
-      return;
-    }
-
     try {
       setLoading(true);
 
@@ -588,11 +569,9 @@ export default function StudentRequirements() {
       console.log(`📥 Downloading requirement: ${req.title}`);
       setLoading(true);
       // Directly call the published requirement download endpoint (bypass api helper to ensure correct route)
-      const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-      const headers = token ? { Authorization: 'Bearer ' + token } : {};
       const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
       const fullUrl = `${apiBaseUrl}/requirements/${req._id}/download`;
-      const response = await fetch(fullUrl, { method: 'GET', headers });
+      const response = await fetch(fullUrl, { method: 'GET', credentials: 'include' });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -657,11 +636,9 @@ export default function StudentRequirements() {
     try {
       setLoading(true);
 
-      const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-      const headers = token ? { Authorization: 'Bearer ' + token } : {};
       const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
       const fullUrl = `${apiBaseUrl}/student/requirements/${submission._id}/download`;
-      const response = await fetch(fullUrl, { method: 'GET', headers });
+      const response = await fetch(fullUrl, { method: 'GET', credentials: 'include' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to download file');

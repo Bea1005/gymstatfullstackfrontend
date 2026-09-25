@@ -3,12 +3,14 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import logoImage from '../../assets/logo.png';
 import Icon from '../../components/Icon';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
+import * as api from '../../services/api';
 import './AdminPortal.css';
 
 const AdminLayout = () => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
   const navItems = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: (
@@ -69,28 +71,30 @@ const AdminLayout = () => {
   ];
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
+    let active = true;
+    api.getCurrentUser()
+      .then((user) => {
+        if (String(user?.role || '').toLowerCase() !== 'admin') {
+          navigate('/login', { replace: true });
+          return;
+        }
+        if (active) setAuthReady(true);
+      })
+      .catch((error) => console.warn('[AUTH] Admin auth check failed', { status: error.status }));
 
-    if (!token || role !== 'admin') {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* session storage may be unavailable */ }
-      navigate('/login', { replace: true });
-    }
+    return () => { active = false; };
   }, [navigate]);
 
   const handleLogout = () => {
     setShowLogoutModal(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutModal(false);
-    localStorage.removeItem('token');
+    await api.logout();
     localStorage.removeItem('role');
     localStorage.removeItem('user');
-    try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* session storage may be unavailable */ }
+    try { sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* session storage may be unavailable */ }
     navigate('/login');
   };
 
@@ -99,6 +103,8 @@ const AdminLayout = () => {
   };
 
   const closeMobileMenu = () => setMobileOpen(false);
+
+  if (!authReady) return null;
 
   return (
     <div className="admin-container">

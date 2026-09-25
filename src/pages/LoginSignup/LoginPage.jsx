@@ -1,7 +1,8 @@
 ﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword } from "../../services/api";
-import { useNotifications } from "../../components/NotificationProvider";
+import { useNotifications } from "../../components/useNotifications";
+import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./LoginPage.css";
 import gymBackground from "../../assets/gym-background.jpg";
 import Icon from '../../components/Icon';
@@ -60,22 +61,25 @@ export default function LoginPage() {
 
       if (data.success) {
         const resolvedRole = (data.user?.role || "student").toLowerCase();
+        console.info('[AUTH] Login success', {
+          userId: data.user?.id || data.user?._id || id,
+          role: resolvedRole,
+          sessionCookieVisible: document.cookie.includes('csrfToken='),
+        });
         const normalizedUser = {
           ...data.user,
           role: resolvedRole,
         };
 
-        localStorage.setItem("token", data.token);
         localStorage.setItem("role", resolvedRole);
         localStorage.setItem("user", JSON.stringify(normalizedUser));
-        // store session-scoped values so each tab retains its own session
         try {
-          sessionStorage.setItem("token", data.token);
           sessionStorage.setItem("role", resolvedRole);
           sessionStorage.setItem("user", JSON.stringify(normalizedUser));
         } catch (e) {
           console.warn('Session storage not available', e.message);
         }
+        console.info('[AUTH] User role saved', { role: resolvedRole });
 
         notify("success", "Login Successful", "Welcome back! Redirecting to your portal...");
 
@@ -181,9 +185,7 @@ export default function LoginPage() {
   };
 
   const validateNewPassword = () => {
-    if (!/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_-]).{8,}$/.test(forgotPasswordValue)) {
-      return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
-    }
+    if (!isPasswordValid(forgotPasswordValue)) return PASSWORD_POLICY_MESSAGE;
     if (forgotPasswordValue !== forgotConfirmPassword) {
       return "The new passwords do not match.";
     }

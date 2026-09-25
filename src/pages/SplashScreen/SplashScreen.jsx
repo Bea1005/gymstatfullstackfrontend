@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import logoImage from "../../assets/logo.png";
 import "./SplashScreen.css";
@@ -22,13 +22,15 @@ export default function SplashScreen() {
     navigate("/landingpage");
   };
 
+  const goToOnboardingEvent = useEffectEvent(goToOnboarding);
+
   useEffect(() => {
     if (redirectAttemptedRef.current) {
       return;
     }
 
     timerRef.current = setTimeout(() => {
-      goToOnboarding();
+      goToOnboardingEvent();
     }, 3000);
 
     return () => {

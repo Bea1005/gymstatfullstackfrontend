@@ -1,22 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
+import * as api from '../../services/api';
 import './CoachPortal.css';
 
 const CoachLayout = () => {
   const navigate = useNavigate();
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const role = sessionStorage.getItem('role') || localStorage.getItem('role');
+    let active = true;
+    api.getCurrentUser()
+      .then((user) => {
+        if (String(user?.role || '').toLowerCase() !== 'coach') {
+          navigate('/login', { replace: true });
+          return;
+        }
+        if (active) setAuthReady(true);
+      })
+      .catch((error) => console.warn('[AUTH] Coach auth check failed', { status: error.status }));
 
-    if (!token || role !== 'coach') {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('user');
-      try { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch(e) {}
-      navigate('/login', { replace: true });
-    }
+    return () => { active = false; };
   }, [navigate]);
+
+  if (!authReady) return null;
 
   return (
     <div className="portal-container coach-portal-shell">

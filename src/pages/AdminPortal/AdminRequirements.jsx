@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useEffectEvent } from 'react';
 import { createRequirement, publishRequirement, getAllRequirements, deleteAdminRequirement } from '../../services/api';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -18,11 +18,6 @@ const AdminRequirements = () => {
   const [uploadedReqs, setUploadedReqs] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  // Load requirements from MongoDB on component mount
-  useEffect(() => {
-    loadRequirements();
-  }, []);
 
   const loadRequirements = async () => {
     try {
@@ -60,6 +55,13 @@ const AdminRequirements = () => {
       setLoading(false);
     }
   };
+
+  const loadRequirementsOnMount = useEffectEvent(loadRequirements);
+
+  // Load requirements from MongoDB on component mount
+  useEffect(() => {
+    loadRequirementsOnMount();
+  }, []);
 
   const handleEntryFileChange = (entryId, e) => {
     const file = e.target.files?.[0] || null;

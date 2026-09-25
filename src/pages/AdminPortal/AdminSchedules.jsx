@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import DocumentViewer from '../../components/DocumentViewer';
@@ -176,44 +176,8 @@ const AdminSchedules = () => {
         console.error('Fallback error loading requests:', fallbackErr);
         setScheduleRequests([]);
       }
-    } finally {
     }
   };
-
-  useEffect(() => {
-    loadScheduleRequests();
-    loadSchedulesFromServer();
-    
-    const handleStorage = (e) => {
-      if (e.key === REQUESTS_KEY) loadScheduleRequests();
-      if (e.key === APPROVED_KEY) loadSchedulesFromServer();
-    };
-    
-    const handleCustomStorage = (e) => {
-      if (e.detail?.key === REQUESTS_KEY) loadScheduleRequests();
-      if (e.detail?.key === APPROVED_KEY) loadSchedulesFromServer();
-    };
-    
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('gymstatStorageUpdate', handleCustomStorage);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('gymstatStorageUpdate', handleCustomStorage);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key !== 'Escape') return;
-      if (confirmAction) return;
-      if (showModal) setShowModal(false);
-      else if (showNotAvailableModal) setShowNotAvailableModal(false);
-      else if (requestPanelOpen) closeRequestPanel();
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [confirmAction, requestPanelOpen, showModal, showNotAvailableModal]);
 
   const saveScheduleRequests = async (requests) => {
     try {
@@ -240,17 +204,59 @@ const AdminSchedules = () => {
     }
   };
 
+  const loadScheduleRequestsEvent = useEffectEvent(loadScheduleRequests);
+  const loadSchedulesFromServerEvent = useEffectEvent(loadSchedulesFromServer);
+  const closeRequestPanelEvent = useEffectEvent(closeRequestPanel);
+
+  useEffect(() => {
+    loadScheduleRequestsEvent();
+    loadSchedulesFromServerEvent();
+
+    const handleStorage = (event) => {
+      if (event.key === REQUESTS_KEY) loadScheduleRequestsEvent();
+      if (event.key === APPROVED_KEY) loadSchedulesFromServerEvent();
+    };
+
+    const handleCustomStorage = (event) => {
+      if (event.detail?.key === REQUESTS_KEY) loadScheduleRequestsEvent();
+      if (event.detail?.key === APPROVED_KEY) loadSchedulesFromServerEvent();
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('gymstatStorageUpdate', handleCustomStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('gymstatStorageUpdate', handleCustomStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape' || confirmAction) return;
+      if (showModal) setShowModal(false);
+      else if (showNotAvailableModal) setShowNotAvailableModal(false);
+      else if (requestPanelOpen) closeRequestPanelEvent();
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [confirmAction, requestPanelOpen, showModal, showNotAvailableModal]);
+
   const toggleRequestExpand = (id) => {
     setExpandedRequestId(expandedRequestId === id ? null : id);
   };
 
-  const getFileUrl = (file) => {
-    if (!file || !file.data) return '';
+  const getFileUrl = async (file) => {
+    if (!file) return '';
     try {
-      const byteString = atob(file.data);
-      const buffer = new Uint8Array(byteString.length);
-      for (let i = 0; i < byteString.length; i += 1) buffer[i] = byteString.charCodeAt(i);
-      const blob = new Blob([buffer], { type: file.type || file.mimetype || 'application/octet-stream' });
+      const blob = file.data
+        ? (() => {
+            const byteString = atob(file.data);
+            const buffer = new Uint8Array(byteString.length);
+            for (let i = 0; i < byteString.length; i += 1) buffer[i] = byteString.charCodeAt(i);
+            return new Blob([buffer], { type: file.type || file.mimetype || 'application/octet-stream' });
+          })()
+        : await api.getScheduleRequestFile(file.requestId).then((response) => response.blob());
       return URL.createObjectURL(blob);
     } catch (err) {
       console.error('Error creating file URL:', err);
@@ -258,10 +264,10 @@ const AdminSchedules = () => {
     }
   };
 
-  const openRequestAttachment = (file) => {
+  const openRequestAttachment = async (file) => {
     if (!file) return;
     if (previewFile.url) URL.revokeObjectURL(previewFile.url);
-    const url = getFileUrl(file);
+    const url = await getFileUrl(file);
     if (url) {
       setPreviewFile({
         url,
@@ -283,7 +289,9 @@ const AdminSchedules = () => {
     return {
       ...request,
       id: request.id || request._id || (request._id ? String(request._id) : undefined),
-      file: request.file || request.attachment || null,
+      file: request.file
+        ? { ...request.file, requestId: request.id || request._id }
+        : request.attachment || null,
       description: request.description || request.details || ''
     };
   };
@@ -774,7 +782,6 @@ const AdminSchedules = () => {
               const isContinuedRight = new Date(dateStr) < new Date(event.endDate);
               const cls = `mini-event ${isContinuedLeft ? 'cont-left' : ''} ${isContinuedRight ? 'cont-right' : ''}`;
               const sourceTone = normalizeScheduleSource(event) === 'public' ? 'mini-event--public' : 'mini-event--internal';
-              const dotTone = normalizeScheduleSource(event) === 'public' ? 'event-dot--public' : 'event-dot--internal';
               return (
                 <div key={idx} className={`${cls} ${sourceTone}`} title={`${event.event}\n${event.startTime} – ${event.endTime}`}>
                   <span className="event-name">{event.event.length > 20 ? event.event.substring(0, 18) + '...' : event.event}</span>
@@ -1131,8 +1138,8 @@ const AdminSchedules = () => {
                               <button
                                 type="button"
                                 className="btn-download-attachment"
-                                onClick={() => {
-                                  const url = getFileUrl(req.file);
+                                onClick={async () => {
+                                  const url = await getFileUrl(req.file);
                                   if (!url) {
                                     setToast({ message: 'Unable to download attachment', type: 'error' });
                                     return;
