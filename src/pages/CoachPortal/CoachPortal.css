@@ -409,6 +409,10 @@
   overflow: hidden;
   background: #ffffff;
 }
+.col-photo{
+  margin: 1px;
+  padding: 15px 5px;
+}
 
 .grid-col .col-photo img {
   width: 100%;
@@ -463,18 +467,21 @@
   justify-content: center;
   text-align: center;
   font-family: var(--form-sans);
-  font-size: clamp(8px, 0.72vw, 12px);
-  padding: 0 6px;
+  font-size: clamp(8px, 0.75vw, 12px);
   overflow: hidden;
   white-space: normal;
   text-overflow: ellipsis;
   overflow-wrap: anywhere;
   word-break: break-word;
-  line-height: 1.15;
+  line-height: 1.10;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
+}
+.col-info-row{
+  margin: 1px;
+  padding: 10px 1px;
 }
 .grid-col .col-info-row:last-child {
   border-bottom: none;
