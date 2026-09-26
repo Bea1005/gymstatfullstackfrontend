@@ -21,6 +21,8 @@ import noDocumentsStamp from '../../assets/GymstatStamps/NoDocuments.png';
 import * as api from '../../services/api';
 import './CoachPortal.css';
 
+const CAMPUS_OPTIONS = ['', 'Boac Main', 'Santa Cruz', 'Gasan', 'Torrijos'];
+
 // Both header logos now use the real uploaded assets — see imports above.
 
 const placeholderImg = logoImage;
@@ -1486,7 +1488,10 @@ export default function CoachRecord() {
                 <input value={editForm.location} onChange={(event) => setEditForm({ ...editForm, location: event.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <label>
-                Upload Photo
+                <select value={editForm.location} onChange={(event) => setEditForm({ ...editForm, location: event.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }}>
+                  {editForm.location && !CAMPUS_OPTIONS.includes(editForm.location) && <option value={editForm.location}>{editForm.location}</option>}
+                  {CAMPUS_OPTIONS.map((campus) => <option key={campus || 'unspecified'} value={campus}>{campus || 'Select campus'}</option>)}
+                </select>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
                   <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={handleFileSelect} ref={fileInputRef} style={{ flex: 1 }} />
                   {imagePreview && <img src={imagePreview} alt="Preview" style={{ width: '50px', height: '50px', objectFit: 'cover', border: '1px solid #ddd' }} />}

@@ -8,16 +8,10 @@ import DocumentViewer from '../../components/DocumentViewer';
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
+import usePortalSession from '../../hooks/usePortalSession';
 import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import './ScreenerPage.css';
 
-const configuredApiUrl = import.meta.env.VITE_API_URL || '/api';
-
-const resolveAttachmentUrl = (fileUrl) => {
-  if (!fileUrl) return '';
-  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-  return `${configuredApiUrl.replace(/\/$/, '')}/${fileUrl.replace(/^\//, '')}`;
-};
 
 const getFileExtension = (fileName = '') => {
   const normalizedName = String(fileName).toLowerCase();
@@ -47,30 +41,7 @@ const getRequirementFileUrl = (entry) => {
 };
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
-  const resolvedUrl = resolveAttachmentUrl(fileUrl);
-  const response = await fetch(resolvedUrl, {
-    cache: 'no-store',
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('Your Screener session has expired. Please log in again.');
-    }
-    if (response.status === 403) {
-      throw new Error('You are not authorized to view this document.');
-    }
-    if (response.status === 404) {
-      throw new Error('The uploaded document is no longer available in storage.');
-    }
-    throw new Error('Unable to load uploaded file. Please try again.');
-  }
-
-  const blob = await response.blob();
-  if (!blob.size) {
-    throw new Error('The uploaded document is empty.');
-  }
-  return URL.createObjectURL(blob);
+  return api.getProtectedImageObjectUrl(fileUrl, { cache: 'no-store' });
 };
 
 const ScreenerPage = () => {
@@ -86,7 +57,7 @@ const ScreenerPage = () => {
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [authReady, setAuthReady] = useState(false);
+  const { authReady } = usePortalSession(['screener', 'admin'], 'Screener');
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -101,23 +72,6 @@ const ScreenerPage = () => {
   const hasNotifiedLoadErrorRef = useRef(false);
   const hasLoadedSuccessfullyRef = useRef(false);
 
-  useEffect(() => {
-    let active = true;
-    api.getCurrentUser()
-      .then((user) => {
-        const role = String(user?.role || '').toLowerCase();
-        // Screener and admin may access the screening portal.
-        if (role !== 'screener' && role !== 'admin') {
-          navigate('/login', { replace: true });
-          return;
-        }
-        if (active) setAuthReady(true);
-      })
-      .catch((error) => console.warn('[AUTH] Screener auth check failed', { status: error.status }));
-
-    return () => { active = false; };
-  }, [navigate]);
-  
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
@@ -213,18 +167,13 @@ const ScreenerPage = () => {
   };
 
   useEffect(() => {
-    loadRequirementsEvent();
-  }, []);
+    if (!authReady) return undefined;
 
-  useEffect(() => {
+    loadRequirementsEvent();
     const refreshInterval = window.setInterval(() => {
       loadRequirementsEvent(true);
     }, 10000);
 
-    return () => window.clearInterval(refreshInterval);
-  }, []);
-
-  useEffect(() => {
     const handleRequirementUpdate = () => {
       loadRequirementsEvent(true);
     };
@@ -239,10 +188,11 @@ const ScreenerPage = () => {
     window.addEventListener('storage', handleStorageUpdate);
 
     return () => {
+      window.clearInterval(refreshInterval);
       window.removeEventListener('gymstat-requirement-updated', handleRequirementUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
     };
-  }, []);
+  }, [authReady]);
 
   useEffect(() => {
     let cancelled = false;

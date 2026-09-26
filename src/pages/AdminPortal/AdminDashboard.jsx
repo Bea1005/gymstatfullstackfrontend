@@ -17,8 +17,12 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     let mounted = true;
+    let fetching = false;
 
     const fetchDashboardData = async () => {
+      if (fetching) return;
+      fetching = true;
+
       try {
         const data = await api.getAdminDashboard();
         if (!mounted) return;
@@ -46,6 +50,8 @@ const AdminDashboard = () => {
         console.warn('Admin dashboard fetch error:', error);
         setActivities(DEMO_ACTIVITIES);
         setSchedules([]);
+      } finally {
+        fetching = false;
       }
     };
 
@@ -61,7 +67,7 @@ const AdminDashboard = () => {
       }
     };
 
-    const intervalId = window.setInterval(fetchDashboardData, 5000);
+    const intervalId = window.setInterval(fetchDashboardData, 30000);
     window.addEventListener('gymstat-schedule-updated', handleRefresh);
     window.addEventListener('storage', handleStorageRefresh);
 

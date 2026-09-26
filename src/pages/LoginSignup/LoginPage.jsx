@@ -20,6 +20,7 @@ export default function LoginPage() {
   const [forgotStep, setForgotStep] = useState("email");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotOtp, setForgotOtp] = useState("");
+  const [forgotResetToken, setForgotResetToken] = useState("");
   const [forgotPasswordValue, setForgotPasswordValue] = useState("");
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState("");
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
@@ -115,6 +116,7 @@ export default function LoginPage() {
     setForgotStep("email");
     setForgotEmail("");
     setForgotOtp("");
+    setForgotResetToken("");
     setForgotPasswordValue("");
     setForgotConfirmPassword("");
     setForgotValidationError("");
@@ -159,7 +161,11 @@ export default function LoginPage() {
     setForgotValidationError("");
     setForgotLoading(true);
     try {
-      await verifyPasswordResetOtp(forgotEmail, forgotOtp);
+      const verification = await verifyPasswordResetOtp(forgotEmail, forgotOtp);
+      if (!verification.resetToken) {
+        throw new Error("Unable to complete verification. Please request a new code.");
+      }
+      setForgotResetToken(verification.resetToken);
       setForgotStep("password");
     } catch (error) {
       notify("error", "Verification failed", error.message || "The code is invalid or expired.");
@@ -203,7 +209,7 @@ export default function LoginPage() {
     setForgotValidationError("");
     setForgotLoading(true);
     try {
-      await resetPassword(forgotEmail, forgotPasswordValue);
+      await resetPassword(forgotEmail, forgotResetToken, forgotPasswordValue);
       setForgotStep("success");
       notify("success", "Password reset successfully", "You can now log in with your new password.");
       window.setTimeout(resetForgotFlow, 1800);

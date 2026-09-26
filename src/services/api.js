@@ -7,6 +7,9 @@ if (import.meta.env.PROD && /^http:\/\//i.test(configuredApiUrl)) {
 }
 
 const API_URL = configuredApiUrl;
+const AUTH_ROLES = new Set(['student', 'coach', 'admin', 'screener']);
+const csrfTokenMemory = new Map();
+let csrfRecoveryPromise = null;
 const configuredTimeout = Number(import.meta.env.VITE_API_TIMEOUT_MS);
 const API_TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0
   ? configuredTimeout
@@ -21,9 +24,22 @@ const createApiError = (message, code, details = {}) => {
   return error;
 };
 
+const getPortalRole = () => {
+  try {
+    const storedRole = String(window.sessionStorage.getItem('role') || '').trim().toLowerCase();
+    if (AUTH_ROLES.has(storedRole)) return storedRole;
+  } catch (error) {
+    console.warn('[AUTH] Unable to read this tab portal context', { name: error?.name });
+  }
+
+  const routeRole = window.location?.pathname.match(/^\/(admin|student|coach|screener)(?:\/|$)/)?.[1];
+  return AUTH_ROLES.has(routeRole) ? routeRole : '';
+};
+
 const fetchWithTimeout = async (url, options = {}) => {
+  const { timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options;
   const timeoutController = new AbortController();
-  const externalSignal = options.signal;
+  const externalSignal = fetchOptions.signal;
   let timeoutId;
   let externalAbortHandler;
 
@@ -42,13 +58,16 @@ const fetchWithTimeout = async (url, options = {}) => {
     externalSignal.addEventListener('abort', externalAbortHandler, { once: true });
   }
 
-  timeoutId = window.setTimeout(() => timeoutController.abort(), API_TIMEOUT_MS);
+  timeoutId = window.setTimeout(() => timeoutController.abort(), timeoutMs);
 
   try {
-    return await fetch(url, {
-      ...options,
+    const response = await fetch(url, {
+      ...fetchOptions,
       signal: requestSignal,
     });
+    const responseCsrfToken = response.headers.get('x-csrf-token');
+    if (responseCsrfToken) csrfTokenMemory.set(getPortalRole(), responseCsrfToken);
+    return response;
   } catch (error) {
     if (externalSignal?.aborted) {
       throw createApiError('Request was cancelled.', 'REQUEST_ABORTED', { cause: error });
@@ -74,32 +93,88 @@ const getCookie = (name) => {
   return document.cookie.split('; ').find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) || '';
 };
 
+const getCsrfToken = () => {
+  const role = getPortalRole();
+  const scopedCookie = role ? getCookie(`csrfToken_${role}`) : '';
+  return scopedCookie || getCookie('csrfToken') || csrfTokenMemory.get(role) || '';
+};
+
+const recoverCsrfToken = () => {
+  const existingToken = getCsrfToken();
+  if (existingToken) return Promise.resolve(existingToken);
+
+  if (!csrfRecoveryPromise) {
+    csrfRecoveryPromise = fetchWithTimeout(`${API_URL}/csrf`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: getPortalRole() ? { 'X-Portal-Role': getPortalRole() } : {},
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw createApiError('Unable to recover the CSRF token.', 'CSRF_RECOVERY_FAILED', {
+            status: response.status,
+          });
+        }
+        return getCsrfToken();
+      })
+      .finally(() => {
+        csrfRecoveryPromise = null;
+      });
+  }
+
+  return csrfRecoveryPromise;
+};
+
 const clearClientSession = () => {
   console.warn('[AUTH] Clearing client session');
-  localStorage.removeItem('role');
-  localStorage.removeItem('user');
-  sessionStorage.removeItem('role');
-  sessionStorage.removeItem('user');
-  localStorage.removeItem('token');
-  sessionStorage.removeItem('token');
+  for (const storageName of ['localStorage', 'sessionStorage']) {
+    try {
+      const storage = window[storageName];
+      storage.removeItem('role');
+      storage.removeItem('user');
+      storage.removeItem('token');
+    } catch (error) {
+      console.warn('[AUTH] Unable to clear cached profile metadata', { name: error?.name });
+    }
+  }
+  csrfTokenMemory.clear();
+  currentUserRequest = null;
 };
 
 let refreshPromise = null;
+let currentUserRequest = null;
+let sessionExpiryRedirectStarted = false;
+
+const clearExpiredSessionAndRedirect = () => {
+  clearClientSession();
+  if (typeof window !== 'undefined'
+    && window.location.pathname !== '/login'
+    && !sessionExpiryRedirectStarted) {
+    sessionExpiryRedirectStarted = true;
+    window.location.assign('/login?session=expired');
+  }
+};
 
 const refreshSessionRequest = async () => {
-  const csrfToken = getCookie('csrfToken');
-
   if (!refreshPromise) {
-    refreshPromise = fetchWithTimeout(`${API_URL}/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
-    })
+    refreshPromise = recoverCsrfToken()
+      .then((csrfToken) => fetchWithTimeout(`${API_URL}/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+          ...(getPortalRole() ? { 'X-Portal-Role': getPortalRole() } : {}),
+        },
+      }))
       .then(async (response) => {
         console.info('[AUTH] Refresh response', { status: response.status });
         if (!response.ok) {
-          const error = new Error('Session expired');
+          const error = new Error(response.status === 401
+            ? 'Session expired'
+            : 'Unable to refresh session. Please try again later.');
           error.status = response.status;
+          if (response.status === 401) error.code = 'SESSION_EXPIRED';
           throw error;
         }
         return response.json();
@@ -110,6 +185,21 @@ const refreshSessionRequest = async () => {
   }
 
   return refreshPromise;
+};
+
+const retryProtectedRequest = async (url, requestOptions) => {
+  const retry = () => fetchWithTimeout(url, requestOptions);
+  if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+    return navigator.locks.request('gymstat-auth-refresh', async () => {
+      const responseAfterWaiting = await retry();
+      if (responseAfterWaiting.status !== 401) return responseAfterWaiting;
+      await refreshSessionRequest();
+      return retry();
+    });
+  }
+
+  await refreshSessionRequest();
+  return retry();
 };
 
 // List of public endpoints that don't require authentication
@@ -160,6 +250,8 @@ const apiRequest = async (endpoint, options = {}) => {
     const headers = {
       ...options.headers,
     };
+    const portalRole = getPortalRole();
+    if (portalRole) headers['X-Portal-Role'] = portalRole;
 
     // Only add Content-Type for non-FormData requests
     // DON'T set Content-Type for FormData - browser will set it with boundary
@@ -170,9 +262,16 @@ const apiRequest = async (endpoint, options = {}) => {
       delete headers['Content-Type'];
     }
 
+    if (!isSafeMethod(options.method)) {
+      const csrfToken = getCsrfToken();
+      if (csrfToken && !Object.keys(headers).some((name) => name.toLowerCase() === 'x-csrf-token')) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+    }
+
     // Check if this is a public endpoint
     const isPublic = isPublicEndpoint(endpoint, options.method || 'GET');
-    
+
     const fullUrl = `${API_URL}${endpoint}`;
 
     let response = await fetchWithTimeout(fullUrl, {
@@ -184,21 +283,22 @@ const apiRequest = async (endpoint, options = {}) => {
     if (response.status === 401 && !isPublic && !options.skipRefresh && isSafeMethod(options.method)) {
       console.warn('[AUTH] Protected request returned 401', { endpoint });
       try {
-        await refreshSessionRequest();
-        response = await fetchWithTimeout(fullUrl, {
+        response = await retryProtectedRequest(fullUrl, {
           ...options,
           credentials: 'include',
           headers,
         });
+        if (response.status === 401) {
+          console.warn('[AUTH] Protected request remained unauthorized after refresh', { endpoint });
+          clearExpiredSessionAndRedirect();
+        }
       } catch (error) {
-        if (error.status === 401 || error.status === 403) {
+        if (error.code === 'SESSION_EXPIRED') {
           console.warn('[AUTH] Session is invalid; redirecting to login', { endpoint });
-          clearClientSession();
-          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-            window.location.assign('/login?session=expired');
-          }
+          clearExpiredSessionAndRedirect();
         } else {
           console.warn('[AUTH] Session refresh unavailable; preserving client session', { endpoint });
+          throw error;
         }
       }
     }
@@ -236,27 +336,53 @@ const apiRequest = async (endpoint, options = {}) => {
 
 // Auth Endpoints - Using ID instead of email
 export const login = async (id, password) => {
-  return apiRequest('/login', {
+  const previousRole = getPortalRole();
+  const result = await apiRequest('/login', {
     method: 'POST',
     body: JSON.stringify({ id, password }),
   });
+  const authenticatedRole = String(result?.user?.role || '').toLowerCase();
+  const csrfToken = csrfTokenMemory.get(previousRole);
+  if (AUTH_ROLES.has(authenticatedRole) && csrfToken) {
+    csrfTokenMemory.set(authenticatedRole, csrfToken);
+  }
+  currentUserRequest = null;
+  sessionExpiryRedirectStarted = false;
+  return result;
 };
 
-export const getCurrentUser = async () => {
-  const response = await apiRequest('/profile', { method: 'GET' });
-  return response.user;
+export const getCurrentUser = async ({ force = false } = {}) => {
+  if (force) {
+    const response = await apiRequest('/profile', { method: 'GET' });
+    return response.user;
+  }
+
+  if (!currentUserRequest) {
+    const request = apiRequest('/profile', { method: 'GET' }).then((response) => response.user);
+    const trackedRequest = request.finally(() => {
+      if (currentUserRequest === trackedRequest) currentUserRequest = null;
+    });
+    currentUserRequest = trackedRequest;
+  }
+  return currentUserRequest;
 };
 
 export const logout = async () => {
-  const csrfToken = getCookie('csrfToken');
   try {
+    const csrfToken = await recoverCsrfToken();
     await apiRequest('/logout', {
       method: 'POST',
       skipRefresh: true,
-      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+      headers: {
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...(getPortalRole() ? { 'X-Portal-Role': getPortalRole() } : {}),
+      },
     });
-  } catch {
-    // Clear local UI state even if the server session is already unavailable.
+  } catch (error) {
+    console.warn('[AUTH] Logout request failed; clearing local session', {
+      code: error?.code,
+      status: error?.status,
+    });
   } finally {
     clearClientSession();
   }
@@ -293,10 +419,10 @@ export const verifyPasswordResetOtp = async (email, otp) => {
   });
 };
 
-export const resetPassword = async (email, newPassword) => {
+export const resetPassword = async (email, resetToken, newPassword) => {
   return apiRequest('/forgot-password/reset', {
     method: 'POST',
-    body: JSON.stringify({ email, newPassword }),
+    body: JSON.stringify({ email, resetToken, newPassword }),
   });
 };
 
@@ -307,6 +433,7 @@ export const getEquipment = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   return apiRequest(`/admin/equipment?${params}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
@@ -404,6 +531,7 @@ export const getBorrowingRecords = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   return apiRequest(`/admin/borrowing?${params}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
@@ -449,6 +577,7 @@ export const getBorrowingStats = async () => {
 export const getAdminDashboard = async () => {
   return apiRequest('/admin/dashboard', {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
@@ -465,6 +594,7 @@ export const getAllUsers = async (role = null) => {
 export const getAdminStudents = async (accountStatus = 'active') => {
   return apiRequest(`/users?role=student&accountStatus=${accountStatus}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
@@ -472,6 +602,7 @@ export const getAdminStudents = async (accountStatus = 'active') => {
 export const getAdminScreeners = async (accountStatus = 'active') => {
   return apiRequest(`/users?role=screener&accountStatus=${accountStatus}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
@@ -516,9 +647,13 @@ export const updateProfile = async (userData) => {
 };
 
 export const getProtectedImageObjectUrl = async (endpoint, options = {}) => {
+  const headers = { ...options.headers };
+  const portalRole = getPortalRole();
+  if (portalRole) headers['X-Portal-Role'] = portalRole;
   const response = await fetchWithTimeout(`${API_URL}${endpoint}`, {
     ...options,
     credentials: 'include',
+    headers,
   });
   if (!response.ok) {
     throw createApiError('Unable to load profile photo', 'API_ERROR', { status: response.status });
@@ -929,6 +1064,7 @@ export const getScheduleRequests = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   return apiRequest(`/schedule-requests?${params}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 

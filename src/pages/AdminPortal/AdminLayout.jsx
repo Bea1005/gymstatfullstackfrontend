@@ -1,16 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import logoImage from '../../assets/logo.png';
 import Icon from '../../components/Icon';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import * as api from '../../services/api';
+import usePortalSession from '../../hooks/usePortalSession';
 import './AdminPortal.css';
 
 const AdminLayout = () => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [authReady, setAuthReady] = useState(false);
+  const { authReady } = usePortalSession(['admin'], 'Admin');
 
   const navItems = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: (
@@ -69,21 +70,6 @@ const AdminLayout = () => {
       <Icon name="settings" />
     ) },
   ];
-
-  useEffect(() => {
-    let active = true;
-    api.getCurrentUser()
-      .then((user) => {
-        if (String(user?.role || '').toLowerCase() !== 'admin') {
-          navigate('/login', { replace: true });
-          return;
-        }
-        if (active) setAuthReady(true);
-      })
-      .catch((error) => console.warn('[AUTH] Admin auth check failed', { status: error.status }));
-
-    return () => { active = false; };
-  }, [navigate]);
 
   const handleLogout = () => {
     setShowLogoutModal(true);

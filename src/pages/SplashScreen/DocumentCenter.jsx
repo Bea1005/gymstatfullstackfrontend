@@ -1,18 +1,19 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './DocumentCenter.css';
-import borrowersPdf from '../../assets/borrowers-template.pdf';
+import borrowersTemplatePdf from '../../assets/borrowers-template.pdf';
 
 const documents = [
   {
-    id: 'borrowers-form',
-    fileName: "Borrower's_Form_Template.pdf",
-    // point to bundled asset
-    fileUrl: borrowersPdf,
+    id: 'equipment-borrowing-request',
+    title: 'Equipment Borrowing Request',
+    fileName: 'borrowers-template.pdf',
+    fileUrl: borrowersTemplatePdf,
   },
   {
-    id: 'gymnasium-request',
-    fileName: 'Gymnasium_Request_Letter_Template.docx',
+    id: 'gymnasium-schedule-request',
+    fileName: 'gymnasium_schedule_request.docx',
+    fileUrl: '/documents/gymnasium_schedule_request.docx',
   },
 ];
 
@@ -35,9 +36,9 @@ const DocumentCenter = () => {
       <div className="downloads-section">
         <div className="downloads-header">
           <h1 className="downloads-title">DOWNLOADS</h1>
-          <h2 className="downloads-subtitle">Download forms and official request templates</h2>
+          <h2 className="downloads-subtitle">Download forms and schedule templates</h2>
           <p className="document-center-description">
-            Access the most requested .docx forms for gymnasium schedule requests, equipment borrowing, and official correspondence.
+            Access the most requested forms for gymnasium schedule requests and equipment borrowing.
           </p>
         </div>
         
@@ -61,26 +62,34 @@ const DocumentCenter = () => {
               </div>
 
               <a 
-                href={doc.fileUrl || `/documents/${doc.fileName}`} 
-                download 
+                href={doc.fileUrl}
+                download={doc.fileName}
                 className="file-name-link"
               >
-                {(doc.fileName || doc.fileUrl).toString().replace(/_/g, ' ')}
+                {(doc.title || doc.fileName).toString().replace(/_/g, ' ')}
               </a>
 
               <div className="card-actions">
-                <button className="action-btn" title="Preview">
+                <a
+                  href={doc.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="action-btn"
+                  title="Preview document"
+                  aria-label={`Open ${doc.fileName}`}
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                   </svg>
-                </button>
+                </a>
 
                 <a 
-                  href={doc.fileUrl || `/documents/${doc.fileName}`} 
-                  download 
+                  href={doc.fileUrl}
+                  download={doc.fileName}
                   className="action-btn" 
                   title="Download"
+                  aria-label={`Download ${doc.fileName}`}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
