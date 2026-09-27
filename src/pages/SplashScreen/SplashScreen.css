@@ -995,6 +995,95 @@ body {
   color: var(--accent-gold);
 }
 
+.landing-footer-support ul li button {
+  color: #ffffff;
+  font-weight: 400;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.landing-footer-support ul li button:hover,
+.landing-footer-support ul li button:focus-visible {
+  color: var(--accent-gold);
+  text-decoration-color: currentColor;
+}
+
+.landing-footer-support ul li button:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 3px;
+}
+
+.landing-policy-page {
+  min-height: 100vh;
+  padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 5vw, 2rem);
+  background: #fff;
+  color: #292929;
+}
+
+.landing-policy-page__content {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.landing-policy-page__back {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-bottom: 2rem;
+  color: #7b1e1e;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.landing-policy-page__back:hover,
+.landing-policy-page__back:focus-visible {
+  color: #4a0e0e;
+}
+
+.landing-policy-page__back:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 3px;
+}
+
+.landing-policy-page h1 {
+  margin: 0 0 2rem;
+  color: #5e1414;
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.landing-policy-page__section + .landing-policy-page__section {
+  margin-top: 1.7rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid #eadfdf;
+}
+
+.landing-policy-page h2 {
+  margin: 0 0 0.55rem;
+  color: #7b1e1e;
+  font-size: 1.08rem;
+  line-height: 1.4;
+}
+
+.landing-policy-page p {
+  margin: 0 0 0.85rem;
+  color: #333;
+  font-size: 1rem;
+  line-height: 1.75;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.landing-policy-page p:last-child {
+  margin-bottom: 0;
+}
+
 .landing-footer-bottom {
   max-width: 1200px;
   margin: 0 auto;

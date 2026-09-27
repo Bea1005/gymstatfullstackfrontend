@@ -275,6 +275,14 @@ const LandingPage = () => {
               <p>Follow us for updates and announcements</p>
             </div>
           </div>
+
+          <div className="landing-footer-section landing-footer-support">
+            <h5>Support</h5>
+            <ul>
+              <li><button onClick={() => navigate('/terms-of-service')}>Terms of Service</button></li>
+              <li><button onClick={() => navigate('/privacy-policy')}>GYMSTAT Privacy Policy</button></li>
+            </ul>
+          </div>
         </div>
 
         <div className="landing-footer-bottom">

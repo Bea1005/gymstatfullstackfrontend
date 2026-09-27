@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as api from '../../services/api';
 import { useNotifications } from '../../components/useNotifications';
 import Icon from '../../components/Icon';
@@ -681,7 +681,11 @@ export default function StudentRequirements() {
         <span>
           <strong>I certify that the requirements I am submitting are true, valid, and belong to me. I understand that submitting false, invalid, or unauthorized documents may result in the rejection of my requirements.</strong>
           <span className="requirements-assurance__terms">
-            By submitting these requirements, you agree to the system’s Terms of Service and Privacy Policy and confirm that the information and documents provided are accurate.
+            By submitting these requirements, you agree to the system’s{' '}
+            <Link to="/student/terms-of-service">Terms of Service</Link>
+            {' | '}
+            <Link to="/student/privacy-policy">Privacy Policy</Link>
+            {' '}and confirm that the information and documents provided are accurate.
           </span>
         </span>
       </label>

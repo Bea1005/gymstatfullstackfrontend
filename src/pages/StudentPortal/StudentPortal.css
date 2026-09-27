@@ -2551,6 +2551,65 @@ table tbody tr:has(.badge-declined) {
   color: #5e3b3b;
 }
 
+.requirements-assurance__terms a {
+  color: #7b1e1e;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.requirements-assurance__terms a:hover,
+.requirements-assurance__terms a:focus-visible {
+  color: #4a0e0e;
+}
+
+.student-policy-page {
+  width: 100%;
+  max-width: 880px;
+  min-height: calc(100vh - 56px);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3.5rem);
+  background: #fff;
+  color: #333;
+}
+
+.student-policy-page__back {
+  display: inline-block;
+  margin-bottom: 2rem;
+  color: #7b1e1e;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.student-policy-page h1 {
+  margin-bottom: 2rem;
+  color: #4a0e0e;
+  font-size: clamp(1.65rem, 4vw, 2.2rem);
+  line-height: 1.25;
+}
+
+.student-policy-page section + section {
+  margin-top: 1.5rem;
+}
+
+.student-policy-page h2 {
+  margin-bottom: 0.45rem;
+  color: #5e1414;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.student-policy-page p {
+  color: #3d3d3d;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.main-content:has(.student-policy-page) {
+  background: #fff;
+}
+
 .detail-modal-body {
   padding: 1.5rem;
   overflow-y: auto;
@@ -2771,6 +2830,12 @@ table tbody tr:has(.badge-declined) {
 .notification-bell-container {
   top: clamp(12px, 1.6vw, 20px);
   right: clamp(12px, 1.6vw, 20px);
+}
+
+@media (max-width: 768px) {
+  .requirements-page .notification-bell-container {
+    right: calc(14px + 42px + 12px);
+  }
 }
 
 .notification-bell {

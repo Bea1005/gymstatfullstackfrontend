@@ -14,6 +14,7 @@ const StudentHomePage = lazy(() => import("./pages/StudentPortal/StudentHome"));
 const StudentRequirements = lazy(() => import("./pages/StudentPortal/StudentRequirements"));
 const StudentProfile = lazy(() => import("./pages/StudentPortal/StudentProfile"));
 const StudentSettings = lazy(() => import("./pages/StudentPortal/StudentSettings"));
+const StudentPolicyPage = lazy(() => import("./pages/StudentPortal/StudentPolicyPage"));
 
 // Admin Portal Pages
 const AdminLayout = lazy(() => import("./pages/AdminPortal/AdminLayout"));
@@ -31,6 +32,7 @@ const CoachRecords = lazy(() => import("./pages/CoachPortal/CoachRecords"));
 
 // Screener Portal Pages
 const ScreenerPage = lazy(() => import("./pages/ScreenerPortal/ScreenerPage"));
+const LandingPolicyPage = lazy(() => import("./pages/SplashScreen/LandingPolicyPage"));
 
 function App() {
   return (
@@ -46,6 +48,8 @@ function App() {
         {/* Public Routes */}
         <Route path="/" element={<SplashScreen />} />
         <Route path="/landingpage" element={<LandingPage />} />
+        <Route path="/terms-of-service" element={<LandingPolicyPage policy="terms" />} />
+        <Route path="/privacy-policy" element={<LandingPolicyPage policy="privacy" />} />
         {/* role selection removed - onboarding now goes to login */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -59,6 +63,8 @@ function App() {
           <Route index element={<Navigate to="/student/home" />} />
           <Route path="home" element={<StudentHomePage />} />
           <Route path="requirements" element={<StudentRequirements />} />
+          <Route path="terms-of-service" element={<StudentPolicyPage policy="terms" />} />
+          <Route path="privacy-policy" element={<StudentPolicyPage policy="privacy" />} />
           <Route path="profile" element={<StudentProfile />} />
           <Route path="settings" element={<StudentSettings />} />
         </Route>
