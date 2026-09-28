@@ -492,6 +492,34 @@ body {
   transform: translateY(-2px);
 }
 
+.sh-content .sh-quick-tip {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--gold-primary);
+}
+
+.sh-quick-tip h2 {
+  margin-bottom: 6px;
+  color: var(--maroon-dark);
+  font-size: clamp(1rem, 1.2vw, 1.1rem);
+  line-height: 1.35;
+}
+
+.sh-quick-tip p {
+  max-width: 900px;
+  color: var(--text-light);
+  font-size: clamp(0.875rem, 0.95vw, 0.95rem);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.sh-quick-tip .sh-quick-tip__support {
+  margin-top: 8px;
+  color: var(--maroon-dark);
+  font-size: 0.85rem;
+}
+
 .sh-updates-header {
   display: flex;
   justify-content: space-between;
@@ -2894,6 +2922,16 @@ table tbody tr:has(.badge-declined) {
     justify-content: flex-start;
   }
 
+  .sh-notification-panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 76px);
+    right: auto;
+    left: 50%;
+    width: min(360px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    transform: translateX(-50%);
+  }
+
   .sh-welcome-card {
     flex-direction: column;
     align-items: flex-start;
@@ -2925,6 +2963,10 @@ table tbody tr:has(.badge-declined) {
 }
 
 @media (max-width: 640px) {
+  .sh-notification-panel {
+    top: calc(env(safe-area-inset-top) + 68px);
+  }
+
   .sidebar {
     width: min(82vw, 280px);
     height: 100dvh;

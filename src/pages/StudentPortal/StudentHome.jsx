@@ -176,6 +176,16 @@ export default function StudentHomePage() {
            </button>
          </div>
 
+           <section className="sh-quick-tip" aria-labelledby="sh-quick-tip-title">
+             <h2 id="sh-quick-tip-title">GYMSTAT Quick Tip</h2>
+             <p>
+               Keep your student information and submitted requirements updated. Before uploading a document, make sure it is clear, complete, valid, and belongs to you. Regularly check your requirement status and notifications so you do not miss important updates.
+             </p>
+             <p className="sh-quick-tip__support">
+               Tip: Check your Requirements page regularly for pending or updated submissions.
+             </p>
+           </section>
+
       </div>
     </div>
   );
