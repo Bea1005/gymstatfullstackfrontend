@@ -247,22 +247,23 @@ const isPublicEndpoint = (endpoint, method = 'GET') => {
 // Helper function for API requests with proper token handling
 const apiRequest = async (endpoint, options = {}) => {
   try {
+    const { responseType, ...requestOptions } = options;
     const headers = {
-      ...options.headers,
+      ...requestOptions.headers,
     };
     const portalRole = getPortalRole();
     if (portalRole) headers['X-Portal-Role'] = portalRole;
 
     // Only add Content-Type for non-FormData requests
     // DON'T set Content-Type for FormData - browser will set it with boundary
-    if (!(options.body instanceof FormData)) {
+    if (!(requestOptions.body instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
     } else {
       // Remove Content-Type for FormData (browser will add it)
       delete headers['Content-Type'];
     }
 
-    if (!isSafeMethod(options.method)) {
+    if (!isSafeMethod(requestOptions.method)) {
       const csrfToken = getCsrfToken();
       if (csrfToken && !Object.keys(headers).some((name) => name.toLowerCase() === 'x-csrf-token')) {
         headers['X-CSRF-Token'] = csrfToken;
@@ -270,21 +271,21 @@ const apiRequest = async (endpoint, options = {}) => {
     }
 
     // Check if this is a public endpoint
-    const isPublic = isPublicEndpoint(endpoint, options.method || 'GET');
+    const isPublic = isPublicEndpoint(endpoint, requestOptions.method || 'GET');
 
     const fullUrl = `${API_URL}${endpoint}`;
 
     let response = await fetchWithTimeout(fullUrl, {
-      ...options,
+      ...requestOptions,
       credentials: 'include',
       headers,
     });
 
-    if (response.status === 401 && !isPublic && !options.skipRefresh && isSafeMethod(options.method)) {
+    if (response.status === 401 && !isPublic && !requestOptions.skipRefresh && isSafeMethod(requestOptions.method)) {
       console.warn('[AUTH] Protected request returned 401', { endpoint });
       try {
         response = await retryProtectedRequest(fullUrl, {
-          ...options,
+          ...requestOptions,
           credentials: 'include',
           headers,
         });
@@ -302,6 +303,8 @@ const apiRequest = async (endpoint, options = {}) => {
         }
       }
     }
+
+    if (responseType === 'response' && response.ok) return response;
     
     let data;
     const contentType = response.headers.get('content-type');
@@ -832,18 +835,12 @@ export const deleteRequirement = async (requirementId) => {
 };
 
 // Download a requirement file
-export const downloadRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
+const downloadFileToBrowser = async (endpoint, filename) => {
   try {
-    const fullUrl = `${API_URL}/student/requirements/${requirementId}/download?participationType=${encodeURIComponent(participationType)}`;
-    const response = await fetchWithTimeout(fullUrl, {
+    const response = await apiRequest(endpoint, {
       method: 'GET',
-      credentials: 'include'
+      responseType: 'response',
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw createApiError(errorData.message || 'Failed to download file', 'API_ERROR', { status: response.status });
-    }
 
     const contentDisposition = response.headers.get('content-disposition');
     let finalFilename = filename;
@@ -863,11 +860,20 @@ export const downloadRequirement = async (requirementId, filename = 'requirement
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
 
-    return { success: true, message: 'File downloaded successfully' };
+    return { success: true, message: 'File downloaded successfully', filename: finalFilename };
   } catch (error) {
     console.error('❌ Download error:', error);
     throw error;
   }
+};
+
+export const downloadPublishedRequirement = async (requirementId, filename = 'requirement.pdf') => {
+  return downloadFileToBrowser(`/requirements/${encodeURIComponent(requirementId)}/download`, filename);
+};
+
+export const downloadRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
+  const endpoint = `/student/requirements/${encodeURIComponent(requirementId)}/download?participationType=${encodeURIComponent(participationType)}`;
+  return downloadFileToBrowser(endpoint, filename);
 };
 
 export const viewRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {

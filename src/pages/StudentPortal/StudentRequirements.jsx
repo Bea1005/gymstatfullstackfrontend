@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as api from '../../services/api';
 import { useNotifications } from '../../components/useNotifications';
@@ -190,6 +190,7 @@ export default function StudentRequirements() {
   const [publishedRequirements, setPublishedRequirements] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(false);
+  const downloadInProgressRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSport, setSelectedSport] = useState('General');
   const participationType = 'Intrams';
@@ -564,42 +565,20 @@ export default function StudentRequirements() {
       notify('error', 'Download Error', 'Invalid requirement. Please try again.');
       return;
     }
+    if (downloadInProgressRef.current) return;
+    downloadInProgressRef.current = true;
     
     try {
       console.log(`📥 Downloading requirement: ${req.title}`);
       setLoading(true);
-      // Directly call the published requirement download endpoint (bypass api helper to ensure correct route)
-      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
-      const fullUrl = `${apiBaseUrl}/requirements/${req._id}/download`;
-      const response = await fetch(fullUrl, { method: 'GET', credentials: 'include' });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to download file');
-      }
-
-      const contentDisposition = response.headers.get('content-disposition');
-      let filename = req.title || 'requirement.pdf';
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"\s]+)"?/);
-        if (match) filename = match[1];
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
+      const result = await api.downloadPublishedRequirement(req._id, req.title || 'requirement.pdf');
+      const filename = result.filename || req.title || 'requirement.pdf';
       notify('success', 'Download Successful', `✅ ${filename} downloaded successfully!`);
     } catch (err) {
       console.error('❌ Download error:', err);
       notify('error', 'Download Failed', `Failed to download: ${err.message || 'Unknown error'}`);
     } finally {
+      downloadInProgressRef.current = false;
       setLoading(false);
     }
   };
@@ -633,39 +612,22 @@ export default function StudentRequirements() {
 
   const handleDownloadSubmission = async (submission) => {
     if (!submission?._id) return;
+    if (downloadInProgressRef.current) return;
+    downloadInProgressRef.current = true;
     try {
       setLoading(true);
-
-      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
-      const fullUrl = `${apiBaseUrl}/student/requirements/${submission._id}/download`;
-      const response = await fetch(fullUrl, { method: 'GET', credentials: 'include' });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to download file');
-      }
-
-      const contentDisposition = response.headers.get('content-disposition');
-      let filename = submission.fileName || 'uploaded-file';
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"\s]+)"?/);
-        if (match) filename = match[1];
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
+      const result = await api.downloadRequirement(
+        submission._id,
+        submission.fileName || 'uploaded-file',
+        submission.participationType
+      );
+      const filename = result.filename || submission.fileName || 'uploaded-file';
       notify('success', 'Download Successful', `✅ ${filename} downloaded successfully!`);
     } catch (err) {
       console.error('❌ Download error:', err);
       notify('error', 'Download Failed', err.message || 'Unable to download this file right now.');
     } finally {
+      downloadInProgressRef.current = false;
       setLoading(false);
     }
   };
