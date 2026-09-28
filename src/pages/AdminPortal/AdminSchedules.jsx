@@ -246,36 +246,80 @@ const AdminSchedules = () => {
     setExpandedRequestId(expandedRequestId === id ? null : id);
   };
 
-  const getFileUrl = async (file) => {
-    if (!file) return '';
-    try {
-      const blob = file.data
-        ? (() => {
-            const byteString = atob(file.data);
-            const buffer = new Uint8Array(byteString.length);
-            for (let i = 0; i < byteString.length; i += 1) buffer[i] = byteString.charCodeAt(i);
-            return new Blob([buffer], { type: file.type || file.mimetype || 'application/octet-stream' });
-          })()
-        : await api.getScheduleRequestFile(file.requestId).then((response) => response.blob());
-      return URL.createObjectURL(blob);
-    } catch (err) {
-      console.error('Error creating file URL:', err);
-      return '';
+  const getAttachmentErrorMessage = (error) => {
+    if (error?.status === 401 || error?.code === 'SESSION_EXPIRED') {
+      return 'Your admin session could not be verified. Please sign in again.';
     }
+    if (error?.status === 403) return 'You do not have permission to download this attachment.';
+    if (error?.status === 404) return 'This attachment could not be found.';
+    if (error?.status >= 500) return 'The server could not download this attachment. Please try again.';
+    if (error?.code === 'NETWORK_ERROR' || error?.code === 'REQUEST_TIMEOUT') {
+      return 'Network problem while downloading the attachment. Please try again.';
+    }
+    return 'Unable to download this attachment.';
+  };
+
+  const getFileUrl = async (file) => {
+    if (!file) return null;
+    let blob;
+    let responseFilename = '';
+    let responseContentType = '';
+
+    if (file.data) {
+      const byteString = atob(file.data);
+      const buffer = new Uint8Array(byteString.length);
+      for (let i = 0; i < byteString.length; i += 1) buffer[i] = byteString.charCodeAt(i);
+      blob = new Blob([buffer], { type: file.type || file.mimetype || 'application/octet-stream' });
+    } else {
+      const response = await api.getScheduleRequestFile(file.requestId);
+      if (!response || typeof response.blob !== 'function') {
+        const error = new Error('Invalid attachment response');
+        error.code = 'INVALID_FILE_RESPONSE';
+        throw error;
+      }
+      if (!response.ok) {
+        const error = new Error('Attachment request failed');
+        error.status = response.status;
+        throw error;
+      }
+
+      const contentDisposition = response.headers?.get('content-disposition') || '';
+      const encodedFilename = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const regularFilename = contentDisposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+      if (encodedFilename) {
+        try {
+          responseFilename = decodeURIComponent(encodedFilename[1].trim());
+        } catch {
+          responseFilename = '';
+        }
+      }
+      if (!responseFilename && regularFilename) {
+        responseFilename = (regularFilename[1] || regularFilename[2]).trim().replace(/^"|"$/g, '');
+      }
+      responseContentType = response.headers?.get('content-type') || '';
+      blob = await response.blob();
+    }
+
+    return {
+      url: URL.createObjectURL(blob),
+      name: responseFilename || file.originalname || file.name || file.filename || 'attachment',
+      type: responseContentType || blob.type || file.type || file.mimetype || 'application/octet-stream',
+    };
   };
 
   const openRequestAttachment = async (file) => {
     if (!file) return;
     if (previewFile.url) URL.revokeObjectURL(previewFile.url);
-    const url = await getFileUrl(file);
-    if (url) {
+    try {
+      const attachment = await getFileUrl(file);
+      if (!attachment) return;
       setPreviewFile({
-        url,
-        name: file.name || file.originalname || file.filename || 'attachment',
-        type: file.type || file.mimetype || 'application/octet-stream'
+        url: attachment.url,
+        name: attachment.name,
+        type: attachment.type,
       });
-    } else {
-      setToast({ message: 'Unable to open file attachment', type: 'error' });
+    } catch (error) {
+      setToast({ message: getAttachmentErrorMessage(error), type: 'error' });
     }
   };
 
@@ -619,7 +663,7 @@ const AdminSchedules = () => {
     return `${startTime} - ${endTime}`;
   };
 
-  const handleDownloadCalendar = () => {
+  const handleDownloadCalendar = async () => {
     const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
     const pageWidth = 1100;
     const pageHeight = 700;
@@ -709,15 +753,55 @@ const AdminSchedules = () => {
 
     svg += `</svg>`;
 
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const downloadLink = document.createElement('a');
-    downloadLink.href = url;
-    downloadLink.download = `gymnasium-schedule-${currentYear}-${String(currentMonth + 1).padStart(2, '0')}.svg`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
+    try {
+      const { jsPDF } = await import('jspdf');
+      await import('svg2pdf.js');
+
+      const parsedSvg = new DOMParser().parseFromString(svg, 'image/svg+xml');
+      if (parsedSvg.querySelector('parsererror')) {
+        throw new Error('The calendar could not be prepared for PDF export.');
+      }
+      const svgElement = document.importNode(parsedSvg.documentElement, true);
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: [11, 8.5] });
+      const pdfPageWidth = doc.internal.pageSize.getWidth();
+      const pdfPageHeight = doc.internal.pageSize.getHeight();
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(123, 30, 30);
+      doc.text('GYMSTAT CALENDAR', pdfPageWidth / 2, 0.36, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(90, 90, 90);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, pdfPageWidth / 2, 0.57, { align: 'center' });
+      doc.setDrawColor(255, 220, 0);
+      doc.setLineWidth(0.015);
+      doc.line(pdfPageWidth / 2 - 0.45, 0.7, pdfPageWidth / 2 + 0.45, 0.7);
+
+      const pdfMargin = 0.5;
+      const headerAreaHeight = 0.88;
+      const bottomMargin = 0.5;
+      const availableWidth = pdfPageWidth - pdfMargin * 2;
+      const availableHeight = pdfPageHeight - headerAreaHeight - bottomMargin;
+      const scale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight);
+      const calendarWidth = pageWidth * scale;
+      const calendarHeight = pageHeight * scale;
+      const calendarX = (pdfPageWidth - calendarWidth) / 2;
+      const calendarY = headerAreaHeight + (availableHeight - calendarHeight) / 2;
+
+      await doc.svg(svgElement, {
+        x: calendarX,
+        y: calendarY,
+        width: calendarWidth,
+        height: calendarHeight,
+      });
+
+      doc.save(`gymnasium-schedule-${currentYear}-${String(currentMonth + 1).padStart(2, '0')}.pdf`);
+      setToast({ message: 'Calendar PDF downloaded successfully.', type: 'success' });
+    } catch (error) {
+      console.error('Failed to export calendar PDF:', error);
+      setToast({ message: 'Unable to download the calendar PDF. Please try again.', type: 'error' });
+    }
   };
 
   const normalizeScheduleSource = (schedule) => {
@@ -883,9 +967,11 @@ const AdminSchedules = () => {
                       <td>{res.startDate}</td>
                       <td>{res.endDate}</td>
                       <td>{res.startTime} - {res.endTime}</td>
-                      <td style={{textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap'}}>
-                        <button type="button" className="btn-edit-action" onClick={() => handleEdit(res)}>Edit schedule</button>
-                        <button type="button" className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel schedule</button>
+                      <td className="schedule-actions-cell">
+                        <div className="schedule-action-buttons">
+                          <button type="button" className="btn-edit-action" onClick={() => handleEdit(res)}>Edit schedule</button>
+                          <button type="button" className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel schedule</button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1139,18 +1225,23 @@ const AdminSchedules = () => {
                                 type="button"
                                 className="btn-download-attachment"
                                 onClick={async () => {
-                                  const url = await getFileUrl(req.file);
-                                  if (!url) {
-                                    setToast({ message: 'Unable to download attachment', type: 'error' });
-                                    return;
+                                  let attachment;
+                                  try {
+                                    attachment = await getFileUrl(req.file);
+                                    if (!attachment) return;
+                                    const link = document.createElement('a');
+                                    link.href = attachment.url;
+                                    link.download = attachment.name;
+                                    try {
+                                      document.body.appendChild(link);
+                                      link.click();
+                                    } finally {
+                                      link.remove();
+                                      window.setTimeout(() => URL.revokeObjectURL(attachment.url), 1000);
+                                    }
+                                  } catch (error) {
+                                    setToast({ message: getAttachmentErrorMessage(error), type: 'error' });
                                   }
-                                  const link = document.createElement('a');
-                                  link.href = url;
-                                  link.download = req.file.originalname || req.file.name || req.file.filename || 'attachment';
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  URL.revokeObjectURL(url);
                                 }}
                               >
                                 Download

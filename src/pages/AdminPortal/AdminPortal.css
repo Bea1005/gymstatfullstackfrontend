@@ -571,6 +571,13 @@
   color: #666;
 }
 .admin-schedule-table td { padding: 15px 20px; border-bottom: 1px solid #eee; font-size: 14px; }
+.schedule-actions-cell { text-align: center; }
+.schedule-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 
 .btn-cancel-action {
   background: #fff5f5;
@@ -2764,7 +2771,50 @@ textarea:focus-visible,
 
   .admin-schedule-table th,
   .admin-schedule-table td {
-    padding: 10px 8px;
+    padding: 8px 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .schedule-list-container,
+  .schedule-list-container .table-responsive {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .schedule-list-container .table-responsive {
+    overflow-x: hidden;
+  }
+
+  .schedule-list-container .admin-schedule-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .schedule-list-container .admin-schedule-table th:nth-child(1),
+  .schedule-list-container .admin-schedule-table td:nth-child(1) { width: 22%; }
+  .schedule-list-container .admin-schedule-table th:nth-child(2),
+  .schedule-list-container .admin-schedule-table td:nth-child(2),
+  .schedule-list-container .admin-schedule-table th:nth-child(3),
+  .schedule-list-container .admin-schedule-table td:nth-child(3) { width: 15%; }
+  .schedule-list-container .admin-schedule-table th:nth-child(4),
+  .schedule-list-container .admin-schedule-table td:nth-child(4) { width: 20%; }
+  .schedule-list-container .admin-schedule-table th:nth-child(5),
+  .schedule-list-container .admin-schedule-table td:nth-child(5) { width: 28%; }
+
+  .schedule-action-buttons {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .schedule-action-buttons .btn-edit-action,
+  .schedule-action-buttons .btn-cancel-action {
+    min-width: 0;
+    max-width: 100%;
+    padding: 5px 7px;
+    font-size: 11px;
+    line-height: 1.2;
     white-space: nowrap;
   }
 
@@ -2790,5 +2840,41 @@ textarea:focus-visible,
   .modal-buttons button {
     width: 100%;
     min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .schedule-list-container .admin-schedule-table th,
+  .schedule-list-container .admin-schedule-table td {
+    padding: 6px 3px;
+    font-size: 11px;
+  }
+
+  .schedule-list-container .admin-schedule-table th {
+    font-size: 9px;
+  }
+
+  .schedule-list-container .admin-schedule-table th:nth-child(1),
+  .schedule-list-container .admin-schedule-table td:nth-child(1) { width: 22%; }
+  .schedule-list-container .admin-schedule-table th:nth-child(2),
+  .schedule-list-container .admin-schedule-table td:nth-child(2),
+  .schedule-list-container .admin-schedule-table th:nth-child(3),
+  .schedule-list-container .admin-schedule-table td:nth-child(3) { width: 14%; }
+  .schedule-list-container .admin-schedule-table th:nth-child(4),
+  .schedule-list-container .admin-schedule-table td:nth-child(4) { width: 19%; }
+  .schedule-list-container .admin-schedule-table th:nth-child(5),
+  .schedule-list-container .admin-schedule-table td:nth-child(5) { width: 31%; }
+
+  .schedule-action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+  }
+
+  .schedule-action-buttons .btn-edit-action,
+  .schedule-action-buttons .btn-cancel-action {
+    width: 100%;
+    padding: 4px 2px;
+    font-size: 9px;
   }
 }

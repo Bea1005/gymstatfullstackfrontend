@@ -337,6 +337,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
   const generateEquipmentReport = async (filter) => {
     try {
       const { jsPDF } = await import('jspdf');
+      const { autoTable } = await import('jspdf-autotable');
       const response = await getEquipment();
       const allEquipment = Array.isArray(response?.data) ? response.data : [];
 
@@ -345,121 +346,95 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         filteredEquipment = allEquipment.filter(eq => (eq.condition || 'Good') === filter);
       }
 
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'in',
-        format: [8.5, 13]
-      });
-
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'in', format: [8.5, 11] });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 0.5;
-      const lineHeight = 0.25;
-      let yPosition = margin;
-
-      doc.setFontSize(16);
-      doc.setFont(undefined, 'bold');
-      doc.text('EQUIPMENT MASTERLIST REPORT', pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += lineHeight * 2;
-
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      const filterLabel = filter === 'all' ? 'All Equipment' : 'Condition: ' + filter;
-      doc.text('Filter: ' + filterLabel, margin, yPosition);
-      yPosition += lineHeight;
-      doc.text('Generated: ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(), margin, yPosition);
-      yPosition += lineHeight * 1.5;
-
-      const col1X = margin;
-      const col2X = margin + 2.5;
-      const col3X = margin + 4.2;
-      const col4X = margin + 5.2;
-      const col5X = margin + 6.2;
-      const colWidth1 = 2.3;
-      const colWidth2 = 1.5;
-      const colWidth3 = 0.9;
-      const colWidth4 = 0.9;
-      const colWidth5 = 1.8;
-
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      doc.setFillColor(123, 30, 30);
-      doc.setTextColor(255, 255, 255);
-      const headerY = yPosition;
-      doc.rect(col1X, headerY, colWidth1, lineHeight, 'F');
-      doc.rect(col2X, headerY, colWidth2, lineHeight, 'F');
-      doc.rect(col3X, headerY, colWidth3, lineHeight, 'F');
-      doc.rect(col4X, headerY, colWidth4, lineHeight, 'F');
-      doc.rect(col5X, headerY, colWidth5, lineHeight, 'F');
-      doc.text('EQUIPMENT NAME', col1X + 0.05, headerY + 0.18);
-      doc.text('REFERENCE ID', col2X + 0.05, headerY + 0.18);
-      doc.text('QTY', col3X + 0.05, headerY + 0.18);
-      doc.text('CONDITION', col4X + 0.05, headerY + 0.18);
-      doc.text('TYPE', col5X + 0.05, headerY + 0.18);
-      yPosition += lineHeight + 0.05;
-
-      doc.setTextColor(0, 0, 0);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(8);
-
-      const maxTableHeight = pageHeight - margin - 0.5;
-      const rowHeight = lineHeight * 0.8;
-
-      filteredEquipment.forEach((equipment) => {
-        const condition = equipment.condition || 'Good';
+      const margin = 0.55;
+      const generatedAt = new Date();
+      const filterLabel = filter === 'all' ? 'All Equipment' : `Condition: ${filter}`;
+      const tableRows = filteredEquipment.map((equipment) => {
         const referenceIds = Array.isArray(equipment.referenceIds) && equipment.referenceIds.length > 0
-          ? equipment.referenceIds
-          : [equipment.referenceId || 'N/A'];
-        const quantity = referenceIds.length > 0 ? referenceIds.length : (equipment.total || equipment.totalStock || 1);
+          ? equipment.referenceIds.filter(Boolean)
+          : equipment.referenceId
+            ? [equipment.referenceId]
+            : [];
+        const quantity = referenceIds.length || Number(equipment.total || equipment.totalStock || 1);
 
-        referenceIds.forEach((refId, idx) => {
-          if (yPosition + rowHeight > maxTableHeight) {
-            doc.addPage();
-            yPosition = margin;
-          }
-
-          if (idx % 2 === 1) {
-            doc.setFillColor(245, 245, 245);
-            doc.rect(col1X, yPosition, pageWidth - 2 * margin, rowHeight, 'F');
-          }
-
-          if (idx === 0) {
-            const nameLines = doc.splitTextToSize(equipment.name, colWidth1 - 0.1);
-            doc.text(nameLines, col1X + 0.05, yPosition + 0.08);
-          }
-
-          doc.text(refId, col2X + 0.05, yPosition + 0.12);
-
-          if (idx === 0) {
-            doc.text(String(quantity), col3X + 0.1, yPosition + 0.12);
-          }
-
-          doc.text(condition, col4X + 0.05, yPosition + 0.12);
-
-          if (idx === 0) {
-            const type = equipment.type || equipment.category || 'Sports Equipment';
-            const typeLines = doc.splitTextToSize(type, colWidth5 - 0.1);
-            doc.text(typeLines, col5X + 0.05, yPosition + 0.08);
-          }
-
-          doc.setDrawColor(200, 200, 200);
-          doc.setLineWidth(0.01);
-          doc.rect(col1X, yPosition, colWidth1, rowHeight);
-          doc.rect(col2X, yPosition, colWidth2, rowHeight);
-          doc.rect(col3X, yPosition, colWidth3, rowHeight);
-          doc.rect(col4X, yPosition, colWidth4, rowHeight);
-          doc.rect(col5X, yPosition, colWidth5, rowHeight);
-
-          yPosition += rowHeight;
-        });
+        return [
+          equipment.name || 'Unknown Equipment',
+          referenceIds.length ? referenceIds.join('\n') : 'N/A',
+          String(quantity),
+          equipment.condition || 'Good',
+          equipment.type || equipment.category || 'Sports Equipment',
+        ];
       });
 
-      const footerY = pageHeight - 0.4;
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text('Page ' + (doc.internal.pages.length - 1), pageWidth / 2, footerY, { align: 'center' });
+      autoTable(doc, {
+        head: [['Equipment Name', 'Reference ID', 'Qty', 'Condition', 'Type']],
+        body: tableRows,
+        theme: 'grid',
+        startY: 1.34,
+        margin: { top: 1.34, right: margin, bottom: 0.58, left: margin },
+        tableWidth: pageWidth - margin * 2,
+        rowPageBreak: 'avoid',
+        showHead: 'everyPage',
+        styles: {
+          font: 'helvetica',
+          fontSize: 8,
+          textColor: [45, 45, 45],
+          fillColor: [255, 255, 255],
+          lineColor: [225, 221, 216],
+          lineWidth: 0.006,
+          cellPadding: { top: 0.075, right: 0.07, bottom: 0.075, left: 0.07 },
+          overflow: 'linebreak',
+          valign: 'middle',
+        },
+        headStyles: {
+          fontStyle: 'bold',
+          fontSize: 8,
+          textColor: [123, 30, 30],
+          fillColor: [255, 255, 255],
+          lineColor: [255, 220, 0],
+          lineWidth: 0.015,
+          minCellHeight: 0.32,
+        },
+        alternateRowStyles: { fillColor: [250, 249, 247] },
+        columnStyles: {
+          0: { cellWidth: 2.05, halign: 'left', valign: 'top' },
+          1: { cellWidth: 2.15, halign: 'center', valign: 'top' },
+          2: { cellWidth: 0.65, halign: 'center' },
+          3: { cellWidth: 1.05, halign: 'center' },
+          4: { cellWidth: 1.5, halign: 'left', valign: 'top' },
+        },
+        didDrawPage: () => {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.setTextColor(123, 30, 30);
+          doc.text('GYMSTAT', pageWidth / 2, 0.34, { align: 'center' });
+          doc.setFontSize(9);
+          doc.text('EQUIPMENT MASTERLIST REPORT', pageWidth / 2, 0.53, { align: 'center' });
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(90, 90, 90);
+          doc.text(`Generated: ${generatedAt.toLocaleString()}`, pageWidth / 2, 0.7, { align: 'center' });
+          doc.setFontSize(7);
+          doc.text(`Filter: ${filterLabel}`, pageWidth / 2, 0.85, { align: 'center' });
+          doc.setDrawColor(255, 220, 0);
+          doc.setLineWidth(0.015);
+          doc.line(pageWidth / 2 - 0.5, 0.97, pageWidth / 2 + 0.5, 0.97);
+        },
+      });
 
-      const fileName = 'Equipment_Masterlist_' + filter + '_' + new Date().toISOString().split('T')[0] + '.pdf';
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        doc.setPage(page);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Page ${page} of ${pageCount}`, pageWidth / 2, pageHeight - 0.22, { align: 'center' });
+      }
+
+      const fileName = `Equipment_Masterlist_${filter}_${generatedAt.toISOString().slice(0, 10)}.pdf`;
       doc.save(fileName);
 
       setToast({ message: 'Report downloaded successfully!', type: 'success' });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useEffectEvent } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminScreeners, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
@@ -78,6 +78,24 @@ const parseUserListResponse = (data) => {
   return [];
 };
 
+const getSurname = (fullname) => {
+  const name = String(fullname || '').trim();
+  if (name.includes(',')) return name.split(',')[0].trim();
+
+  const parts = name.split(/\s+/).filter(Boolean);
+  const suffixes = new Set(['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv']);
+  if (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
+    return parts[parts.length - 2];
+  }
+  return parts[parts.length - 1] || '';
+};
+
+const reportNameCollator = new Intl.Collator(undefined, { sensitivity: 'base' });
+const sortUsersBySurname = (users) => [...users].sort((first, second) => (
+  reportNameCollator.compare(getSurname(first.name), getSurname(second.name))
+  || reportNameCollator.compare(first.name, second.name)
+));
+
 /* ── Constants ── */
 const DEPARTMENTS = DEPARTMENT_OPTIONS;
 const SPORTS      = ['Basketball','Volleyball','Swimming','Track & Field','Badminton','Softball','Boxing','Archery','Chess','Mobile Legends'];
@@ -120,6 +138,7 @@ export default function AdminUserRecords() {
   const [scrError,       setScrError]       = useState('');
   const [toast,          setToast]          = useState({ message: '', type: 'success' });
   const [confirmDialog,  setConfirmDialog]  = useState({ open: false, message: '', action: null });
+  const reportInProgressRef = useRef(false);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
   const closeToast = () => setToast({ message: '', type: 'success' });
@@ -173,17 +192,17 @@ export default function AdminUserRecords() {
   const toggleAll = (rows, sel, setter) => setter(sel.length === rows.length ? [] : rows.map(r => r.id));
 
   /* ── Filtered lists ── */
-  const filtStudents = students.filter(s =>
+  const filtStudents = sortUsersBySurname(students.filter(s =>
     (studentDept === 'All' || s.dept === studentDept) &&
     (s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
      s.email.toLowerCase().includes(studentSearch.toLowerCase()) ||
      s.sport.toLowerCase().includes(studentSearch.toLowerCase()))
-  );
-  const filtScreeners = screeners.filter(s =>
+  ));
+  const filtScreeners = sortUsersBySurname(screeners.filter(s =>
     (screenerDept === 'All' || s.dept === screenerDept) &&
     (s.name.toLowerCase().includes(screenerSearch.toLowerCase()) ||
      s.email.toLowerCase().includes(screenerSearch.toLowerCase()))
-  );
+  ));
 
   /* ── Register screener ── */
   const registerScreener = async (e) => {
@@ -233,22 +252,174 @@ export default function AdminUserRecords() {
     }
   };
 
-  /* ── Download CSV ── */
-  const download = () => {
-    let headers, rows;
-    if (tab === 'student') {
-      headers = ['Name','Username','Sport','Email','Department','Status'];
-      rows    = filtStudents.map(r => [r.name, r.username, r.sport, r.email, r.dept, r.status]);
-    } else {
-      headers = ['Name','Username','Department','Sport','Status'];
-      rows    = filtScreeners.map(r => [r.name, r.username, r.dept, r.sport, r.status]);
+  /* ── Download current User Records as PDF ── */
+  const download = async () => {
+    if (reportInProgressRef.current) return;
+    reportInProgressRef.current = true;
+
+    try {
+      const isStudentTab = tab === 'student';
+      const role = isStudentTab ? 'student' : 'screener';
+      const accountStatus = isStudentTab ? studentAccountStatus : screenerAccountStatus;
+      const response = isStudentTab
+        ? await getAdminStudents(accountStatus)
+        : await getAdminScreeners(accountStatus);
+      const records = parseUserListResponse(response)
+        .filter((user) => (
+          String(user?.role || '').trim().toLowerCase() === role
+          && (user?.accountStatus === 'archived' ? 'archived' : 'active') === accountStatus
+        ))
+        .map(normalizeUserRow);
+      const department = isStudentTab ? studentDept : screenerDept;
+      const search = (isStudentTab ? studentSearch : screenerSearch).trim().toLowerCase();
+      let reportUsers = records.filter((user) => (
+        (department === 'All' || user.dept === department)
+        && (
+          user.name.toLowerCase().includes(search)
+          || user.email.toLowerCase().includes(search)
+          || (isStudentTab && user.sport.toLowerCase().includes(search))
+        )
+      ));
+
+      reportUsers = sortUsersBySurname(reportUsers);
+
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'in', format: [8.5, 11] });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 0.5;
+      const tableWidth = pageWidth - margin * 2;
+      const fontSize = 8;
+      const lineHeight = fontSize / 72 * 1.4;
+      const cellPaddingX = 0.07;
+      const cellPaddingY = 0.06;
+      const bottomLimit = pageHeight - margin - 0.28;
+      const columns = isStudentTab
+        ? [
+          { label: 'NAME', width: 1.8, value: (user) => user.name },
+          { label: 'STATUS', width: 0.8, value: (user) => user.status },
+          { label: 'SPORT', width: 1, value: (user) => user.sport },
+          { label: 'DEPARTMENT', width: 1.3, value: (user) => user.dept },
+          { label: 'EMAIL ADDRESS', width: 2.6, value: (user) => user.email },
+        ]
+        : [
+          { label: 'NAME', width: 2, value: (user) => user.name },
+          { label: 'EMAIL ADDRESS', width: 3, value: (user) => user.email },
+          { label: 'DEPARTMENT', width: 1.5, value: (user) => user.dept },
+          { label: 'STATUS', width: 1, value: (user) => user.status },
+        ];
+      const headerHeight = 0.3;
+
+      const drawTableHeader = (firstPage) => {
+        let y;
+        if (firstPage) {
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(123, 30, 30);
+          doc.setFontSize(18);
+          doc.text('GYMSTAT', margin, 0.78);
+          doc.setFontSize(13);
+          doc.text('USER RECORDS REPORT', margin, 1.08);
+          doc.setFontSize(9);
+          doc.text(isStudentTab ? 'STUDENT-ATHLETE USER RECORDS' : 'SCREENER USER RECORDS', margin, 1.32);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(90, 90, 90);
+          doc.setFontSize(8);
+          doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 1.53);
+          doc.setDrawColor(255, 220, 0);
+          doc.setLineWidth(0.025);
+          doc.line(margin, 1.65, pageWidth - margin, 1.65);
+          y = 1.76;
+        } else {
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(123, 30, 30);
+          doc.setFontSize(9);
+          doc.text('GYMSTAT  |  USER RECORDS REPORT', margin, 0.34);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.text(isStudentTab ? 'STUDENT-ATHLETE USER RECORDS' : 'SCREENER USER RECORDS', margin, 0.5);
+          doc.setDrawColor(255, 220, 0);
+          doc.setLineWidth(0.02);
+          doc.line(margin, 0.58, pageWidth - margin, 0.58);
+          y = 0.68;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.setFillColor(123, 30, 30);
+        doc.rect(margin, y, tableWidth, headerHeight, 'F');
+        let x = margin;
+        for (const column of columns) {
+          doc.text(column.label, x + cellPaddingX, y + 0.19, { maxWidth: column.width - cellPaddingX * 2 });
+          x += column.width;
+        }
+        doc.setDrawColor(255, 220, 0);
+        doc.setLineWidth(0.018);
+        doc.line(margin, y + headerHeight, pageWidth - margin, y + headerHeight);
+        return y + headerHeight;
+      };
+
+      let y = drawTableHeader(true);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(fontSize);
+      doc.setTextColor(45, 45, 45);
+
+      const tableRows = reportUsers.length
+        ? reportUsers.map((user) => columns.map((column) => String(column.value(user) || '—')))
+        : [['No records found for the selected filters.', ...columns.slice(1).map(() => '')]];
+
+      tableRows.forEach((row, rowIndex) => {
+        const wrappedCells = row.map((value, index) => (
+          doc.splitTextToSize(value, columns[index].width - cellPaddingX * 2)
+        ));
+        const rowHeight = Math.max(0.32, Math.max(...wrappedCells.map((lines) => lines.length)) * lineHeight + cellPaddingY * 2);
+
+        if (y + rowHeight > bottomLimit) {
+          doc.addPage();
+          y = drawTableHeader(false);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(fontSize);
+          doc.setTextColor(45, 45, 45);
+        }
+
+        if (rowIndex % 2 === 1) {
+          doc.setFillColor(250, 248, 245);
+          doc.rect(margin, y, tableWidth, rowHeight, 'F');
+        }
+
+        let x = margin;
+        wrappedCells.forEach((lines, index) => {
+          const column = columns[index];
+          doc.setDrawColor(225, 220, 215);
+          doc.setLineWidth(0.006);
+          doc.rect(x, y, column.width, rowHeight);
+          doc.text(lines, x + cellPaddingX, y + cellPaddingY + lineHeight * 0.78, {
+            maxWidth: column.width - cellPaddingX * 2,
+            lineHeightFactor: 1.4,
+          });
+          x += column.width;
+        });
+        y += rowHeight;
+      });
+
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        doc.setPage(page);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Page ${page} of ${pageCount}`, pageWidth / 2, pageHeight - 0.2, { align: 'center' });
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      doc.save(`GYMSTAT_${role}_user_records_${date}.pdf`);
+      showToast('PDF report downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Failed to generate user records PDF:', error);
+      showToast(error?.message || 'Failed to generate user records PDF', 'error');
+    } finally {
+      reportInProgressRef.current = false;
     }
-    const csv  = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${tab}-records.csv`; a.click();
-    URL.revokeObjectURL(url);
   };
 
   /* ── Delete selected students ── */
@@ -558,7 +729,7 @@ export default function AdminUserRecords() {
                       onChange={() => toggleAll(filtScreeners, selScreeners, setSelScreeners)}
                     />
                   </th>
-                  <th>Name</th><th>Email address</th><th>Department</th><th>Status ↕</th><th>Sport</th><th></th>
+                  <th>Name</th><th>Email address</th><th>Department</th><th>Status ↕</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -576,7 +747,6 @@ export default function AdminUserRecords() {
                     <td className="ur-email">{s.email || '—'}</td>
                     <td className="ur-dept-tag">{s.dept || '—'}</td>
                     <td><StatusBadge status={s.status} /></td>
-                    <td className="ur-sport">{s.sport || '—'}</td>
                     <td>
                       {s.accountStatus === 'archived' ? <button className="ur-row-del" onClick={() => restoreUser(s.id, 'screener')}>Restore</button> : <button className="ur-row-del" onClick={() => archiveScreener(s.id)}><Icon name="trash" size={16} /></button>}
                     </td>

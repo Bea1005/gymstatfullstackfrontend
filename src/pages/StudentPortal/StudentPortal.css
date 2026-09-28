@@ -198,7 +198,7 @@ body {
 
   text-decoration: none;
   color: white;
-  font-weight: 500;
+  font-weight: 400;
 
   transition: var(--transition);
   cursor: pointer;
@@ -209,6 +209,7 @@ body {
   background: rgba(255, 220, 0, 0.15);
 }
 
+.nav-item.active-yellow,
 .nav-item.active,
 .sidebar-nav-item.active-yellow {
   background: var(--gold-primary);

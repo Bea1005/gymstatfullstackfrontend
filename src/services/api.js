@@ -846,11 +846,20 @@ const downloadFileToBrowser = async (endpoint, filename) => {
     let finalFilename = filename;
 
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename="?([^"\s]+)"?/);
-      if (match) finalFilename = match[1];
+      const encodedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const regularMatch = contentDisposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+      if (encodedMatch) {
+        finalFilename = decodeURIComponent(encodedMatch[1].trim());
+      } else if (regularMatch) {
+        finalFilename = (regularMatch[1] || regularMatch[2]).trim();
+      }
     }
 
     const blob = await response.blob();
+    if (blob.size === 0) {
+      throw createApiError('The stored file is empty or unavailable.', 'EMPTY_FILE');
+    }
+
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1080,6 +1089,7 @@ export const getScheduleRequestById = async (id) => {
 export const getScheduleRequestFile = async (id) => {
   return apiRequest(`/schedule-requests/${id}/file`, {
     method: 'GET',
+    responseType: 'response',
   });
 };
 

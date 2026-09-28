@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useEffectEvent } from 'react';
-import { createRequirement, publishRequirement, getAllRequirements, deleteAdminRequirement } from '../../services/api';
+import { createRequirement, publishRequirement, getAllRequirements, deleteAdminRequirement, downloadPublishedRequirement } from '../../services/api';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import Icon from '../../components/Icon';
@@ -16,6 +16,7 @@ const AdminRequirements = () => {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadedReqs, setUploadedReqs] = useState([]);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -99,19 +100,22 @@ const AdminRequirements = () => {
     setShowModal(true);
   };
 
-  const handleDownloadFromModal = () => {
-    if (selectedRequirement) {
-      const content = selectedRequirement.content;
-      const blob = new Blob([content], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${selectedRequirement.title.toLowerCase().replace(/ /g, '_')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+  const handleDownloadFromModal = async () => {
+    if (!selectedRequirement?._id || isDownloading) return;
+
+    try {
+      setIsDownloading(true);
+      const fallbackFilename = selectedRequirement.file?.originalname
+        || selectedRequirement.file?.filename
+        || selectedRequirement.fileName
+        || `${selectedRequirement.title || 'requirement'}.pdf`;
+      await downloadPublishedRequirement(selectedRequirement._id, fallbackFilename);
       setShowModal(false);
+    } catch (error) {
+      console.error('Failed to download requirement file:', error);
+      showToast(error?.message || 'Unable to download this requirement file.', 'error');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -390,7 +394,9 @@ const AdminRequirements = () => {
                 {isDeleting ? 'Deleting...' : <><Icon name="trash" size={16} /> Delete</>}
               </button>
               <button className="minimal-cancel" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="minimal-download" onClick={handleDownloadFromModal}>Download</button>
+              <button className="minimal-download" onClick={handleDownloadFromModal} disabled={isDownloading}>
+                {isDownloading ? 'Downloading...' : 'Download'}
+              </button>
             </div>
           </div>
         </div>
