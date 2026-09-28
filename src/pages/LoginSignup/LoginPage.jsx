@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
@@ -13,6 +13,7 @@ export default function LoginPage() {
 
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
+  const loginInProgressRef = useRef(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -42,6 +43,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (loginInProgressRef.current) return;
 
     // Custom validation instead of relying on HTML5
     if (!id.trim()) {
@@ -54,7 +56,9 @@ export default function LoginPage() {
       return;
     }
 
+    loginInProgressRef.current = true;
     setLoading(true);
+    let loginSucceeded = false;
 
     try {
       // Login using ID
@@ -83,6 +87,7 @@ export default function LoginPage() {
         console.info('[AUTH] User role saved', { role: resolvedRole });
 
         notify("success", "Login Successful", "Welcome back! Redirecting to your portal...");
+        loginSucceeded = true;
 
         const pathname =
           resolvedRole === "student"
@@ -107,7 +112,10 @@ export default function LoginPage() {
         error.message || "Cannot connect to server. Please check if backend is running."
       );
     } finally {
-      setLoading(false);
+      if (!loginSucceeded) {
+        loginInProgressRef.current = false;
+        setLoading(false);
+      }
     }
   };
 

@@ -339,6 +339,7 @@ export const login = async (id, password) => {
   const previousRole = getPortalRole();
   const result = await apiRequest('/login', {
     method: 'POST',
+    timeoutMs: 120000,
     body: JSON.stringify({ id, password }),
   });
   const authenticatedRole = String(result?.user?.role || '').toLowerCase();
