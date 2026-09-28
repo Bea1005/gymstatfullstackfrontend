@@ -191,6 +191,7 @@ export default function StudentRequirements() {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(false);
   const downloadInProgressRef = useRef(false);
+  const viewInProgressRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSport, setSelectedSport] = useState('General');
   const participationType = 'Intrams';
@@ -592,6 +593,8 @@ export default function StudentRequirements() {
 
   const handleViewSubmission = async (submission) => {
     if (!submission?._id) return;
+    if (viewInProgressRef.current) return;
+    viewInProgressRef.current = true;
     try {
       setLoading(true);
       const previewData = await api.viewRequirement(submission._id, submission.fileName || 'uploaded-file', submission.participationType);
@@ -606,6 +609,7 @@ export default function StudentRequirements() {
       console.error('❌ View error:', err);
       notify('error', 'Preview Failed', err.message || 'Unable to open this file right now.');
     } finally {
+      viewInProgressRef.current = false;
       setLoading(false);
     }
   };

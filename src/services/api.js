@@ -878,16 +878,11 @@ export const downloadRequirement = async (requirementId, filename = 'requirement
 
 export const viewRequirement = async (requirementId, filename = 'requirement.pdf', participationType = 'Intrams') => {
   try {
-    const fullUrl = `${API_URL}/student/requirements/${requirementId}/download?participationType=${encodeURIComponent(participationType)}`;
-    const response = await fetchWithTimeout(fullUrl, {
+    const endpoint = `/student/requirements/${encodeURIComponent(requirementId)}/download?participationType=${encodeURIComponent(participationType)}`;
+    const response = await apiRequest(endpoint, {
       method: 'GET',
-      credentials: 'include'
+      responseType: 'response',
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw createApiError(errorData.message || 'Failed to open file', 'API_ERROR', { status: response.status });
-    }
 
     const blob = await response.blob();
     const objectUrl = window.URL.createObjectURL(blob);
