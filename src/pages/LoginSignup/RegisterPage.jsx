@@ -25,6 +25,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [departmentError, setDepartmentError] = useState("");
 
   const set = (key) => (e) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
@@ -62,6 +63,12 @@ export default function RegisterPage() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+
+    if (!form.department.trim() || form.department === "Select Department") {
+      setDepartmentError("Please select department.");
+      return;
+    }
+    setDepartmentError("");
     
     // ✅ ID and Email are both required for all users
     if (!form.fullname || !form.email || !form.password || !confirmPassword || !form.id) {
@@ -254,15 +261,20 @@ export default function RegisterPage() {
             <div className="login-field">
               <label>Department</label>
               <select
-                className="login-input"
+                className={`login-input ${departmentError ? "input-error" : ""}`}
                 value={form.department}
-                onChange={set("department")}
+                onChange={(event) => {
+                  set("department")(event);
+                  setDepartmentError("");
+                }}
+                aria-invalid={Boolean(departmentError)}
               >
                 <option value="">Select Department</option>
                 {DEPARTMENT_OPTIONS.map((department) => (
                   <option key={department} value={department}>{department}</option>
                 ))}
               </select>
+              {departmentError && <p className="password-match-error">{departmentError}</p>}
             </div>
 
             <button type="submit" className="login-submit-btn" disabled={loading}>

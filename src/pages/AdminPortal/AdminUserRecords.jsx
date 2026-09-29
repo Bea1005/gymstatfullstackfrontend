@@ -3,8 +3,11 @@ import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminScreeners, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
+import { isPasswordValid, PASSWORD_POLICY_MESSAGE } from '../../constants/passwordPolicy';
 import Icon from '../../components/Icon';
 import './AdminPortal.css';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const getUserActivityStatus = (user) => {
   const explicitStatus = user?.status;
@@ -207,35 +210,50 @@ export default function AdminUserRecords() {
   /* ── Register screener ── */
   const registerScreener = async (e) => {
     e.preventDefault();
-    
-    // Validate required fields
-    if (!scrForm.id) {
-      setScrError('ID is required.');
-      showToast('ID is required.', 'error');
+
+    const id = scrForm.id.trim();
+    const email = scrForm.email.trim();
+    const showRegisterError = (message) => {
+      setScrError(message);
+      showToast(message, 'error');
+    };
+
+    if (!id) {
+      showRegisterError('ID is required.');
       return;
     }
-    
-    if (!scrForm.email) {
-      setScrError('Email is required.');
-      showToast('Email is required.', 'error');
+
+    if (!email) {
+      showRegisterError('Email is required.');
       return;
     }
-    
-    if (!scrForm.password) { 
-      setScrError('Password is required.'); 
-      showToast('Password is required.', 'error'); 
+
+    if (!EMAIL_PATTERN.test(email)) {
+      showRegisterError('Please provide a valid email address.');
+      return;
+    }
+
+    if (!scrForm.password) {
+      showRegisterError('Password is required.');
+      return;
+    }
+
+    if (!isPasswordValid(scrForm.password)) {
+      showRegisterError(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+
+    if (!scrForm.dept || !DEPARTMENT_OPTIONS.includes(scrForm.dept)) {
+      showRegisterError('Department is required.');
       return; 
     }
 
     try {
       const screenerData = {
-        id: scrForm.id.trim(),
-        fullname: scrForm.id.trim(),
-        username: scrForm.id.trim().toLowerCase(),
-        email: scrForm.email.trim(),
-        department: scrForm.dept,
+        id,
+        email,
         password: scrForm.password,
-        sport: '',
+        department: scrForm.dept,
         role: 'screener'
       };
 

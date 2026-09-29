@@ -57,7 +57,7 @@ const ScreenerPage = () => {
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { authReady } = usePortalSession(['screener', 'admin'], 'Screener');
+  const { authReady, user } = usePortalSession(['screener', 'admin'], 'Screener');
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -78,6 +78,9 @@ const ScreenerPage = () => {
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
   const participationType = 'Intrams';
+  const departmentOptions = user?.role === 'screener'
+    ? DEPARTMENT_OPTIONS.filter((department) => department !== user.department)
+    : DEPARTMENT_OPTIONS;
 
   const loadRequirements = async (silent = false) => {
     try {
@@ -418,7 +421,7 @@ const ScreenerPage = () => {
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
               <option value="All">All</option>
-              {DEPARTMENT_OPTIONS.map((department) => (
+              {departmentOptions.map((department) => (
                 <option key={department} value={department}>{department}</option>
               ))}
             </select>
