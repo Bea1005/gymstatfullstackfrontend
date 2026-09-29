@@ -859,32 +859,42 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                                   padding: '6px 8px',
                                   borderBottom: idx < record.referenceIds.length - 1 ? '1px solid #eee' : 'none'
                                 }}>
-                                  <select
-                                    value={currentCondition}
-                                    onChange={(e) => updateReferenceCondition(record.id, idx, e.target.value)}
-                                    disabled={record.status === 'Returned' || Boolean(record.returnedTimestamp)}
-                                    style={{
-                                      padding: '4px 8px',
-                                      borderRadius: '4px',
-                                      border: `1px solid ${conditionStyle.backgroundColor}`,
-                                      backgroundColor: conditionStyle.backgroundColor,
+                                  {record.status === 'Returned' || Boolean(record.returnedTimestamp) ? (
+                                    <span style={{
                                       color: conditionStyle.color,
                                       fontWeight: '500',
-                                      fontSize: '12px',
-                                      cursor: record.status === 'Returned' || Boolean(record.returnedTimestamp) ? 'not-allowed' : 'pointer',
-                                      outline: 'none',
-                                      opacity: record.status === 'Returned' || Boolean(record.returnedTimestamp) ? 0.7 : 1
-                                    }}
-                                  >
-                                    {EDITABLE_CONDITION_OPTIONS.map(opt => (
-                                      <option key={opt.value} value={opt.value} style={{ 
-                                        backgroundColor: 'white', 
-                                        color: '#333' 
-                                      }}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                      fontSize: '12px'
+                                    }}>
+                                      {currentCondition}
+                                    </span>
+                                  ) : (
+                                    <select
+                                      value={currentCondition}
+                                      onChange={(e) => updateReferenceCondition(record.id, idx, e.target.value)}
+                                      disabled={record.status === 'Returned' || Boolean(record.returnedTimestamp)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        border: `1px solid ${conditionStyle.backgroundColor}`,
+                                        backgroundColor: conditionStyle.backgroundColor,
+                                        color: conditionStyle.color,
+                                        fontWeight: '500',
+                                        fontSize: '12px',
+                                        cursor: record.status === 'Returned' || Boolean(record.returnedTimestamp) ? 'not-allowed' : 'pointer',
+                                        outline: 'none',
+                                        opacity: record.status === 'Returned' || Boolean(record.returnedTimestamp) ? 0.7 : 1
+                                      }}
+                                    >
+                                      {EDITABLE_CONDITION_OPTIONS.map(opt => (
+                                        <option key={opt.value} value={opt.value} style={{ 
+                                          backgroundColor: 'white', 
+                                          color: '#333' 
+                                        }}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
                                 </div>
                               );
                             })}

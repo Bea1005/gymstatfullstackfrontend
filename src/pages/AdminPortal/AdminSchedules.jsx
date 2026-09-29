@@ -1098,8 +1098,8 @@ const AdminSchedules = () => {
         <div className="modal-overlay" onClick={() => setShowNotAvailableModal(false)}>
           <div className="modal-content not-available-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header not-available-header">
-              <h3>⚠️ Date Not Available</h3>
-              <button className="close-modal" onClick={() => setShowNotAvailableModal(false)}>×</button>
+              <h3><Icon name="warning" size={19} aria-hidden="true" /> Date Not Available</h3>
+              <button className="close-modal" onClick={() => setShowNotAvailableModal(false)}><Icon name="close" size={18} aria-hidden="true" /></button>
             </div>
             
             <div className="not-available-content">
@@ -1115,8 +1115,8 @@ const AdminSchedules = () => {
                       <div className="event-info">
                         <div className="event-title">{event.event}</div>
                         <div className="event-datetime">
-                          <span>📆 {event.startDate} - {event.endDate}</span>
-                          <span>⏰ {event.startTime} - {event.endTime}</span>
+                          <span><Icon name="calendar" size={15} aria-hidden="true" /> {event.startDate} - {event.endDate}</span>
+                          <span><Icon name="clock" size={15} aria-hidden="true" /> {event.startTime} - {event.endTime}</span>
                         </div>
                       </div>
                     </div>
