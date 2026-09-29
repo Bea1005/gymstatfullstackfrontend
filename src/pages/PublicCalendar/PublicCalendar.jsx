@@ -15,6 +15,74 @@ const TIMES = [
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const PUBLIC_CALENDAR_CACHE_PREFIX = 'gymstatPublicCalendar:v1:';
+const calendarRequestsInFlight = new Map();
+
+const getPublicCalendarCacheKey = (year, month) =>
+  `${PUBLIC_CALENDAR_CACHE_PREFIX}${year}-${String(month + 1).padStart(2, '0')}`;
+
+const normalizeCalendarSchedules = (schedules) => schedules.map((schedule) => ({
+  _id: schedule._id,
+  event: schedule.event || schedule.eventName || '',
+  startDate: schedule.startDate,
+  endDate: schedule.endDate,
+  startTime: schedule.startTime,
+  endTime: schedule.endTime,
+  prepDays: Number(schedule.prepDays || 0) || 0,
+  status: schedule.status,
+  fromRequest: schedule.fromRequest || null,
+}));
+
+const normalizeCalendarRequests = (requests) => requests.map((request) => ({
+  _id: request._id,
+  eventName: request.eventName || request.event || '',
+  startDate: request.startDate,
+  endDate: request.endDate,
+  startTime: request.startTime,
+  endTime: request.endTime,
+  prepDays: Number(request.prepDays || 0) || 0,
+  status: 'pending',
+}));
+
+const readPublicCalendarCache = (year, month) => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(getPublicCalendarCacheKey(year, month)) || 'null');
+    if (!Array.isArray(cached?.approvedSchedules) || !Array.isArray(cached?.scheduleRequests)) return null;
+    return {
+      approvedSchedules: normalizeCalendarSchedules(cached.approvedSchedules),
+      scheduleRequests: normalizeCalendarRequests(cached.scheduleRequests),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writePublicCalendarCache = (year, month, approvedSchedules, scheduleRequests) => {
+  try {
+    localStorage.setItem(getPublicCalendarCacheKey(year, month), JSON.stringify({
+      approvedSchedules: normalizeCalendarSchedules(approvedSchedules),
+      scheduleRequests: normalizeCalendarRequests(scheduleRequests),
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const fetchPublicCalendarMonth = (startDate, endDate) => {
+  const requestKey = `${startDate}:${endDate}`;
+  if (calendarRequestsInFlight.has(requestKey)) return calendarRequestsInFlight.get(requestKey);
+
+  const request = Promise.allSettled([
+    api.getSchedulesByDateRange(startDate, endDate),
+    api.getPublicCalendarScheduleRequests(startDate, endDate),
+  ]);
+  calendarRequestsInFlight.set(requestKey, request);
+  request.finally(() => {
+    if (calendarRequestsInFlight.get(requestKey) === request) calendarRequestsInFlight.delete(requestKey);
+  });
+  return request;
+};
 
 export default function PublicCalendar() {
   const navigate = useNavigate();
@@ -22,59 +90,12 @@ export default function PublicCalendar() {
 
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const APPROVED_KEY = 'gymstatApprovedSchedules';
-  const REQUESTS_KEY = 'gymstatScheduleRequests';
-  const [approvedSchedules, setApprovedSchedules] = useState([]);
-  const [scheduleRequests, setScheduleRequests] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
-      return Array.isArray(stored) ? stored : [];
-    } catch {
-      return [];
-    }
-  });
+  const [initialCalendarCache] = useState(() => readPublicCalendarCache(today.getFullYear(), today.getMonth()));
+  const [approvedSchedules, setApprovedSchedules] = useState(initialCalendarCache?.approvedSchedules || []);
+  const [scheduleRequests, setScheduleRequests] = useState(initialCalendarCache?.scheduleRequests || []);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileLoadPending, setFileLoadPending] = useState(false);
-
-  const loadApprovedSchedules = async () => {
-    try {
-      const response = await api.getSchedules({ status: 'active' });
-      const schedules = Array.isArray(response?.data) ? response.data : [];
-      setApprovedSchedules(schedules);
-    } catch {
-      setApprovedSchedules([]);
-    }
-  };
-
-  const loadScheduleRequests = () => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
-      if (Array.isArray(stored)) setScheduleRequests(stored);
-    } catch {
-      // ignore
-    }
-  };
-
-  useEffect(() => {
-    loadApprovedSchedules();
-
-    const storageHandler = (e) => {
-      if (e.key === APPROVED_KEY) loadApprovedSchedules();
-      if (e.key === REQUESTS_KEY) loadScheduleRequests();
-    };
-
-    const customHandler = (e) => {
-      if (e.detail?.key === APPROVED_KEY) loadApprovedSchedules();
-      if (e.detail?.key === REQUESTS_KEY) loadScheduleRequests();
-    };
-
-    window.addEventListener('storage', storageHandler);
-    window.addEventListener('gymstatStorageUpdate', customHandler);
-    return () => {
-      window.removeEventListener('storage', storageHandler);
-      window.removeEventListener('gymstatStorageUpdate', customHandler);
-    };
-  }, []);
 
   // Modal
   const [modal, setModal] = useState(false);
@@ -97,6 +118,58 @@ export default function PublicCalendar() {
     endTime: '12:00 PM',
     prepDays: '',
   });
+
+  useEffect(() => {
+    let isCurrentMonth = true;
+    const rangeStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const rangeEnd = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+    const cached = readPublicCalendarCache(year, month);
+
+    if (cached) {
+      setApprovedSchedules(cached.approvedSchedules);
+      setScheduleRequests(cached.scheduleRequests);
+    }
+    setIsCalendarLoading(true);
+
+    const loadCalendarData = async () => {
+      const [approvedResult, pendingResult] = await fetchPublicCalendarMonth(rangeStart, rangeEnd);
+      if (!isCurrentMonth) return;
+
+      const approvedSucceeded = approvedResult.status === 'fulfilled'
+        && approvedResult.value?.success
+        && Array.isArray(approvedResult.value.data);
+      const pendingSucceeded = pendingResult.status === 'fulfilled'
+        && pendingResult.value?.success
+        && Array.isArray(pendingResult.value.data);
+
+      const nextApprovedSchedules = approvedSucceeded
+        ? normalizeCalendarSchedules(approvedResult.value.data)
+        : cached?.approvedSchedules || [];
+      const nextScheduleRequests = pendingSucceeded
+        ? normalizeCalendarRequests(pendingResult.value.data)
+        : cached?.scheduleRequests || [];
+
+      setApprovedSchedules(nextApprovedSchedules);
+      setScheduleRequests(nextScheduleRequests);
+      setIsCalendarLoading(false);
+
+      if (approvedSucceeded && pendingSucceeded) {
+        writePublicCalendarCache(year, month, nextApprovedSchedules, nextScheduleRequests);
+      } else {
+        setNotification({
+          message: cached
+            ? 'Some schedules could not be refreshed. Showing saved calendar data where available.'
+            : 'Schedules could not be loaded. Please check your connection and try again.',
+          type: 'error',
+        });
+      }
+    };
+
+    loadCalendarData();
+    return () => {
+      isCurrentMonth = false;
+    };
+  }, [year, month]);
 
   /* ── calendar helpers ── */
   const totalDays  = new Date(year, month + 1, 0).getDate();
@@ -225,8 +298,23 @@ export default function PublicCalendar() {
       ...pendingRequestEntriesForDate(dateStr),
     ]);
 
-  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); };
-  const nextMonth = () => { if (month === 11) { setMonth(0);  setYear(y => y+1); } else setMonth(m => m+1); };
+  const changeMonth = (nextYear, nextMonth) => {
+    const cached = readPublicCalendarCache(nextYear, nextMonth);
+    setApprovedSchedules(cached?.approvedSchedules || []);
+    setScheduleRequests(cached?.scheduleRequests || []);
+    setYear(nextYear);
+    setMonth(nextMonth);
+  };
+
+  const prevMonth = () => {
+    if (month === 0) changeMonth(year - 1, 11);
+    else changeMonth(year, month - 1);
+  };
+
+  const nextMonth = () => {
+    if (month === 11) changeMonth(year + 1, 0);
+    else changeMonth(year, month + 1);
+  };
 
   /* ── open modal ── */
   const openModal = (d) => {
@@ -450,22 +538,17 @@ export default function PublicCalendar() {
       // Use the API function from api.js (PUBLIC endpoint - no auth needed)
       const response = await api.createScheduleRequest(requestData);
 
-      // Also save to localStorage for backward compatibility
-      const storedRequests = JSON.parse(localStorage.getItem('gymstatScheduleRequests') || '[]');
       const newRequest = {
-        id: response.data?.id || Date.now(),
-        ...requestData,
-        createdAt: new Date().toISOString(),
-        status: 'pending'
+        _id: response.data?.id || `pending-${Date.now()}`,
+        eventName: requestData.eventName,
+        startDate: requestData.startDate,
+        startTime: requestData.startTime,
+        endDate: requestData.endDate,
+        endTime: requestData.endTime,
+        prepDays: prepDaysValue,
+        status: 'pending',
       };
-      const updatedRequests = [...storedRequests, newRequest];
-      localStorage.setItem('gymstatScheduleRequests', JSON.stringify(updatedRequests));
-      
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('gymstatStorageUpdate', { 
-          detail: { key: 'gymstatScheduleRequests' } 
-        }));
-      }
+      setScheduleRequests((currentRequests) => [...currentRequests, newRequest]);
 
       setNotification({ 
         message: 'Schedule Request Successfully Submitted and Sent to Admin.', 
@@ -559,7 +642,7 @@ export default function PublicCalendar() {
           </div>
         </div>
 
-        <div className="pc-calendar">
+        <div className="pc-calendar" aria-busy={isCalendarLoading}>
           <div className="pc-cal-nav">
             <button className="pc-nav-btn" onClick={prevMonth}>◀ Previous</button>
             <h2 className="pc-cal-month">{MONTHS[month]} {year}</h2>
@@ -570,7 +653,9 @@ export default function PublicCalendar() {
           </div>
           <div className="pc-cal-grid">{cells}</div>
           <div className="pc-legend">
-            <span className="pc-legend__hint">· Click a day to request a schedule for an open time slot</span>
+            <span className="pc-legend__hint" role={isCalendarLoading ? 'status' : undefined}>
+              {isCalendarLoading ? 'Updating schedule data...' : '· Click a day to request a schedule for an open time slot'}
+            </span>
           </div>
         </div>
       </div>

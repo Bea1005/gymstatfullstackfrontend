@@ -215,6 +215,7 @@ const PUBLIC_ENDPOINTS = [
 
 const PUBLIC_GET_ENDPOINTS = [
   '/schedules',
+  '/schedule-requests/public-calendar',
 ];
 
 // Helper function to check if endpoint is public
@@ -1079,6 +1080,13 @@ export const getScheduleRequests = async (filters = {}) => {
   });
 };
 
+export const getPublicCalendarScheduleRequests = async (startDate, endDate) => {
+  const params = new URLSearchParams({ startDate, endDate });
+  return apiRequest(`/schedule-requests/public-calendar?${params}`, {
+    method: 'GET',
+  });
+};
+
 // Get schedule request by ID (Admin only)
 export const getScheduleRequestById = async (id) => {
   return apiRequest(`/schedule-requests/${id}`, {
@@ -1226,6 +1234,7 @@ export default {
   // Schedule Requests
   createScheduleRequest,
   getScheduleRequests,
+  getPublicCalendarScheduleRequests,
   getScheduleRequestById,
   updateScheduleRequest,
   deleteScheduleRequest,
