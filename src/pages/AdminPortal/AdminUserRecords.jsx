@@ -704,8 +704,18 @@ export default function AdminUserRecords() {
                       onChange={e => setScrForm(f => ({ ...f, password: e.target.value }))} 
                       required
                     />
-                    <button type="button" className="ur-pw-toggle" onClick={() => setScrPwShow(p => !p)}>
-                      {scrPwShow ? '🙈' : '👁'}
+                    <button
+                      type="button"
+                      className="ur-pw-toggle"
+                      onClick={() => setScrPwShow(p => !p)}
+                      aria-label={scrPwShow ? 'Hide password' : 'Show password'}
+                      aria-pressed={scrPwShow}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                        <circle cx="12" cy="12" r="3" />
+                        {scrPwShow && <path d="m4 4 16 16" />}
+                      </svg>
                     </button>
                   </div>
                 </div>

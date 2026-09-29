@@ -404,34 +404,77 @@ body {
 @media (max-width: 900px) {
   .login-root {
     flex-direction: column;
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
   }
 
   .login-left {
     width: 100%;
-    min-height: 240px;
+    height: auto;
+    min-height: clamp(224px, 32svh, 280px);
+    flex: 0 0 auto;
   }
 
   .login-right {
     width: 100%;
     min-height: auto;
-    padding: clamp(18px, 4vw, 28px) clamp(16px, 3vw, 24px);
+    padding: clamp(24px, 4svh, 36px) clamp(14px, 4.5vw, 24px);
     align-items: flex-start;
   }
 
   .login-right-inner {
     width: min(100%, 480px);
     max-height: none;
+    margin-inline: auto;
+  }
+
+  .login-left-content {
+    top: max(70px, calc(env(safe-area-inset-top) + 56px));
+    right: clamp(16px, 3vw, 24px);
+    bottom: clamp(14px, 3svh, 22px);
+    left: clamp(16px, 3vw, 24px);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .login-university-badge {
+    max-width: 100%;
+    width: fit-content;
+    margin-bottom: clamp(8px, 2svh, 15px);
+  }
+
+  .login-university-badge span {
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .login-form,
+  .login-field,
+  .login-input-wrapper {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .login-input,
+  .login-field select,
+  .login-submit-btn {
+    max-width: 100%;
+    box-sizing: border-box;
   }
 }
 
 @media (max-width: 768px) {
   .login-left {
-    min-height: 220px;
+    min-height: clamp(224px, 32svh, 280px);
   }
 
   .login-left-content {
-    bottom: clamp(16px, 3vw, 22px);
     left: clamp(16px, 3vw, 20px);
+    right: clamp(16px, 3vw, 20px);
   }
 
   .login-right-inner {
@@ -448,10 +491,12 @@ body {
   .login-root {
     height: auto;
     min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
   }
 
   .login-left {
-    min-height: 180px;
+    min-height: clamp(224px, 32svh, 270px);
   }
 
   .login-right {
@@ -463,6 +508,29 @@ body {
     max-width: 100%;
     padding: 0;
     max-height: none;
+  }
+
+  .login-left-content {
+    top: max(68px, calc(env(safe-area-inset-top) + 54px));
+    right: 16px;
+    bottom: 14px;
+    left: 16px;
+  }
+
+  .login-university-badge {
+    padding: 5px 12px;
+  }
+
+  .login-university-badge span {
+    font-size: clamp(8px, 2.7vw, 10px);
+    letter-spacing: 0.6px;
+  }
+
+  .login-form,
+  .login-field,
+  .login-input-wrapper {
+    min-width: 0;
+    width: 100%;
   }
 
   .login-field {

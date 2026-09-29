@@ -1467,7 +1467,10 @@
 }
 .ur-pw-wrap { position: relative; }
 .ur-pw-wrap .ur-reg-input { padding-right: 44px; }
-.ur-pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; line-height: 1; padding: 0; }
+.ur-pw-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #800000; cursor: pointer; transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease; }
+.ur-pw-toggle svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ur-pw-toggle:hover { background: rgba(255,220,0,0.35); color: #5a0000; }
+.ur-pw-toggle:focus-visible { outline: 2px solid #ffdc00; outline-offset: 1px; }
 .ur-reg-error  { color: #ffdc00; font-size: 13px; font-weight: 600; margin: 0; text-align: center; }
 .ur-reg-submit { background: #ffdc00; color: #1a1a1a; border: none; padding: 12px 48px; border-radius: 50px; font-size: 15px; font-weight: 800; cursor: pointer; transition: background 0.2s, transform 0.15s; }
 .ur-reg-submit:hover { background: #e6c600; transform: translateY(-1px); }
