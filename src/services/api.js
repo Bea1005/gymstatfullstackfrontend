@@ -784,7 +784,8 @@ export const uploadRequirement = async (
   sport = 'General',
   participationType = 'Intrams',
   customRequirementId = '',
-  customRequirementLabel = ''
+  customRequirementLabel = '',
+  replacementSubmissionId = ''
 ) => {
   const formData = new FormData();
   formData.append('file', file);
@@ -798,6 +799,10 @@ export const uploadRequirement = async (
 
   if (customRequirementLabel) {
     formData.append('customRequirementLabel', customRequirementLabel);
+  }
+
+  if (replacementSubmissionId) {
+    formData.append('replacementSubmissionId', replacementSubmissionId);
   }
 
   return apiRequest('/student/requirements', {

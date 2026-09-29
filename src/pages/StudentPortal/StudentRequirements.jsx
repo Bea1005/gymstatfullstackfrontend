@@ -360,6 +360,9 @@ export default function StudentRequirements() {
     const uploadedRequirementType = confirmUpload?.requirementType || requirementId;
     const uploadedCustomRequirementId = confirmUpload?.customRequirementId || '';
     const uploadedCustomRequirementLabel = confirmUpload?.customRequirementLabel || '';
+    const existingPsaSubmission = uploadedRequirementType === 'psa'
+      ? getSubmissionForRequirement('psa')
+      : null;
 
     if (!file) {
       notify('error', 'File Required', 'Please select a file first');
@@ -384,7 +387,8 @@ export default function StudentRequirements() {
         selectedSport,
         participationType,
         uploadedCustomRequirementId,
-        uploadedCustomRequirementLabel
+        uploadedCustomRequirementLabel,
+        existingPsaSubmission?._id || ''
       );
 
       if (isReuploadingRejected) {
@@ -433,7 +437,18 @@ export default function StudentRequirements() {
         const requirementType = matchingCard ? 'other' : requirementId;
         const customRequirementId = matchingCard ? (matchingCard.customRequirementId || requirementId) : '';
         const customRequirementLabel = matchingCard ? (matchingCard.customRequirementLabel || matchingCard.label || '') : '';
-        await api.uploadRequirement(file, requirementType, selectedSport, participationType, customRequirementId, customRequirementLabel);
+        const existingPsaSubmission = requirementType === 'psa'
+          ? getSubmissionForRequirement('psa')
+          : null;
+        await api.uploadRequirement(
+          file,
+          requirementType,
+          selectedSport,
+          participationType,
+          customRequirementId,
+          customRequirementLabel,
+          existingPsaSubmission?._id || ''
+        );
       }
       notify('success', 'All Files Submitted', 'Your selected requirement files were uploaded successfully.');
       notifyRequirementUpdate();

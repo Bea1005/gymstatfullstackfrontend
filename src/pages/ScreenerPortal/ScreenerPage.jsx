@@ -305,6 +305,11 @@ const ScreenerPage = () => {
     return <span className="text-muted-italic">No Documents Attached</span>;
   };
 
+  const renderOverallStatusBadge = (status) => {
+    if (status === 'Approved') return <span className="badge badge-completed">Approved</span>;
+    return renderStatusBadge(status);
+  };
+
   const resubmissionCount = students.reduce((acc, student) => {
     return acc + Object.values(student.requirements || {})
       .filter((item) => !Array.isArray(item))
@@ -482,7 +487,7 @@ const ScreenerPage = () => {
                     {renderStatusCell(student.requirements?.insurance)}
                     {renderStatusCell(student.requirements?.profile)}
                     {renderStatusCell(student.requirements?.consent)}
-                    <td>{renderStatusBadge(student.overallStatus)}</td>
+                    <td>{renderOverallStatusBadge(student.overallStatus)}</td>
                   </tr>
                 ))}
               </tbody>
