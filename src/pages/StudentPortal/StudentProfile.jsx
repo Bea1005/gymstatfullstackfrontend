@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import * as api from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
-import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import "./StudentProfile.css";
 
 const normalizeDateForInput = (value) => {
@@ -78,8 +78,8 @@ const StudentProfile = () => {
       if (!updatedUser) {
         throw new Error("The profile was saved, but the updated user record could not be retrieved.");
       }
-      if (updatedUser.dateOfBirth !== form.dateOfBirth || updatedUser.yearLevel !== form.yearLevel || updatedUser.branchCampus !== form.branchCampus) {
-        throw new Error("The profile was saved, but Date of Birth, Year Level, or Branch Campus was not persisted.");
+      if (updatedUser.dateOfBirth !== form.dateOfBirth || updatedUser.yearLevel !== form.yearLevel || updatedUser.branchCampus !== form.branchCampus || (updatedUser.sport || "") !== form.sport) {
+        throw new Error("The profile was saved, but Date of Birth, Year Level, Branch Campus, or Sport was not persisted.");
       }
       setUser(updatedUser);
       if (photoFile) {
@@ -172,7 +172,12 @@ const StudentProfile = () => {
               <div className="student-profile-field" key={label}>
                 <span>{label}</span>
                 {isEditing && editable ? (
-                value === "branchCampus" || value === "department" || value === "yearLevel" ? (
+                value === "sport" ? (
+                  <select className="student-profile-input" value={form.sport || ""} onChange={(event) => setForm((current) => ({ ...current, sport: event.target.value }))}>
+                    <option value="" disabled>Select Sport</option>
+                    {SPORT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                ) : value === "branchCampus" || value === "department" || value === "yearLevel" ? (
                   <select className="student-profile-input" value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))}>
                     <option value="" disabled>{value === "department" ? "Select Department" : value === "yearLevel" ? "Select Year Level" : "Select Branch Campus"}</option>
                     {(value === "department" ? DEPARTMENT_OPTIONS : value === "yearLevel" ? YEAR_LEVEL_OPTIONS : ["Boac Main", "Santa Cruz", "Gasan", "Torrijos"]).map((option) => (
