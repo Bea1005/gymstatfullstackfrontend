@@ -648,6 +648,22 @@
 }
 .modal-form .form-group input:focus,
 .modal-form .form-group select:focus { outline: none; border-color: #7b1e1e; }
+.schedule-time-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  gap: 6px;
+  min-width: 0;
+}
+.schedule-time-controls input,
+.schedule-time-controls select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.schedule-time-error {
+  color: #7b1e1e;
+  font-size: 12px;
+}
 .modal-buttons { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
 .modal-buttons .cancel-btn {
   background: #ccc; color: #333; border: none;
@@ -1676,7 +1692,26 @@
    BORROWING  (bw-*)
 ════════════════════════════════════════ */
 .bw-root { padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; max-width: 1100px; }
+.bw-page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .bw-title { font-size: 26px; font-weight: 900; color: #1a1a1a; margin: 0; line-height: 1.25; }
+.bw-template-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid #7b1e1e;
+  border-radius: 6px;
+  background: #fff;
+  color: #7b1e1e;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+}
+.bw-template-download:hover { background: #7b1e1e; color: #fff; transform: translateY(-1px); }
+.bw-template-download:focus-visible { outline: 2px solid #ffdc00; outline-offset: 3px; }
 
 .bw-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .bw-stat-card { background: #ffdc00; border-radius: 14px; padding: 22px 28px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 4px 14px rgba(255,220,0,0.28); }
@@ -1728,6 +1763,8 @@
 
 @media (max-width: 640px) {
   .bw-root     { padding: 16px; }
+  .bw-page-header { align-items: stretch; flex-direction: column; }
+  .bw-template-download { align-self: flex-start; }
   .bw-stats    { grid-template-columns: 1fr 1fr; }
   .bw-form-row { grid-template-columns: 1fr; }
 }

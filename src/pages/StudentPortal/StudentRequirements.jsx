@@ -1082,7 +1082,8 @@ export default function StudentRequirements() {
                 const savedFileName = uploadedFiles[req.id]?.name || submission?.fileName || req.savedFileName || '';
 
                 return (
-                  <div key={req.id} className={`upload-card ${isRejected ? 'rejected-state' : ''}`}>
+                  <div key={req.id} className={`upload-card${req.id === 'cor' ? ' upload-card--optional' : ''} ${isRejected ? 'rejected-state' : ''}`}>
+                    {req.id === 'cor' && <span className="optional-requirement-label">UNREQUIRE DOCUMENTS</span>}
                     <div className="upload-icon"><Icon name={req.icon} /></div>
                     <span className="upload-label">{req.label}</span>
 

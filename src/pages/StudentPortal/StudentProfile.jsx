@@ -14,16 +14,24 @@ const normalizeDateForInput = (value) => {
   return Number.isNaN(parsedDate.getTime()) ? "" : parsedDate.toISOString().slice(0, 10);
 };
 
-const getEditableProfileFields = (profile = {}) => ({
-  fullname: profile.fullname || profile.name || "",
-  email: profile.email || "",
-  contactNumber: profile.contactNumber || "",
-  dateOfBirth: normalizeDateForInput(profile.dateOfBirth || profile.dob),
-  department: profile.department || "",
-  yearLevel: profile.yearLevel || "",
-  sport: profile.sport || "",
-  branchCampus: profile.branchCampus || ""
-});
+const getEditableProfileFields = (profile = {}) => {
+  const savedSports = Array.isArray(profile.sports) && profile.sports.length
+    ? profile.sports
+    : [profile.sport];
+  const sports = [...new Set(savedSports.map((sport) => String(sport || "").trim()).filter(Boolean))];
+
+  return {
+    fullname: profile.fullname || profile.name || "",
+    email: profile.email || "",
+    contactNumber: profile.contactNumber || "",
+    dateOfBirth: normalizeDateForInput(profile.dateOfBirth || profile.dob),
+    department: profile.department || "",
+    yearLevel: profile.yearLevel || "",
+    sport: sports[0] || "",
+    sports: sports.length ? sports : [""],
+    branchCampus: profile.branchCampus || ""
+  };
+};
 
 const StudentProfile = () => {
   const { notify } = useNotifications();
@@ -66,6 +74,10 @@ const StudentProfile = () => {
     try {
       const formData = new FormData();
       Object.entries(getEditableProfileFields(form)).forEach(([field, value]) => {
+        if (field === "sports") {
+          formData.append(field, JSON.stringify(value));
+          return;
+        }
         if (value !== "" && value !== null && value !== undefined) {
           formData.append(field, value);
         }
@@ -78,8 +90,14 @@ const StudentProfile = () => {
       if (!updatedUser) {
         throw new Error("The profile was saved, but the updated user record could not be retrieved.");
       }
-      if (updatedUser.dateOfBirth !== form.dateOfBirth || updatedUser.yearLevel !== form.yearLevel || updatedUser.branchCampus !== form.branchCampus || (updatedUser.sport || "") !== form.sport) {
-        throw new Error("The profile was saved, but Date of Birth, Year Level, Branch Campus, or Sport was not persisted.");
+      const persistedSports = Array.isArray(updatedUser.sports) && updatedUser.sports.length
+        ? updatedUser.sports
+        : [updatedUser.sport].filter(Boolean);
+      if (updatedUser.dateOfBirth !== form.dateOfBirth
+        || updatedUser.yearLevel !== form.yearLevel
+        || updatedUser.branchCampus !== form.branchCampus
+        || JSON.stringify(persistedSports) !== JSON.stringify(form.sports)) {
+        throw new Error("The profile was saved, but one or more profile fields or sports were not persisted.");
       }
       setUser(updatedUser);
       if (photoFile) {
@@ -134,7 +152,7 @@ const StudentProfile = () => {
     ["Date of Birth", "dateOfBirth", true],
     ["Department", "department", true],
     ["Year Level", "yearLevel", true],
-    ["Sport", "sport", true],
+    ["Sport", "sports", true],
     ["Branch Campus", "branchCampus", true],
   ];
 
@@ -172,11 +190,51 @@ const StudentProfile = () => {
               <div className="student-profile-field" key={label}>
                 <span>{label}</span>
                 {isEditing && editable ? (
-                value === "sport" ? (
-                  <select className="student-profile-input" value={form.sport || ""} onChange={(event) => setForm((current) => ({ ...current, sport: event.target.value }))}>
-                    <option value="" disabled>Select Sport</option>
-                    {SPORT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
+                value === "sports" ? (
+                  <div className="student-profile-sports">
+                    {(form.sports || []).map((sport, index) => (
+                      <div className="student-profile-sport-row" key={`${sport || "sport"}-${index}`}>
+                        <select
+                          className="student-profile-input"
+                          value={sport}
+                          onChange={(event) => setForm((current) => {
+                            const sports = [...(current.sports || [])];
+                            sports[index] = event.target.value;
+                            return { ...current, sports, sport: sports[0] || "" };
+                          })}
+                          required={index === 0}
+                        >
+                          <option value="" disabled>Select Sport</option>
+                          {sport && !SPORT_OPTIONS.includes(sport) && <option value={sport}>{sport}</option>}
+                          {SPORT_OPTIONS.filter((option) => !form.sports.includes(option) || option === sport).map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                        {index === 0 ? (
+                          <button
+                            type="button"
+                            className="student-profile-sport-add"
+                            onClick={() => setForm((current) => ({ ...current, sports: [...(current.sports || []), ""] }))}
+                            disabled={(form.sports || []).length >= SPORT_OPTIONS.length}
+                          >
+                            Add Sport
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="student-profile-sport-remove"
+                            onClick={() => setForm((current) => {
+                              const sports = current.sports.filter((_, sportIndex) => sportIndex !== index);
+                              return { ...current, sports, sport: sports[0] || "" };
+                            })}
+                            aria-label={`Remove ${sport || "additional sport"}`}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 ) : value === "branchCampus" || value === "department" || value === "yearLevel" ? (
                   <select className="student-profile-input" value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))}>
                     <option value="" disabled>{value === "department" ? "Select Department" : value === "yearLevel" ? "Select Year Level" : "Select Branch Campus"}</option>
@@ -187,7 +245,11 @@ const StudentProfile = () => {
                 ) : (
                   <input className="student-profile-input" type={value === "dateOfBirth" ? "date" : "text"} value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))} required={value === "fullname"} />
                 )
-                ) : <strong>{value === "department" ? displayValue(departmentDisplay) : displayValue(editable ? form[value] : value)}</strong>}
+                ) : <strong>{value === "department"
+                  ? displayValue(departmentDisplay)
+                  : value === "sports"
+                    ? displayValue((form.sports || []).join(", "))
+                    : displayValue(editable ? form[value] : value)}</strong>}
               </div>
             );
           })}

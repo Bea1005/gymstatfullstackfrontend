@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
+import Icon from '../../components/Icon';
+import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
 import {
   getEquipment,
   getBorrowingRecords,
@@ -479,6 +481,15 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     <div className="bw-root">
       <div className="bw-page-header">
         <h1 className="bw-title">Equipment Borrowing<br />Management</h1>
+        <a
+          className="bw-template-download"
+          href={borrowersTemplateDoc}
+          download="borrowers-template.doc"
+          title="Download equipment borrowing request template"
+        >
+          <Icon name="download" size={16} />
+          Download Template
+        </a>
       </div>
 
       <div className="bw-stats">

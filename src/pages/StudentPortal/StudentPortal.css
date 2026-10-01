@@ -845,6 +845,24 @@ body {
   color: #991b1b;
 }
 
+.upload-card--optional {
+  position: relative;
+}
+
+.optional-requirement-label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 6px;
+  border: 1px solid var(--maroon-dark);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--maroon-dark);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .rejection-note {
   width: 100%;
   padding: 0.85rem 1rem;

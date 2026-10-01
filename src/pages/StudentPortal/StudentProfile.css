@@ -224,6 +224,49 @@
   outline-offset: 1px;
 }
 
+.student-profile-sports {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.student-profile-sport-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.student-profile-sport-row .student-profile-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.student-profile-sport-add,
+.student-profile-sport-remove {
+  flex: 0 0 auto;
+  border: 1px solid var(--maroon-dark);
+  padding: 7px 10px;
+  background: #fff;
+  color: var(--maroon-dark);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.student-profile-sport-add:hover:not(:disabled),
+.student-profile-sport-remove:hover {
+  background: var(--maroon-dark);
+  color: #fff;
+}
+
+.student-profile-sport-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .student-profile-edit-hint {
   color: var(--text-light);
   font-size: 0.82rem;

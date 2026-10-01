@@ -8,11 +8,24 @@ import './AdminPortal.css';
 
 // Define TIMES array for time selection
 const TIMES = [
-  '12:00 AM','01:00 AM','02:00 AM','03:00 AM','04:00 AM','05:00 AM',
-  '06:00 AM','07:00 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM',
+  '07:30 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM',
   '12:00 PM','01:00 PM','02:00 PM','03:00 PM','04:00 PM','05:00 PM',
-  '06:00 PM','07:00 PM','08:00 PM','09:00 PM','10:00 PM','11:00 PM',
+  '06:00 PM','07:00 PM','08:00 PM','09:00 PM'
 ];
+
+const parseScheduleTime = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 1 || hour > 12) return null;
+
+  const normalizedHour = hour % 12 + (match[3].toUpperCase() === 'PM' ? 12 : 0);
+  return { minutes: normalizedHour * 60 + minute };
+};
+
+const timeToMinutes = (value) => parseScheduleTime(value)?.minutes ?? 0;
 
 const AdminSchedules = () => {
   const [reservations, setReservations] = useState([
@@ -32,6 +45,7 @@ const AdminSchedules = () => {
     endTime: '12:00 PM',
     prepDays: 0
   });
+  const [timeErrors, setTimeErrors] = useState({ startTime: '', endTime: '' });
 
   const getDaysInMonth = (year, month) => {
     return new Date(year, month + 1, 0).getDate();
@@ -342,6 +356,7 @@ const AdminSchedules = () => {
 
   const handleCreateNewSchedule = () => {
     setShowNotAvailableModal(false);
+    setTimeErrors({ startTime: '', endTime: '' });
     setShowModal(true);
   };
 
@@ -469,6 +484,7 @@ const AdminSchedules = () => {
       setShowNotAvailableModal(true);
     } else {
       setSelectedDate(dateStr);
+      setTimeErrors({ startTime: '', endTime: '' });
       setFormData({
         event: '',
         startDate: dateStr,
@@ -496,14 +512,14 @@ const AdminSchedules = () => {
       return;
     }
 
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const [time, meridian] = t.split(' ');
-      const [hh, mm] = time.split(':').map(Number);
-      let h = hh % 12;
-      if (meridian === 'PM') h += 12;
-      return h * 60 + mm;
+    const parsedStartTime = parseScheduleTime(formData.startTime);
+    const parsedEndTime = parseScheduleTime(formData.endTime);
+    const nextTimeErrors = {
+      startTime: parsedStartTime ? '' : 'Enter a valid time, such as 1:30 PM.',
+      endTime: parsedEndTime ? '' : 'Enter a valid time, such as 2:45 PM.',
     };
+    setTimeErrors(nextTimeErrors);
+    if (nextTimeErrors.startTime || nextTimeErrors.endTime) return;
 
     const dateToDayStart = (dateString) => {
       const date = new Date(dateString);
@@ -513,9 +529,16 @@ const AdminSchedules = () => {
 
     const newStartDate = dateToDayStart(formData.startDate);
     const newEndDate = dateToDayStart(formData.endDate);
-    const newStartMin = timeToMinutes(formData.startTime);
-    const newEndMin = timeToMinutes(formData.endTime);
+    const newStartMin = parsedStartTime.minutes;
+    const newEndMin = parsedEndTime.minutes;
     const newPrep = Number(formData.prepDays || 0) || 0;
+
+    const scheduledStart = newStartDate.getTime() + newStartMin * 60000;
+    const scheduledEnd = newEndDate.getTime() + newEndMin * 60000;
+    if (scheduledEnd <= scheduledStart) {
+      setTimeErrors((current) => ({ ...current, endTime: 'End time must be later than start time.' }));
+      return;
+    }
 
     const hasConflict = reservations.some((res) => {
       if (res.id === formData.id) return false;
@@ -592,6 +615,7 @@ const AdminSchedules = () => {
   };
 
   const resetForm = () => {
+    setTimeErrors({ startTime: '', endTime: '' });
     setFormData({
       id: null,
       event: '',
@@ -619,6 +643,7 @@ const AdminSchedules = () => {
   };
 
   const handleEdit = (reservation) => {
+    setTimeErrors({ startTime: '', endTime: '' });
     setFormData({ ...reservation });
     setSelectedDate(reservation.startDate);
     setShowModal(true);
@@ -1032,14 +1057,39 @@ const AdminSchedules = () => {
                 </div>
                 <div className="form-group">
                   <label htmlFor="schedule-start-time">Start time <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
-                  <select 
-                    id="schedule-start-time"
-                    value={formData.startTime} 
-                    onChange={(e) => setFormData({...formData, startTime: e.target.value})}
-                    required
-                  >
-                    {TIMES.map(t => <option key={t}>{t}</option>)}
-                  </select>
+                  <div className="schedule-time-controls">
+                    <input
+                      id="schedule-start-time"
+                      type="text"
+                      value={formData.startTime}
+                      onChange={(e) => {
+                        setFormData((current) => ({ ...current, startTime: e.target.value }));
+                        setTimeErrors((current) => ({ ...current, startTime: '' }));
+                      }}
+                      onBlur={() => setTimeErrors((current) => ({
+                        ...current,
+                        startTime: parseScheduleTime(formData.startTime) ? '' : 'Enter a valid time, such as 1:30 PM.',
+                      }))}
+                      placeholder="e.g., 1:30 PM"
+                      autoComplete="off"
+                      aria-invalid={Boolean(timeErrors.startTime)}
+                      aria-describedby={timeErrors.startTime ? 'schedule-start-time-error' : undefined}
+                      required
+                    />
+                    <select
+                      aria-label="Choose start time"
+                      value={TIMES.includes(formData.startTime) ? formData.startTime : formData.startTime || ''}
+                      onChange={(e) => {
+                        setFormData((current) => ({ ...current, startTime: e.target.value }));
+                        setTimeErrors((current) => ({ ...current, startTime: '' }));
+                      }}
+                    >
+                      {!TIMES.includes(formData.startTime) && formData.startTime && <option value={formData.startTime}>{formData.startTime}</option>}
+                      {!formData.startTime && <option value="">Choose time</option>}
+                      {TIMES.map((time) => <option key={time} value={time}>{time}</option>)}
+                    </select>
+                  </div>
+                  {timeErrors.startTime && <small id="schedule-start-time-error" className="schedule-time-error" role="alert">{timeErrors.startTime}</small>}
                 </div>
               </div>
 
@@ -1056,14 +1106,39 @@ const AdminSchedules = () => {
                 </div>
                 <div className="form-group">
                   <label htmlFor="schedule-end-time">End time <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
-                  <select 
-                    id="schedule-end-time"
-                    value={formData.endTime} 
-                    onChange={(e) => setFormData({...formData, endTime: e.target.value})}
-                    required
-                  >
-                    {TIMES.map(t => <option key={t}>{t}</option>)}
-                  </select>
+                  <div className="schedule-time-controls">
+                    <input
+                      id="schedule-end-time"
+                      type="text"
+                      value={formData.endTime}
+                      onChange={(e) => {
+                        setFormData((current) => ({ ...current, endTime: e.target.value }));
+                        setTimeErrors((current) => ({ ...current, endTime: '' }));
+                      }}
+                      onBlur={() => setTimeErrors((current) => ({
+                        ...current,
+                        endTime: parseScheduleTime(formData.endTime) ? '' : 'Enter a valid time, such as 2:45 PM.',
+                      }))}
+                      placeholder="e.g., 2:45 PM"
+                      autoComplete="off"
+                      aria-invalid={Boolean(timeErrors.endTime)}
+                      aria-describedby={timeErrors.endTime ? 'schedule-end-time-error' : undefined}
+                      required
+                    />
+                    <select
+                      aria-label="Choose end time"
+                      value={TIMES.includes(formData.endTime) ? formData.endTime : formData.endTime || ''}
+                      onChange={(e) => {
+                        setFormData((current) => ({ ...current, endTime: e.target.value }));
+                        setTimeErrors((current) => ({ ...current, endTime: '' }));
+                      }}
+                    >
+                      {!TIMES.includes(formData.endTime) && formData.endTime && <option value={formData.endTime}>{formData.endTime}</option>}
+                      {!formData.endTime && <option value="">Choose time</option>}
+                      {TIMES.map((time) => <option key={time} value={time}>{time}</option>)}
+                    </select>
+                  </div>
+                  {timeErrors.endTime && <small id="schedule-end-time-error" className="schedule-time-error" role="alert">{timeErrors.endTime}</small>}
                 </div>
               </div>
 
