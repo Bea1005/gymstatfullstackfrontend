@@ -27,6 +27,8 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [departmentError, setDepartmentError] = useState("");
 
+  const registrationRole = /^\d{4}-\d{4}$/.test(form.id.trim()) ? "coach" : "student";
+
   const set = (key) => (e) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
@@ -96,7 +98,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const data = await registerUser(form);
+      const data = await registerUser({ ...form, id: form.id.trim(), role: registrationRole });
 
       if (data.success) {
         notify("success", "Registration Successful", "Your account is ready! Redirecting to login...");

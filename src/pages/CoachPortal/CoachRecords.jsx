@@ -14,10 +14,6 @@ import scuaaLogo from '../../assets/SCUAA logo.png';
 // Status stamps (kept from the original portal — rendered as a small badge
 // in the corner of each athlete photo so the "gallery" still communicates
 // document-completion status without breaking the printed-form look).
-import completedStamp from '../../assets/GymstatStamps/Completed.png';
-import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
-import disqualifiedStamp from '../../assets/GymstatStamps/Disqualified.png';
-import noDocumentsStamp from '../../assets/GymstatStamps/NoDocuments.png';
 import * as api from '../../services/api';
 import './CoachPortal.css';
 
@@ -71,13 +67,6 @@ const sportCategoryOptions = [
   'Mobile Legends Women',
   'Mobile Legends Men',
 ];
-
-const statusStampMap = {
-  completed: completedStamp,
-  incomplete: incompleteStamp,
-  disqualified: disqualifiedStamp,
-  'no-documents': noDocumentsStamp,
-};
 
 const DEFAULT_STAFF_ROLES = ['COACH', 'ASST. COACH', 'TRAINER', 'CHAPERONE', 'OTHER FACULTY'];
 
@@ -160,7 +149,7 @@ export default function CoachRecord() {
     fullname: 'DR. CHRISTOPHER J. REBISTUAL',
     email: 'rebistual.christopher@marsu.edu.ph',
     phone: '09277692943',
-    mainSport: 'Volleyball Women',
+    mainSport: '',
     position: 'Coach',
     photo: placeholderImg,
   });
@@ -175,14 +164,14 @@ export default function CoachRecord() {
   const [studentDirectorySearch, setStudentDirectorySearch] = useState('');
   const [studentSearchResults, setStudentSearchResults] = useState([]);
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
-  const studentSearchTimerRef = useRef(null);
+  const [studentSearchError, setStudentSearchError] = useState('');
   const studentSearchCacheRef = useRef(new Map());
   const studentSearchInFlightRef = useRef(new Map());
   const studentSearchRequestRef = useRef(0);
   const athleteCacheRef = useRef(new Map());
   const athleteRequestRef = useRef(new Map());
   const studentPhotoCacheRef = useRef(new Map());
-  const activeSportRef = useRef(coachProfile.mainSport);
+  const activeSportRef = useRef('');
   const [announcements, setAnnouncements] = useState([]);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -261,16 +250,6 @@ export default function CoachRecord() {
   const [removeTarget, setRemoveTarget] = useState({ type: null, id: null, name: '' });
 
   useEffect(() => {
-    const storedUser = JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
-    setCoachProfile((prev) => ({
-      ...prev,
-      fullname: storedUser.fullname || prev.fullname,
-      email: storedUser.email || prev.email,
-      mainSport: storedUser.sport || prev.mainSport,
-      position: storedUser.coachPosition || prev.position,
-      photo: storedUser.photo || prev.photo,
-    }));
-
     fetchCoachData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
@@ -283,7 +262,7 @@ export default function CoachRecord() {
           fullname: athlete.fullname || '',
           email: athlete.email || '',
           course: [athlete.department, athlete.yearLevel].filter(Boolean).join(' - '),
-          sport: athlete.sport || selectedSport || 'Volleyball Women',
+          sport: athlete.sport || selectedSport || '',
           location: athlete.branchCampus || '',
           dob: athlete.dateOfBirth || athlete.dob || '',
           photo: '',
@@ -305,32 +284,39 @@ export default function CoachRecord() {
     return studentPhotoCacheRef.current.get(photoUrl);
   };
 
-  const getStudentSearchResults = (query, sport) => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const queryKey = `${sport}\u0000${normalizedQuery}`;
-    const cachedResults = studentSearchCacheRef.current.get(queryKey);
+  const loadStudentSearchDirectory = (sport) => {
+    const selectedSport = String(sport || '').trim();
+    if (!selectedSport) return Promise.resolve([]);
+
+    const cachedResults = studentSearchCacheRef.current.get(selectedSport);
     if (cachedResults) return Promise.resolve(cachedResults);
 
-    const existingRequest = studentSearchInFlightRef.current.get(queryKey);
+    const existingRequest = studentSearchInFlightRef.current.get(selectedSport);
     if (existingRequest) return existingRequest;
 
-    const request = api.searchCoachStudents(query, sport)
-      .then((results) => (Array.isArray(results) ? results : []).filter((student) => {
-        const studentId = String(student?._id || student?.id || '').toLowerCase();
-        const studentName = String(student?.fullname || '').toLowerCase();
-        return studentId.includes(normalizedQuery) || studentName.includes(normalizedQuery);
-      }))
+    const request = api.searchCoachStudents('', selectedSport)
+      .then((results) => (Array.isArray(results) ? results : []))
       .then((results) => {
-        studentSearchCacheRef.current.set(queryKey, results);
-        if (studentSearchCacheRef.current.size > 100) {
-          studentSearchCacheRef.current.delete(studentSearchCacheRef.current.keys().next().value);
-        }
+        studentSearchCacheRef.current.set(selectedSport, results);
         return results;
       })
-      .finally(() => studentSearchInFlightRef.current.delete(queryKey));
+      .finally(() => studentSearchInFlightRef.current.delete(selectedSport));
 
-    studentSearchInFlightRef.current.set(queryKey, request);
+    studentSearchInFlightRef.current.set(selectedSport, request);
     return request;
+  };
+
+  const getStudentSearchResults = async (query, sport) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+    const directory = await loadStudentSearchDirectory(sport);
+    return directory.filter((student) => {
+      const studentIdentifiers = [student?.id, student?._id]
+        .map((value) => String(value || '').toLowerCase());
+      const studentName = String(student?.fullname || '').toLowerCase();
+      return studentIdentifiers.some((studentId) => studentId.includes(normalizedQuery))
+        || studentName.includes(normalizedQuery);
+    });
   };
 
   const hydrateAthletePhotos = async (sport, athleteList) => {
@@ -369,27 +355,34 @@ export default function CoachRecord() {
     return request;
   };
 
-  const fetchCoachData = async (selectedSport = coachProfile.mainSport) => {
+  const fetchCoachData = async (requestedSport) => {
     try {
-      if (selectedSport === coachProfile.mainSport) setLoading(true);
-      else setCategoryLoading(true);
-      const [profileData, athletesData, updatesData, facultyData] = await Promise.all([
-        api.getCoachProfile().catch(() => null),
-        api.getCoachAthletes(selectedSport).catch(() => []),
+      if (requestedSport) setCategoryLoading(true);
+      else setLoading(true);
+
+      const profileData = await api.getCoachProfile().catch(() => null);
+      const selectedSport = String(
+        requestedSport || activeSportRef.current || profileData?.mainSport || ''
+      ).trim();
+      activeSportRef.current = selectedSport;
+      setCoachProfile((prev) => ({
+        ...prev,
+        fullname: profileData?.fullname || prev.fullname,
+        email: profileData?.email || prev.email,
+        mainSport: selectedSport,
+        position: profileData?.position || prev.position,
+        phone: profileData?.phone || prev.phone || '09277692943',
+        photo: profileData?.photo || prev.photo,
+      }));
+      if (selectedSport) void loadStudentSearchDirectory(selectedSport).catch(() => {});
+
+      const [athletesData, updatesData, facultyData] = await Promise.all([
+        selectedSport ? api.getCoachAthletes(selectedSport).catch(() => []) : Promise.resolve([]),
         api.getCoachUpdates().catch(() => []),
         api.getFacultyMembers().catch(() => []),
       ]);
 
       if (profileData) {
-        setCoachProfile((prev) => ({
-          ...prev,
-          fullname: profileData.fullname || prev.fullname,
-          email: profileData.email || prev.email,
-          mainSport: selectedSport || profileData.mainSport || prev.mainSport,
-          position: profileData.position || prev.position,
-          phone: profileData.phone || prev.phone || '09277692943',
-          photo: profileData.photo || prev.photo,
-        }));
         setStaff((prev) => {
           const next = [...prev];
           next[0] = {
@@ -407,14 +400,14 @@ export default function CoachRecord() {
       }
 
       const normalizedAthletes = normalizeCoachAthletes(athletesData, selectedSport);
-      athleteCacheRef.current.set(selectedSport, normalizedAthletes);
+      if (selectedSport) athleteCacheRef.current.set(selectedSport, normalizedAthletes);
       setAthletes(normalizedAthletes);
       setHasActivatedGrid(
         normalizedAthletes.length > 0
         || Boolean(facultyData.some?.((member) => member.fullname || member.phone || member.email))
         || Boolean(profileData?.staffMembers?.some((member) => member.fullname || member.phone || member.email))
       );
-      void hydrateAthletePhotos(selectedSport, normalizedAthletes);
+      if (selectedSport) void hydrateAthletePhotos(selectedSport, normalizedAthletes);
 
       const normalizedFaculty = Array.isArray(facultyData)
         ? await Promise.all(facultyData.map(async (member) => {
@@ -473,15 +466,23 @@ export default function CoachRecord() {
           }
         }));
         const latestPhotoById = new Map(latestPhotos.map(([photo, id]) => [id, photo]));
-        const latestStatuses = new Map(latestAthletes.map((athlete) => [
-          String(athlete._id || athlete.id),
-          normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
-        ]));
+        const latestAthletesById = new Map(normalizeCoachAthletes(latestAthletes, coachProfile.mainSport)
+          .map((athlete) => [String(athlete.userId || athlete.id), athlete]));
 
         setAthletes((currentAthletes) => currentAthletes.map((athlete) => {
-          const latestStatus = latestStatuses.get(String(athlete.id));
-          const latestPhoto = latestPhotoById.get(String(athlete.id));
-          return latestStatus ? { ...athlete, status: latestStatus, photo: latestPhoto || athlete.photo } : athlete;
+          const studentId = String(athlete.userId || athlete.id);
+          const latestAthlete = latestAthletesById.get(studentId);
+          if (!latestAthlete) return athlete;
+          return {
+            ...athlete,
+            fullname: latestAthlete.fullname,
+            dob: latestAthlete.dob,
+            course: latestAthlete.course,
+            location: latestAthlete.location,
+            sport: latestAthlete.sport,
+            status: latestAthlete.status,
+            photo: latestPhotoById.get(studentId) || athlete.photo,
+          };
         }));
       } finally {
         refreshInFlight = false;
@@ -770,7 +771,23 @@ export default function CoachRecord() {
     setEditingAthlete(null);
     setStudentDirectorySearch('');
     setStudentSearchResults([]);
-    setStudentSearchLoading(false);
+    setStudentSearchError('');
+    const searchRequestId = studentSearchRequestRef.current + 1;
+    studentSearchRequestRef.current = searchRequestId;
+    const selectedSport = coachProfile.mainSport;
+    setStudentSearchLoading(!studentSearchCacheRef.current.has(selectedSport));
+    void loadStudentSearchDirectory(selectedSport)
+      .then(() => {
+        if (studentSearchRequestRef.current === searchRequestId && activeSportRef.current === selectedSport) {
+          setStudentSearchLoading(false);
+        }
+      })
+      .catch(() => {
+        if (studentSearchRequestRef.current === searchRequestId && activeSportRef.current === selectedSport) {
+          setStudentSearchError('Unable to load students. Please try again.');
+          setStudentSearchLoading(false);
+        }
+      });
     setEditForm({
       studentId: '',
       fullname: '',
@@ -795,44 +812,38 @@ export default function CoachRecord() {
     }
 
     const selectedSport = coachProfile.mainSport;
-    const optimisticAthlete = {
-      id: studentId,
-      userId: studentId,
-      fullname: student.fullname || '',
-      email: student.email || '',
-      course: [student.department, student.yearLevel].filter(Boolean).join(' - '),
-      sport: student.sport || selectedSport,
-      location: student.branchCampus || '',
-      dob: student.dateOfBirth || student.dob || '',
-      photo: '',
-      status: normalizeAthleteStatus(student.athleteStatus || student.status),
-    };
-
-    const nextAthletes = [...athletes, optimisticAthlete];
-    athleteCacheRef.current.set(selectedSport, nextAthletes);
-    setAthletes(nextAthletes);
-    setHasActivatedGrid(true);
-    setEditingAthlete(null);
-    setIsAddingAthlete(false);
-    setStudentDirectorySearch('');
-    setStudentSearchResults([]);
-    setToast({ message: 'Student added successfully.', type: 'success' });
-
-    api.createCoachAthlete({ studentId })
-      .then(() => loadStudentPhoto(`/coach/students/${studentId}/profile-photo`))
-      .then((photo) => {
-        if (!photo) return;
-        const updatePhoto = (currentAthletes) => currentAthletes.map((athlete) => (
-          String(athlete.userId || athlete.id) === String(studentId) ? { ...athlete, photo } : athlete
-        ));
-        athleteCacheRef.current.set(selectedSport, updatePhoto(athleteCacheRef.current.get(selectedSport) || nextAthletes));
-        if (activeSportRef.current === selectedSport) setAthletes(updatePhoto);
+    setIsSaving(true);
+    api.createCoachAthlete({ studentId, sport: selectedSport })
+      .then(async (response) => {
+        const savedStudent = response?.data || student;
+        const savedStudentId = String(savedStudent._id || savedStudent.studentId || studentId);
+        const photo = savedStudent.profilePhotoUrl ? await loadStudentPhoto(savedStudent.profilePhotoUrl) : '';
+        const selectedAthlete = {
+          id: savedStudentId,
+          userId: savedStudentId,
+          fullname: savedStudent.fullname || '',
+          course: [savedStudent.department, savedStudent.yearLevel].filter(Boolean).join(' - '),
+          sport: savedStudent.sport || '',
+          location: savedStudent.branchCampus || '',
+          dob: savedStudent.dateOfBirth || savedStudent.dob || '',
+          photo,
+          profilePhotoUrl: savedStudent.profilePhotoUrl || '',
+          status: normalizeAthleteStatus(savedStudent.athleteStatus || savedStudent.status),
+        };
+        const nextAthletes = [...athletes, selectedAthlete];
+        athleteCacheRef.current.set(selectedSport, nextAthletes);
+        if (activeSportRef.current === selectedSport) setAthletes(nextAthletes);
+        setHasActivatedGrid(true);
+        setEditingAthlete(null);
+        setIsAddingAthlete(false);
+        setStudentDirectorySearch('');
+        setStudentSearchResults([]);
+        setToast({ message: 'Student added successfully.', type: 'success' });
       })
       .catch((error) => {
-        athleteCacheRef.current.set(selectedSport, athletes);
-        setAthletes((currentAthletes) => currentAthletes.filter((athlete) => String(athlete.userId || athlete.id) !== String(studentId)));
         setToast({ message: error.message || 'Unable to add student.', type: 'error' });
-      });
+      })
+      .finally(() => setIsSaving(false));
   };
 
   const openRemoveModal = (type, id, name) => (e) => {
@@ -857,7 +868,7 @@ export default function CoachRecord() {
         setToast({ message: 'Student removed.', type: 'success' });
       } else if (type === 'faculty') {
         await api.deleteFacultyMember(id);
-        await fetchCoachData();
+        await fetchCoachData(activeSportRef.current);
         setToast({ message: 'Faculty member removed.', type: 'success' });
       }
     } catch (err) {
@@ -886,7 +897,7 @@ export default function CoachRecord() {
         }
         try {
           await api.createCoachAthlete({ studentId: editForm.studentId, sport: athleteData.sport });
-          await fetchCoachData();
+          await fetchCoachData(activeSportRef.current);
           setToast({ message: 'Student profile added successfully.', type: 'success' });
           setIsAddingAthlete(false);
         } catch (error) {
@@ -902,7 +913,7 @@ export default function CoachRecord() {
             ? { ...athlete, status: savedStatus }
             : athlete
         )));
-        await fetchCoachData();
+        await fetchCoachData(activeSportRef.current);
         setToast({ message: 'Student profile updated successfully.', type: 'success' });
         setEditingAthlete(null);
       }
@@ -1033,8 +1044,12 @@ export default function CoachRecord() {
 
   const handleSelectSport = async (sport) => {
     activeSportRef.current = sport;
+    studentSearchRequestRef.current += 1;
     setCoachProfile((prev) => ({ ...prev, mainSport: sport }));
     setShowSportDropdown(false);
+    setStudentDirectorySearch('');
+    setStudentSearchResults([]);
+    void loadStudentSearchDirectory(sport).catch(() => {});
     const cachedAthletes = athleteCacheRef.current.get(sport);
     setAthletes(cachedAthletes || []);
     setHasActivatedGrid(true);
@@ -1131,7 +1146,6 @@ export default function CoachRecord() {
           <button type="button" className="grid-remove-btn" onClick={openRemoveModal('athlete', athlete.id, athlete.fullname)} title="Remove">
             <RemoveIcon />
           </button>
-          <img className="grid-status-stamp" src={statusStampMap[athlete.status] || noDocumentsStamp} alt={`${athlete.status} stamp`} />
         </div>
         <div className="col-info-row" title={athlete.fullname}>{athlete.fullname}</div>
         <div className="col-info-row" title={formatDateOfBirth(athlete.dob)}>{formatDateOfBirth(athlete.dob)}</div>
@@ -1399,33 +1413,48 @@ export default function CoachRecord() {
                     onChange={(event) => {
                       const val = event.target.value;
                       const trimmed = val.trim();
-                      const queryKey = `${coachProfile.mainSport}\u0000${trimmed.toLowerCase()}`;
+                      const selectedSport = coachProfile.mainSport;
                       const requestId = studentSearchRequestRef.current + 1;
                       studentSearchRequestRef.current = requestId;
                       setStudentDirectorySearch(val);
-
-                      if (studentSearchTimerRef.current) clearTimeout(studentSearchTimerRef.current);
+                      setStudentSearchError('');
 
                       if (!trimmed) {
                         setStudentSearchResults([]);
+                        setStudentSearchLoading(studentSearchInFlightRef.current.has(selectedSport));
+                        return;
+                      }
+
+                      const cachedResults = studentSearchCacheRef.current.get(selectedSport);
+                      if (cachedResults) {
+                        setStudentSearchResults(cachedResults.filter((student) => {
+                          const studentIdentifiers = [student?.id, student?._id]
+                            .map((value) => String(value || '').toLowerCase());
+                          const studentName = String(student?.fullname || '').toLowerCase();
+                          return studentIdentifiers.some((studentId) => studentId.includes(trimmed.toLowerCase()))
+                            || studentName.includes(trimmed.toLowerCase());
+                        }));
                         setStudentSearchLoading(false);
                         return;
                       }
 
-                      const cachedResults = studentSearchCacheRef.current.get(queryKey);
-                      setStudentSearchResults(cachedResults || []);
-                      setStudentSearchLoading(!cachedResults);
-
-                      studentSearchTimerRef.current = setTimeout(async () => {
-                        try {
-                          const normalizedResults = await getStudentSearchResults(trimmed, coachProfile.mainSport);
-                          if (studentSearchRequestRef.current === requestId) setStudentSearchResults(normalizedResults);
-                        } catch {
-                          if (studentSearchRequestRef.current === requestId) setStudentSearchResults([]);
-                        } finally {
+                      setStudentSearchResults([]);
+                      setStudentSearchLoading(true);
+                      getStudentSearchResults(trimmed, selectedSport)
+                        .then((results) => {
+                          if (studentSearchRequestRef.current === requestId && activeSportRef.current === selectedSport) {
+                            setStudentSearchResults(results);
+                          }
+                        })
+                        .catch(() => {
+                          if (studentSearchRequestRef.current === requestId) {
+                            setStudentSearchResults([]);
+                            setStudentSearchError('Unable to load students. Please try again.');
+                          }
+                        })
+                        .finally(() => {
                           if (studentSearchRequestRef.current === requestId) setStudentSearchLoading(false);
-                        }
-                      }, 60);
+                        });
                     }}
                     placeholder="Search by Student ID or Full Name"
                     autoComplete="off"
@@ -1438,10 +1467,15 @@ export default function CoachRecord() {
                     }}
                   />
                   {studentSearchLoading && (
-                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>Searching...</p>
+                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>Loading students...</p>
                   )}
-                  {!studentSearchLoading && studentDirectorySearch.trim() && studentSearchResults.length === 0 && (
-                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>No matching students found.</p>
+                  {!studentSearchLoading && studentSearchError && (
+                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>{studentSearchError}</p>
+                  )}
+                  {!studentSearchLoading && !studentSearchError && studentDirectorySearch.trim() && studentSearchResults.length === 0 && (
+                    <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 4px' }}>
+                      {coachProfile.mainSport ? 'No matching students found.' : 'Select a Sport category first.'}
+                    </p>
                   )}
                   {studentSearchResults.length > 0 && (
                     <div className="coach-category-options">
@@ -1452,7 +1486,7 @@ export default function CoachRecord() {
                         })
                         .map((student) => (
                           <button
-                            key={String(student?._id || student?.id || student?.studentId || Math.random())}
+                            key={String(student?._id || student?.id || student?.studentId)}
                             type="button"
                             className="coach-category-option"
                             onClick={() => handleSelectDirectoryStudent(student)}

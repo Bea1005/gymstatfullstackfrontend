@@ -65,7 +65,10 @@ export default function LoginPage() {
       const data = await login(id, password);
 
       if (data.success) {
-        const resolvedRole = (data.user?.role || "student").toLowerCase();
+        const resolvedRole = String(data.user?.role || "").trim().toLowerCase();
+        if (!["student", "coach", "admin", "screener"].includes(resolvedRole)) {
+          throw new Error("Unable to determine your account role. Please try again.");
+        }
         console.info('[AUTH] Login success', {
           userId: data.user?.id || data.user?._id || id,
           role: resolvedRole,
