@@ -218,6 +218,21 @@
   cursor: pointer;
 }
 
+.form-info-left .sport-category-select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1.5px solid var(--form-black);
+  color: inherit;
+  font: inherit;
+  line-height: normal;
+}
+
+.form-info-left .sport-category-select:focus-visible {
+  outline: 2px solid var(--form-maroon);
+  outline-offset: 3px;
+}
+
 .form-info-category {
   display: flex;
   align-items: baseline;

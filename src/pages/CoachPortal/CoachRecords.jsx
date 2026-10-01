@@ -248,6 +248,7 @@ export default function CoachRecord() {
   const [imagePreview, setImagePreview] = useState(null);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState({ type: null, id: null, name: '' });
+  const staffSaveInProgressRef = useRef(false);
 
   useEffect(() => {
     fetchCoachData();
@@ -967,7 +968,14 @@ export default function CoachRecord() {
 
   const handleSaveStaff = async (e) => {
     e.preventDefault();
+    if (staffSaveInProgressRef.current) return;
     const role = String(staffForm.role || 'OTHER FACULTY').toUpperCase();
+    if (!staffForm.fullname.trim()) {
+      setToast({ message: 'Please provide the faculty member name.', type: 'error' });
+      return;
+    }
+    staffSaveInProgressRef.current = true;
+    setIsSaving(true);
     try {
       const currentMember = editingStaffIndex !== null ? staff[editingStaffIndex] : null;
       const facultyData = new FormData();
@@ -978,12 +986,10 @@ export default function CoachRecord() {
       facultyData.append('email', staffForm.email || '');
       if (selectedStaffFile) facultyData.append('profilePhoto', selectedStaffFile);
       let savedMember;
-      if (isAddingStaff) {
+      if (isAddingStaff || !(currentMember?.facultyId || currentMember?.id)) {
         savedMember = await api.createFacultyMember(facultyData);
-      } else if (currentMember?.facultyId || currentMember?.id) {
-        savedMember = await api.updateFacultyMember(currentMember.facultyId || currentMember.id, facultyData);
       } else {
-        throw new Error('Faculty member ID is missing. Refresh the Coach Portal and try again.');
+        savedMember = await api.updateFacultyMember(currentMember.facultyId || currentMember.id, facultyData);
       }
 
       const normalizedMember = {
@@ -1026,6 +1032,9 @@ export default function CoachRecord() {
       setToast({ message: isAddingStaff ? 'Faculty member added.' : 'Staff information updated.', type: 'success' });
     } catch (error) {
       setToast({ message: error.message || 'Unable to save staff information.', type: 'error' });
+    } finally {
+      staffSaveInProgressRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -1279,9 +1288,15 @@ export default function CoachRecord() {
             </span>
 
             <span className="info-label" style={{ marginLeft: 40 }}>CATEGORY:</span>
-            <span className="info-value" onClick={() => setShowSportDropdown((s) => !s)}>
-              {coachProfile.mainSport}
-            </span>
+            <button
+              className="info-value sport-category-select"
+              type="button"
+              onClick={() => setShowSportDropdown((show) => !show)}
+              aria-haspopup="dialog"
+              aria-expanded={showSportDropdown}
+            >
+              {coachProfile.mainSport || 'Select Sport Category'}
+            </button>
           </div>
           <div className="form-info-right">Date of Screening: (please refer to the STRASUC Olympics Manual)</div>
         </div>
@@ -1642,7 +1657,7 @@ export default function CoachRecord() {
               </label>
               <div className="coach-edit-actions">
                 <button className="secondary-btn" type="button" onClick={() => { setEditingStaffIndex(null); setIsAddingStaff(false); }}>Cancel</button>
-                <button className="primary-btn" type="submit">Save</button>
+                <button className="primary-btn" type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</button>
               </div>
             </form>
           </div>
