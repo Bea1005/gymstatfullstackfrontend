@@ -4,7 +4,7 @@ import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword } fr
 import { useNotifications } from "../../components/useNotifications";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./LoginPage.css";
-import gymBackground from "../../assets/gym-background.jpg";
+import gymBackground from "../../assets/GYMSTAT BG.jpg";
 import Icon from '../../components/Icon';
 
 export default function LoginPage() {

@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import './SplashScreen.css';
-import gymBackground from "../../assets/gym-background.jpg";
+import gymBackground from "../../assets/GYMSTAT BG.jpg";
 import logoImage from "../../assets/logo.png";
 import Icon from '../../components/Icon';
 

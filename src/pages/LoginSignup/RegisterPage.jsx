@@ -7,7 +7,7 @@ import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./RegisterPage.css";
 
-import gymBackground from "../../assets/gym-background.jpg";
+import gymBackground from "../../assets/GYMSTAT BG.jpg";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
