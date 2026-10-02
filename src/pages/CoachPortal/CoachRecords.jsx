@@ -11,9 +11,10 @@ import marsuSeal from '../../assets/MarsuLogo.jpg';
 //   SCUAA_logo.png -> SCUAA emblem + wordmark, already combined (header, top-right)
 import logoRegion from '../../assets/logo region.png';
 import scuaaLogo from '../../assets/SCUAA logo.png';
-// Status stamps (kept from the original portal — rendered as a small badge
-// in the corner of each athlete photo so the "gallery" still communicates
-// document-completion status without breaking the printed-form look).
+import completedStamp from '../../assets/GymstatStamps/Completed.png';
+import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
+import disqualifiedStamp from '../../assets/GymstatStamps/Disqualified.png';
+import noDocumentsStamp from '../../assets/GymstatStamps/NoDocuments.png';
 import * as api from '../../services/api';
 import './CoachPortal.css';
 
@@ -118,6 +119,17 @@ const normalizeAthleteStatus = (status) => {
     incompleted: 'incomplete',
   };
   return statusAliases[normalizedStatus] || normalizedStatus;
+};
+
+const getAthleteStatusBadge = (status) => {
+  const normalizedStatus = normalizeAthleteStatus(status);
+  const badges = {
+    completed: { label: 'Completed', src: completedStamp },
+    incomplete: { label: 'Incomplete', src: incompleteStamp },
+    disqualified: { label: 'Disqualified', src: disqualifiedStamp },
+    'no-documents': { label: 'No Documents', src: noDocumentsStamp },
+  };
+  return badges[normalizedStatus] || badges['no-documents'];
 };
 
 // Total athlete slots reproduced from the reference form:
@@ -587,19 +599,26 @@ export default function CoachRecord() {
         if (!card) return null;
         card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon').forEach((control) => control.remove());
         const photo = card.querySelector('.col-photo');
-        const statusStamp = photo?.querySelector('.grid-status-stamp');
-        photo?.querySelectorAll('img:not(.grid-status-stamp)').forEach((image) => image.remove());
+        const statusBadge = getAthleteStatusBadge(athlete.status);
+        const badgeElement = photo?.querySelector('.athlete-status-badge') || document.createElement('img');
+        badgeElement.className = 'athlete-status-badge';
+        badgeElement.src = statusBadge.src;
+        badgeElement.alt = statusBadge.label;
+        badgeElement.setAttribute('aria-label', `Status: ${statusBadge.label}`);
+        badgeElement.title = `Status: ${statusBadge.label}`;
+        photo?.querySelectorAll('img:not(.grid-status-stamp):not(.athlete-status-badge)').forEach((image) => image.remove());
         if (athlete.photo && photo) {
           const image = document.createElement('img');
           image.src = athlete.photo;
           image.alt = athlete.fullname || 'Student athlete';
-          photo.insertBefore(image, statusStamp || null);
+          photo.insertBefore(image, badgeElement);
         } else if (photo) {
           const emptyMark = document.createElement('span');
           emptyMark.className = 'cell-x';
           emptyMark.textContent = 'X';
           photo.appendChild(emptyMark);
         }
+        photo?.appendChild(badgeElement);
         const infoRows = card.querySelectorAll('.col-info-row');
         const values = [
           athlete.fullname || '',
@@ -620,7 +639,7 @@ export default function CoachRecord() {
         const card = athleteTemplate?.cloneNode(true);
         if (!card) return null;
         card.classList.remove('clickable-col');
-        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon, .grid-status-stamp').forEach((control) => control.remove());
+        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon, .grid-status-stamp, .athlete-status-badge').forEach((control) => control.remove());
         card.querySelectorAll('.col-info-row').forEach((row) => {
           row.textContent = '';
           row.removeAttribute('title');
@@ -638,7 +657,7 @@ export default function CoachRecord() {
         const card = template?.cloneNode(true);
         if (!card) return null;
         card.classList.remove('clickable-col');
-        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon, .faculty-photo-viewer-trigger').forEach((control) => control.remove());
+        card.querySelectorAll('.cell-plus, .grid-remove-btn, .edit-icon-btn, .freeform-edit-icon, .faculty-photo-viewer-trigger, .athlete-status-badge').forEach((control) => control.remove());
         const label = card.querySelector('.col-label');
         const infoRows = card.querySelectorAll('.col-info-row');
         if (label) label.textContent = member?.role || 'FACULTY';
@@ -922,8 +941,9 @@ export default function CoachRecord() {
           return;
         }
       } else if (editingAthlete) {
-        const savedStatus = normalizeAthleteStatus(athleteData.status);
-        await api.updateCoachAthlete(editingAthlete.id, { ...athleteData, athleteStatus: savedStatus });
+        const { status, ...profileData } = athleteData;
+        const savedStatus = normalizeAthleteStatus(status);
+        await api.updateCoachAthlete(editingAthlete.id, { ...profileData, athleteStatus: savedStatus });
         setAthletes((currentAthletes) => currentAthletes.map((athlete) => (
           String(athlete.id) === String(editingAthlete.id)
             ? { ...athlete, status: savedStatus }
@@ -1123,6 +1143,8 @@ export default function CoachRecord() {
   //   'x'     -> a fixed "not applicable" template slot (always shows an X,
   //              matching the reference form's second gallery box)
   const AthleteCell = ({ athlete, variant }) => {
+    const statusBadge = athlete ? getAthleteStatusBadge(athlete.status) : null;
+
     if (variant === 'x') {
       return (
         <div className="grid-col">
@@ -1186,6 +1208,13 @@ export default function CoachRecord() {
           {!athlete.requirementsLoading && !athlete.requirementsError && !athlete.missingRequirements?.length && athlete.photo && (
             <img src={athlete.photo} alt={athlete.fullname} />
           )}
+          <img
+            className="athlete-status-badge"
+            src={statusBadge.src}
+            alt={statusBadge.label}
+            aria-label={`Status: ${statusBadge.label}`}
+            title={`Status: ${statusBadge.label}`}
+          />
           <button type="button" className="grid-remove-btn" onClick={openRemoveModal('athlete', athlete.id, athlete.fullname)} title="Remove">
             <RemoveIcon />
           </button>

@@ -577,6 +577,17 @@
   pointer-events: none;
 }
 
+.grid-col .col-photo .athlete-status-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 /* =========================================================================
    STAFF ROW: name/age/contact/email side table beneath photo
    ========================================================================= */
