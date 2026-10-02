@@ -2,16 +2,11 @@ import React, { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import DocumentViewer from '../../components/DocumentViewer';
+import TimeInput from '../../components/TimeInput';
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
+import { TIMES } from '../../constants/scheduleTimes';
 import './AdminPortal.css';
-
-// Define TIMES array for time selection
-const TIMES = [
-  '07:30 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM',
-  '12:00 PM','01:00 PM','02:00 PM','03:00 PM','04:00 PM','05:00 PM',
-  '06:00 PM','07:00 PM','08:00 PM','09:00 PM'
-];
 
 const parseScheduleTime = (value) => {
   const match = String(value || '').trim().match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i);
@@ -1058,36 +1053,26 @@ const AdminSchedules = () => {
                 <div className="form-group">
                   <label htmlFor="schedule-start-time">Start time <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <div className="schedule-time-controls">
-                    <input
+                    <TimeInput
                       id="schedule-start-time"
-                      type="text"
+                      label="Start time"
+                      className="schedule-time-picker"
+                      inputClassName="schedule-time-input"
                       value={formData.startTime}
-                      onChange={(e) => {
-                        setFormData((current) => ({ ...current, startTime: e.target.value }));
+                      onChange={(nextStartTime) => {
+                        setFormData((current) => ({ ...current, startTime: nextStartTime }));
                         setTimeErrors((current) => ({ ...current, startTime: '' }));
                       }}
                       onBlur={() => setTimeErrors((current) => ({
                         ...current,
                         startTime: parseScheduleTime(formData.startTime) ? '' : 'Enter a valid time, such as 1:30 PM.',
                       }))}
+                      options={TIMES}
                       placeholder="e.g., 1:30 PM"
-                      autoComplete="off"
-                      aria-invalid={Boolean(timeErrors.startTime)}
-                      aria-describedby={timeErrors.startTime ? 'schedule-start-time-error' : undefined}
+                      invalid={Boolean(timeErrors.startTime)}
+                      describedBy={timeErrors.startTime ? 'schedule-start-time-error' : undefined}
                       required
                     />
-                    <select
-                      aria-label="Choose start time"
-                      value={TIMES.includes(formData.startTime) ? formData.startTime : formData.startTime || ''}
-                      onChange={(e) => {
-                        setFormData((current) => ({ ...current, startTime: e.target.value }));
-                        setTimeErrors((current) => ({ ...current, startTime: '' }));
-                      }}
-                    >
-                      {!TIMES.includes(formData.startTime) && formData.startTime && <option value={formData.startTime}>{formData.startTime}</option>}
-                      {!formData.startTime && <option value="">Choose time</option>}
-                      {TIMES.map((time) => <option key={time} value={time}>{time}</option>)}
-                    </select>
                   </div>
                   {timeErrors.startTime && <small id="schedule-start-time-error" className="schedule-time-error" role="alert">{timeErrors.startTime}</small>}
                 </div>
@@ -1107,36 +1092,26 @@ const AdminSchedules = () => {
                 <div className="form-group">
                   <label htmlFor="schedule-end-time">End time <span aria-hidden="true">*</span><span className="sr-only"> required</span></label>
                   <div className="schedule-time-controls">
-                    <input
+                    <TimeInput
                       id="schedule-end-time"
-                      type="text"
+                      label="End time"
+                      className="schedule-time-picker"
+                      inputClassName="schedule-time-input"
                       value={formData.endTime}
-                      onChange={(e) => {
-                        setFormData((current) => ({ ...current, endTime: e.target.value }));
+                      onChange={(nextEndTime) => {
+                        setFormData((current) => ({ ...current, endTime: nextEndTime }));
                         setTimeErrors((current) => ({ ...current, endTime: '' }));
                       }}
                       onBlur={() => setTimeErrors((current) => ({
                         ...current,
                         endTime: parseScheduleTime(formData.endTime) ? '' : 'Enter a valid time, such as 2:45 PM.',
                       }))}
+                      options={TIMES}
                       placeholder="e.g., 2:45 PM"
-                      autoComplete="off"
-                      aria-invalid={Boolean(timeErrors.endTime)}
-                      aria-describedby={timeErrors.endTime ? 'schedule-end-time-error' : undefined}
+                      invalid={Boolean(timeErrors.endTime)}
+                      describedBy={timeErrors.endTime ? 'schedule-end-time-error' : undefined}
                       required
                     />
-                    <select
-                      aria-label="Choose end time"
-                      value={TIMES.includes(formData.endTime) ? formData.endTime : formData.endTime || ''}
-                      onChange={(e) => {
-                        setFormData((current) => ({ ...current, endTime: e.target.value }));
-                        setTimeErrors((current) => ({ ...current, endTime: '' }));
-                      }}
-                    >
-                      {!TIMES.includes(formData.endTime) && formData.endTime && <option value={formData.endTime}>{formData.endTime}</option>}
-                      {!formData.endTime && <option value="">Choose time</option>}
-                      {TIMES.map((time) => <option key={time} value={time}>{time}</option>)}
-                    </select>
                   </div>
                   {timeErrors.endTime && <small id="schedule-end-time-error" className="schedule-time-error" role="alert">{timeErrors.endTime}</small>}
                 </div>

@@ -1,16 +1,20 @@
 import { useState, useEffect, useEffectEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
+import TimeInput from '../../components/TimeInput';
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
+import { TIMES } from '../../constants/scheduleTimes';
 import './PublicCalendar.css';
 import gymBackground from '../../assets/gym-background.jpg';
 
-const TIMES = [
-  '07:30 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM',
-  '12:00 PM','01:00 PM','02:00 PM','03:00 PM','04:00 PM','05:00 PM',
-  '06:00 PM','07:00 PM','08:00 PM','09:00 PM'
-];
+const parseCalendarTime = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  if (hour < 1 || hour > 12) return null;
+  return ((hour % 12) + (match[3].toUpperCase() === 'PM' ? 12 : 0)) * 60 + Number(match[2]);
+};
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -178,12 +182,7 @@ export default function PublicCalendar() {
     `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
   const toMinutes = (t) => {
-    if (!t) return 0;
-    const [time, meridian] = String(t).split(' ');
-    const [hh, mm] = time.split(':').map(Number);
-    let h = hh % 12;
-    if (meridian === 'PM') h += 12;
-    return h * 60 + mm;
+    return parseCalendarTime(t) ?? 0;
   };
 
   const normalizeScheduleSource = (schedule) => {
@@ -394,13 +393,13 @@ export default function PublicCalendar() {
   const synchronizeAvailableTimes = useEffectEvent(() => {
     setForm((current) => {
       const validStartTimes = getAvailableStartTimes(current.startDate, current.endDate, current.endTime);
-      const nextStartTime = validStartTimes.includes(current.startTime)
-        ? current.startTime
-        : (validStartTimes[0] || current.startTime);
+      const nextStartTime = TIMES.includes(current.startTime) && !validStartTimes.includes(current.startTime)
+        ? (validStartTimes[0] || current.startTime)
+        : current.startTime;
       const validEndTimes = getAvailableEndTimes(nextStartTime, current.startDate, current.endDate);
-      const nextEndTime = validEndTimes.includes(current.endTime)
-        ? current.endTime
-        : (validEndTimes[0] || current.endTime);
+      const nextEndTime = TIMES.includes(current.endTime) && !validEndTimes.includes(current.endTime)
+        ? (validEndTimes[0] || current.endTime)
+        : current.endTime;
 
       if (nextStartTime === current.startTime && nextEndTime === current.endTime) return current;
       return { ...current, startTime: nextStartTime, endTime: nextEndTime };
@@ -470,6 +469,15 @@ export default function PublicCalendar() {
     if (!form.endDate) e.endDate = 'Required.';
     if (form.startDate && form.endDate && form.endDate < form.startDate)
       e.endDate = 'End date cannot be before start date.';
+    const startMinutes = parseCalendarTime(form.startTime);
+    const endMinutes = parseCalendarTime(form.endTime);
+    if (startMinutes === null) e.startTime = 'Enter a valid time, such as 1:30 PM.';
+    if (endMinutes === null) e.endTime = 'Enter a valid time, such as 2:45 PM.';
+    if (startMinutes !== null && endMinutes !== null && form.startDate && form.endDate) {
+      const startDateTime = new Date(`${form.startDate}T00:00:00`).getTime() + startMinutes * 60000;
+      const endDateTime = new Date(`${form.endDate}T00:00:00`).getTime() + endMinutes * 60000;
+      if (endDateTime <= startDateTime) e.endTime = 'End time must be later than start time.';
+    }
     if (!requestFile.name) e.requestLetter = 'Request letter is required. Please attach a PDF, DOC, or DOCX file.';
     else if (!requestFile.data) e.requestLetter = 'File is still processing. Please wait a moment or re-attach the file.';
 
@@ -487,7 +495,7 @@ export default function PublicCalendar() {
     if (form.requesterPhone && !cleanedPhone.match(/^[0-9]{7,15}$/))
       e.requesterPhone = 'Please enter a valid phone number (7-15 digits).';
 
-    if (form.startDate && form.endDate && form.startTime && form.endTime) {
+    if (form.startDate && form.endDate && startMinutes !== null && endMinutes !== null) {
       const candidate = {
         startDate: form.startDate,
         endDate: form.endDate,
@@ -786,24 +794,27 @@ export default function PublicCalendar() {
                   </div>
                   <div className="pcm-group">
                     <label className="pcm-label">Start Time *</label>
-                    <select
-                      className="pcm-input pcm-select"
+                    <TimeInput
+                      id="public-calendar-start-time"
+                      label="Start Time"
+                      className="pcm-time-picker"
+                      inputClassName={`pcm-input pcm-select${errors.startTime ? ' pcm-input--err' : ''}`}
                       value={form.startTime}
-                      onChange={e => {
-                        const nextStartTime = e.target.value;
-                        const nextEndTimes = getAvailableEndTimes(nextStartTime, form.startDate, form.endDate);
-                        setForm((current) => ({
-                          ...current,
-                          startTime: nextStartTime,
-                          endTime: nextEndTimes.includes(current.endTime) ? current.endTime : (nextEndTimes[0] || current.endTime),
-                        }));
-                        setErrors((current) => ({ ...current, startDate: '', endDate: '' }));
+                      onChange={(nextStartTime) => {
+                        setForm((current) => ({ ...current, startTime: nextStartTime }));
+                        setErrors((current) => ({ ...current, startTime: '', endTime: '', startDate: '', endDate: '' }));
                       }}
-                    >
-                      {TIMES.map(t => (
-                        <option key={t} value={t} disabled={!availableStartTimes.includes(t)}>{t}</option>
-                      ))}
-                    </select>
+                      onBlur={() => setErrors((current) => ({
+                        ...current,
+                        startTime: parseCalendarTime(form.startTime) === null ? 'Enter a valid time, such as 1:30 PM.' : '',
+                      }))}
+                      options={TIMES}
+                      disabledOptions={TIMES.filter((time) => !availableStartTimes.includes(time))}
+                      placeholder="e.g., 1:30 PM"
+                      invalid={Boolean(errors.startTime)}
+                      required
+                    />
+                    {errors.startTime && <span className="pcm-err">{errors.startTime}</span>}
                   </div>
                 </div>
 
@@ -825,11 +836,27 @@ export default function PublicCalendar() {
                   </div>
                   <div className="pcm-group">
                     <label className="pcm-label">End Time *</label>
-                    <select className="pcm-input pcm-select" value={form.endTime} onChange={e => set('endTime', e.target.value)}>
-                      {TIMES.map(t => (
-                        <option key={t} value={t} disabled={!availableEndTimes.includes(t)}>{t}</option>
-                      ))}
-                    </select>
+                    <TimeInput
+                      id="public-calendar-end-time"
+                      label="End Time"
+                      className="pcm-time-picker"
+                      inputClassName={`pcm-input pcm-select${errors.endTime ? ' pcm-input--err' : ''}`}
+                      value={form.endTime}
+                      onChange={(nextEndTime) => {
+                        setForm((current) => ({ ...current, endTime: nextEndTime }));
+                        setErrors((current) => ({ ...current, startTime: '', endTime: '', startDate: '', endDate: '' }));
+                      }}
+                      onBlur={() => setErrors((current) => ({
+                        ...current,
+                        endTime: parseCalendarTime(form.endTime) === null ? 'Enter a valid time, such as 2:45 PM.' : '',
+                      }))}
+                      options={TIMES}
+                      disabledOptions={TIMES.filter((time) => !availableEndTimes.includes(time))}
+                      placeholder="e.g., 2:45 PM"
+                      invalid={Boolean(errors.endTime)}
+                      required
+                    />
+                    {errors.endTime && <span className="pcm-err">{errors.endTime}</span>}
                   </div>
                 </div>
 

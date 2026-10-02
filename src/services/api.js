@@ -1004,6 +1004,10 @@ export const getCoachAthletes = async (sport) => {
   });
 };
 
+export const getCoachStudentRequirements = async (studentId) => (
+  apiRequest(`/coach/athletes/${encodeURIComponent(studentId)}/requirements`, { method: 'GET' })
+);
+
 export const getCoachStudentDirectory = async (sport) => {
   const query = sport ? `?sport=${encodeURIComponent(sport)}` : '';
   return apiRequest(`/coach/student-directory${query}`, {

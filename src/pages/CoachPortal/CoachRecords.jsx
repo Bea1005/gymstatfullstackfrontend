@@ -269,6 +269,9 @@ export default function CoachRecord() {
           photo: '',
           profilePhotoUrl: athlete.profilePhotoUrl || '',
           status: normalizeAthleteStatus(athlete.athleteStatus || athlete.status),
+          missingRequirements: [],
+          requirementsLoading: true,
+          requirementsError: '',
         }))
       : []
   );
@@ -321,20 +324,37 @@ export default function CoachRecord() {
   };
 
   const hydrateAthletePhotos = async (sport, athleteList) => {
-    const photoEntries = await Promise.all(athleteList.map(async (athlete) => ([
-      String(athlete.userId || athlete.id),
-      await loadStudentPhoto(athlete.profilePhotoUrl),
-    ])));
-    const photosByStudentId = new Map(photoEntries);
-    const withPhotos = (athletesToUpdate) => athletesToUpdate.map((athlete) => ({
+    const hydratedEntries = await Promise.all(athleteList.map(async (athlete) => {
+      const studentId = String(athlete.userId || athlete.id);
+      try {
+        const requirementState = await api.getCoachStudentRequirements(studentId);
+        if (!Array.isArray(requirementState?.missingDocuments)) {
+          throw new Error('Invalid student requirement response');
+        }
+        const missingRequirements = requirementState.missingDocuments;
+        const photo = missingRequirements.length ? '' : await loadStudentPhoto(athlete.profilePhotoUrl);
+        return [studentId, { photo, missingRequirements, requirementsLoading: false, requirementsError: '' }];
+      } catch (error) {
+        const errorMessages = {
+          401: 'Session expired',
+          403: 'Not authorized',
+          404: 'Requirements route unavailable',
+          500: 'Requirement check failed',
+        };
+        const errorLabel = errorMessages[error?.status] || 'Requirements unavailable';
+        return [studentId, { photo: '', missingRequirements: [], requirementsLoading: false, requirementsError: errorLabel }];
+      }
+    }));
+    const hydratedByStudentId = new Map(hydratedEntries);
+    const withRequirements = (athletesToUpdate) => athletesToUpdate.map((athlete) => ({
       ...athlete,
-      photo: photosByStudentId.get(String(athlete.userId || athlete.id)) || athlete.photo || '',
+      ...(hydratedByStudentId.get(String(athlete.userId || athlete.id)) || {}),
     }));
 
     const cachedAthletes = athleteCacheRef.current.get(sport) || athleteList;
-    athleteCacheRef.current.set(sport, withPhotos(cachedAthletes));
+    athleteCacheRef.current.set(sport, withRequirements(cachedAthletes));
     if (activeSportRef.current === sport) {
-      setAthletes((currentAthletes) => withPhotos(currentAthletes));
+      setAthletes((currentAthletes) => withRequirements(currentAthletes));
     }
   };
 
@@ -458,16 +478,9 @@ export default function CoachRecord() {
         const latestAthletes = await api.getCoachAthletes(coachProfile.mainSport).catch(() => []);
         if (cancelled || !Array.isArray(latestAthletes)) return;
 
-        const latestPhotos = await Promise.all(latestAthletes.map(async (athlete) => {
-          if (!athlete.profilePhotoUrl) return ['', String(athlete._id || athlete.id)];
-          try {
-            return [await api.getProtectedImageObjectUrl(athlete.profilePhotoUrl), String(athlete._id || athlete.id)];
-          } catch {
-            return ['', String(athlete._id || athlete.id)];
-          }
-        }));
-        const latestPhotoById = new Map(latestPhotos.map(([photo, id]) => [id, photo]));
-        const latestAthletesById = new Map(normalizeCoachAthletes(latestAthletes, coachProfile.mainSport)
+        const normalizedLatestAthletes = normalizeCoachAthletes(latestAthletes, coachProfile.mainSport);
+        await hydrateAthletePhotos(coachProfile.mainSport, normalizedLatestAthletes);
+        const latestAthletesById = new Map(normalizedLatestAthletes
           .map((athlete) => [String(athlete.userId || athlete.id), athlete]));
 
         setAthletes((currentAthletes) => currentAthletes.map((athlete) => {
@@ -482,7 +495,6 @@ export default function CoachRecord() {
             location: latestAthlete.location,
             sport: latestAthlete.sport,
             status: latestAthlete.status,
-            photo: latestPhotoById.get(studentId) || athlete.photo,
           };
         }));
       } finally {
@@ -818,7 +830,6 @@ export default function CoachRecord() {
       .then(async (response) => {
         const savedStudent = response?.data || student;
         const savedStudentId = String(savedStudent._id || savedStudent.studentId || studentId);
-        const photo = savedStudent.profilePhotoUrl ? await loadStudentPhoto(savedStudent.profilePhotoUrl) : '';
         const selectedAthlete = {
           id: savedStudentId,
           userId: savedStudentId,
@@ -827,14 +838,18 @@ export default function CoachRecord() {
           sport: savedStudent.sport || '',
           location: savedStudent.branchCampus || '',
           dob: savedStudent.dateOfBirth || savedStudent.dob || '',
-          photo,
+          photo: '',
           profilePhotoUrl: savedStudent.profilePhotoUrl || '',
           status: normalizeAthleteStatus(savedStudent.athleteStatus || savedStudent.status),
+          missingRequirements: [],
+          requirementsLoading: true,
+          requirementsError: '',
         };
         const nextAthletes = [...athletes, selectedAthlete];
         athleteCacheRef.current.set(selectedSport, nextAthletes);
         if (activeSportRef.current === selectedSport) setAthletes(nextAthletes);
         setHasActivatedGrid(true);
+        void hydrateAthletePhotos(selectedSport, [selectedAthlete]);
         setEditingAthlete(null);
         setIsAddingAthlete(false);
         setStudentDirectorySearch('');
@@ -1060,11 +1075,21 @@ export default function CoachRecord() {
     setStudentSearchResults([]);
     void loadStudentSearchDirectory(sport).catch(() => {});
     const cachedAthletes = athleteCacheRef.current.get(sport);
-    setAthletes(cachedAthletes || []);
+    const athletesToShow = cachedAthletes?.map((athlete) => ({
+      ...athlete,
+      photo: '',
+      requirementsLoading: true,
+      requirementsError: '',
+    })) || [];
+    setAthletes(athletesToShow);
     setHasActivatedGrid(true);
     setCategoryLoading(false);
 
-    if (cachedAthletes) return;
+    if (cachedAthletes) {
+      athleteCacheRef.current.set(sport, athletesToShow);
+      void hydrateAthletePhotos(sport, athletesToShow);
+      return;
+    }
 
     refreshAthletesForSport(sport)
       .then((normalizedAthletes) => {
@@ -1150,8 +1175,17 @@ export default function CoachRecord() {
         aria-label={`Edit ${athlete.fullname}`}
       >
         <div className="col-label">ATHLETE</div>
-        <div className="col-photo">
-          {athlete.photo && <img src={athlete.photo} alt={athlete.fullname} />}
+        <div className="col-photo clickable student-photo">
+          {athlete.requirementsLoading && <span className="student-photo-status">Checking requirements...</span>}
+          {!athlete.requirementsLoading && athlete.requirementsError && <span className="student-photo-status">{athlete.requirementsError}</span>}
+          {!athlete.requirementsLoading && !athlete.requirementsError && athlete.missingRequirements?.length > 0 && (
+            <div className="student-photo-missing" aria-label={`Missing requirements: ${athlete.missingRequirements.join(', ')}`}>
+              {athlete.missingRequirements.map((documentName) => <span key={documentName}>{documentName}</span>)}
+            </div>
+          )}
+          {!athlete.requirementsLoading && !athlete.requirementsError && !athlete.missingRequirements?.length && athlete.photo && (
+            <img src={athlete.photo} alt={athlete.fullname} />
+          )}
           <button type="button" className="grid-remove-btn" onClick={openRemoveModal('athlete', athlete.id, athlete.fullname)} title="Remove">
             <RemoveIcon />
           </button>

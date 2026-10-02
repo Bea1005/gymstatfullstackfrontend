@@ -1,0 +1,42 @@
+.time-picker {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.time-picker__options {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #b7a3a3;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
+.time-picker__option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: #fff;
+  color: #451717;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.time-picker__option:hover:not(:disabled),
+.time-picker__option:focus-visible:not(:disabled) {
+  background: #f4eeee;
+  outline: none;
+}
+
+.time-picker__option:disabled {
+  color: #999;
+  cursor: not-allowed;
+}
