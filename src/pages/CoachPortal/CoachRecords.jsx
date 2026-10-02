@@ -114,7 +114,8 @@ const normalizeStaffMembers = (members = []) => {
 const normalizeAthleteStatus = (status) => {
   const normalizedStatus = String(status || 'no-documents').toLowerCase().replace(/\s+/g, '-');
   const statusAliases = {
-    approved: 'completed',
+    completed: 'complete',
+    approved: 'complete',
     rejected: 'incomplete',
     incompleted: 'incomplete',
   };
@@ -124,7 +125,7 @@ const normalizeAthleteStatus = (status) => {
 const getAthleteStatusBadge = (status) => {
   const normalizedStatus = normalizeAthleteStatus(status);
   const badges = {
-    completed: { label: 'Completed', src: completedStamp },
+    complete: { label: 'Complete', src: completedStamp },
     incomplete: { label: 'Incomplete', src: incompleteStamp },
     disqualified: { label: 'Disqualified', src: disqualifiedStamp },
     'no-documents': { label: 'No Documents', src: noDocumentsStamp },
@@ -943,14 +944,47 @@ export default function CoachRecord() {
       } else if (editingAthlete) {
         const { status, ...profileData } = athleteData;
         const savedStatus = normalizeAthleteStatus(status);
-        await api.updateCoachAthlete(editingAthlete.id, { ...profileData, athleteStatus: savedStatus });
+        const badgeResponse = await api.updateCoachAthleteStatus(editingAthlete.id, savedStatus);
+        const persistedAthletes = await api.getCoachAthletes(activeSportRef.current);
+        const persistedAthlete = Array.isArray(persistedAthletes)
+          ? persistedAthletes.find((athlete) => String(athlete._id || athlete.studentId || athlete.id) === String(editingAthlete.id))
+          : null;
+        const persistedStatus = normalizeAthleteStatus(persistedAthlete?.athleteStatus || persistedAthlete?.status);
+        if (!persistedAthlete || persistedStatus !== savedStatus) {
+          throw new Error('The badge update could not be confirmed from the server. Please try again.');
+        }
         setAthletes((currentAthletes) => currentAthletes.map((athlete) => (
-          String(athlete.id) === String(editingAthlete.id)
-            ? { ...athlete, status: savedStatus }
+          String(athlete.userId || athlete.id) === String(editingAthlete.id)
+            ? { ...athlete, status: persistedStatus }
             : athlete
         )));
+        const profileUpdates = {};
+        ['fullname', 'email', 'course', 'dob', 'location', 'sport'].forEach((field) => {
+          if (profileData[field] !== editingAthlete[field]) {
+            profileUpdates[field] = profileData[field];
+          }
+        });
+        if (selectedFile) profileUpdates.photo = photoUrl;
+        if (Object.keys(profileUpdates).length > 0) {
+          try {
+            await api.updateCoachAthlete(editingAthlete.id, profileUpdates);
+          } catch (profileError) {
+            await fetchCoachData(activeSportRef.current);
+            setToast({
+              message: `Status badge updated, but other profile changes failed: ${profileError.message || 'Please try again.'}`,
+              type: 'error',
+            });
+            setEditingAthlete(null);
+            return;
+          }
+        }
         await fetchCoachData(activeSportRef.current);
-        setToast({ message: 'Student profile updated successfully.', type: 'success' });
+        setToast({
+          message: badgeResponse?.athleteStatus === persistedStatus
+            ? 'Student status badge updated successfully.'
+            : 'Student status badge saved and confirmed from the server.',
+          type: 'success',
+        });
         setEditingAthlete(null);
       }
     } catch (error) {
@@ -1612,7 +1646,7 @@ export default function CoachRecord() {
               <label>
                 Status Badge
                 <select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }}>
-                  <option value="completed">Completed</option>
+                  <option value="complete">Complete</option>
                   <option value="incomplete">Incomplete</option>
                   <option value="disqualified">Disqualified</option>
                   <option value="no-documents">No Documents</option>

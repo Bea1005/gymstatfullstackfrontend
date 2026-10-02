@@ -1032,6 +1032,13 @@ export const updateCoachAthlete = async (athleteId, athleteData) => {
   });
 };
 
+export const updateCoachAthleteStatus = async (athleteId, athleteStatus) => {
+  return apiRequest(`/coach/athletes/${athleteId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ athleteStatus }),
+  });
+};
+
 export const createCoachAthlete = async (athleteData) => {
   return apiRequest('/coach/athletes', {
     method: 'POST',
@@ -1256,6 +1263,4 @@ export default {
   updateSchedule,
   deleteSchedule
 };
-
-
 
