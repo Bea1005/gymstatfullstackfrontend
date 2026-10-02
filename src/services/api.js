@@ -1004,6 +1004,31 @@ export const getCoachAthletes = async (sport) => {
   });
 };
 
+export const getCoachRecordContent = async () => (
+  apiRequest('/coach/record-content', { method: 'GET' })
+);
+
+export const updateCoachRecordFormHeader = async (formHeader) => (
+  apiRequest('/coach/record-content/form-header', {
+    method: 'PUT',
+    body: JSON.stringify(formHeader),
+  })
+);
+
+export const updateCoachRecordEligibility = async (eligibility) => (
+  apiRequest('/coach/record-content/eligibility', {
+    method: 'PUT',
+    body: JSON.stringify(eligibility),
+  })
+);
+
+export const updateCoachRecordDirector = async (director) => (
+  apiRequest('/coach/record-content/director', {
+    method: 'PUT',
+    body: JSON.stringify(director),
+  })
+);
+
 export const getCoachStudentRequirements = async (studentId) => (
   apiRequest(`/coach/athletes/${encodeURIComponent(studentId)}/requirements`, { method: 'GET' })
 );
@@ -1263,4 +1288,3 @@ export default {
   updateSchedule,
   deleteSchedule
 };
-

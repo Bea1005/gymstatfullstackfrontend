@@ -256,17 +256,87 @@ export default function CoachRecord() {
   const [loading, setLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [recordContentSaving, setRecordContentSaving] = useState({
+    formHeader: false,
+    eligibility: false,
+    director: false,
+  });
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState({ type: null, id: null, name: '' });
   const staffSaveInProgressRef = useRef(false);
+  const coachRecordContentRequestRef = useRef(0);
+  const coachRecordContentPromiseRef = useRef(null);
+
+  const applyCoachRecordContent = (content) => {
+    const formHeader = content?.formHeader;
+    const eligibility = content?.eligibility;
+    const director = content?.director;
+    if (
+      !formHeader
+      || ['olympicsTitle', 'scheduleLocationLine', 'institution'].some((field) => typeof formHeader[field] !== 'string')
+      || typeof eligibility?.requirementsNotes !== 'string'
+      || !director
+      || ['eventLabel', 'directorName', 'directorTitle'].some((field) => typeof director[field] !== 'string')
+    ) {
+      throw new Error('The server returned invalid Coach Record content. Please reload and try again.');
+    }
+
+    setEventMeta({
+      title: formHeader.olympicsTitle,
+      schedule: formHeader.scheduleLocationLine,
+      institution: formHeader.institution,
+    });
+    setEligibilityRequirements({ notes: eligibility.requirementsNotes });
+    setDirectorInfo({
+      eventLabel: director.eventLabel,
+      name: director.directorName,
+      title: director.directorTitle,
+    });
+  };
+
+  const loadCoachRecordContent = async () => {
+    if (coachRecordContentPromiseRef.current) return coachRecordContentPromiseRef.current;
+
+    const requestId = coachRecordContentRequestRef.current;
+    const request = api.getCoachRecordContent()
+      .then((content) => {
+        if (requestId !== coachRecordContentRequestRef.current) return null;
+        applyCoachRecordContent(content);
+        return content;
+      })
+      .finally(() => {
+        if (coachRecordContentPromiseRef.current === request) {
+          coachRecordContentPromiseRef.current = null;
+        }
+      });
+    coachRecordContentPromiseRef.current = request;
+    return request;
+  };
 
   useEffect(() => {
     fetchCoachData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadCoachRecordContent().catch((error) => {
+      if (!cancelled) {
+        setToast({
+          message: error.message || 'Unable to load Coach Record content. Please reload and try again.',
+          type: 'error',
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const normalizeCoachAthletes = (athletesData, selectedSport) => (
     Array.isArray(athletesData)
@@ -996,28 +1066,87 @@ export default function CoachRecord() {
   };
 
   // ---------------- Eligibility / Director ----------------
-  const handleEditEligibility = () => {
-    setEditingEligibility(true);
-    setEligibilityForm({ notes: eligibilityRequirements.notes });
+  const handleEditEligibility = async () => {
+    try {
+      const content = await loadCoachRecordContent();
+      if (!content) return;
+      setEligibilityForm({ notes: content.eligibility.requirementsNotes });
+      setEditingEligibility(true);
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to load eligibility requirements.', type: 'error' });
+    }
   };
 
-  const handleSaveEligibility = (e) => {
+  const handleSaveEligibility = async (e) => {
     e.preventDefault();
-    setEligibilityRequirements({ notes: eligibilityForm.notes });
-    setEditingEligibility(false);
-    setToast({ message: 'Eligibility requirements updated.', type: 'success' });
+    if (recordContentSaving.eligibility) return;
+    setRecordContentSaving((current) => ({ ...current, eligibility: true }));
+    coachRecordContentRequestRef.current += 1;
+    try {
+      const response = await api.updateCoachRecordEligibility({
+        requirementsNotes: eligibilityForm.notes,
+      });
+      const savedNotes = response?.eligibility?.requirementsNotes;
+      if (savedNotes !== eligibilityForm.notes) {
+        throw new Error('The saved eligibility requirements could not be confirmed by the server.');
+      }
+      setEligibilityRequirements({ notes: savedNotes });
+      setEditingEligibility(false);
+      setToast({ message: 'Eligibility requirements updated.', type: 'success' });
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to save eligibility requirements.', type: 'error' });
+    } finally {
+      setRecordContentSaving((current) => ({ ...current, eligibility: false }));
+    }
   };
 
-  const handleEditDirector = () => {
-    setEditingDirector(true);
-    setDirectorForm({ eventLabel: directorInfo.eventLabel, name: directorInfo.name, title: directorInfo.title });
+  const handleEditDirector = async () => {
+    try {
+      const content = await loadCoachRecordContent();
+      if (!content) return;
+      setDirectorForm({
+        eventLabel: content.director.eventLabel,
+        name: content.director.directorName,
+        title: content.director.directorTitle,
+      });
+      setEditingDirector(true);
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to load sports director information.', type: 'error' });
+    }
   };
 
-  const handleSaveDirector = (e) => {
+  const handleSaveDirector = async (e) => {
     e.preventDefault();
-    setDirectorInfo({ ...directorForm });
-    setEditingDirector(false);
-    setToast({ message: 'Director information updated.', type: 'success' });
+    if (recordContentSaving.director) return;
+    setRecordContentSaving((current) => ({ ...current, director: true }));
+    coachRecordContentRequestRef.current += 1;
+    try {
+      const payload = {
+        eventLabel: directorForm.eventLabel,
+        directorName: directorForm.name,
+        directorTitle: directorForm.title,
+      };
+      const response = await api.updateCoachRecordDirector(payload);
+      const savedDirector = response?.director;
+      if (
+        savedDirector?.eventLabel !== payload.eventLabel
+        || savedDirector?.directorName !== payload.directorName
+        || savedDirector?.directorTitle !== payload.directorTitle
+      ) {
+        throw new Error('The saved sports director information could not be confirmed by the server.');
+      }
+      setDirectorInfo({
+        eventLabel: savedDirector.eventLabel,
+        name: savedDirector.directorName,
+        title: savedDirector.directorTitle,
+      });
+      setEditingDirector(false);
+      setToast({ message: 'Director information updated.', type: 'success' });
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to save sports director information.', type: 'error' });
+    } finally {
+      setRecordContentSaving((current) => ({ ...current, director: false }));
+    }
   };
 
   // ---------------- Staff (Coach / Asst. Coach / Trainer / Chaperone / Other Faculty) ----------------
@@ -1108,16 +1237,53 @@ export default function CoachRecord() {
   };
 
   // ---------------- Event meta ----------------
-  const handleEditEvent = () => {
-    setEditingEvent(true);
-    setEventForm({ title: eventMeta.title, schedule: eventMeta.schedule, institution: eventMeta.institution });
+  const handleEditEvent = async () => {
+    try {
+      const content = await loadCoachRecordContent();
+      if (!content) return;
+      setEventForm({
+        title: content.formHeader.olympicsTitle,
+        schedule: content.formHeader.scheduleLocationLine,
+        institution: content.formHeader.institution,
+      });
+      setEditingEvent(true);
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to load Coach Record headers.', type: 'error' });
+    }
   };
 
-  const handleSaveEvent = (e) => {
+  const handleSaveEvent = async (e) => {
     e.preventDefault();
-    setEventMeta({ ...eventForm });
-    setEditingEvent(false);
-    setToast({ message: 'Event details updated.', type: 'success' });
+    if (recordContentSaving.formHeader) return;
+    setRecordContentSaving((current) => ({ ...current, formHeader: true }));
+    coachRecordContentRequestRef.current += 1;
+    try {
+      const payload = {
+        olympicsTitle: eventForm.title,
+        scheduleLocationLine: eventForm.schedule,
+        institution: eventForm.institution,
+      };
+      const response = await api.updateCoachRecordFormHeader(payload);
+      const savedHeader = response?.formHeader;
+      if (
+        savedHeader?.olympicsTitle !== payload.olympicsTitle
+        || savedHeader?.scheduleLocationLine !== payload.scheduleLocationLine
+        || savedHeader?.institution !== payload.institution
+      ) {
+        throw new Error('The saved Coach Record headers could not be confirmed by the server.');
+      }
+      setEventMeta({
+        title: savedHeader.olympicsTitle,
+        schedule: savedHeader.scheduleLocationLine,
+        institution: savedHeader.institution,
+      });
+      setEditingEvent(false);
+      setToast({ message: 'Event details updated.', type: 'success' });
+    } catch (error) {
+      setToast({ message: error.message || 'Unable to save Coach Record headers.', type: 'error' });
+    } finally {
+      setRecordContentSaving((current) => ({ ...current, formHeader: false }));
+    }
   };
 
   const handleSelectSport = async (sport) => {
@@ -1666,20 +1832,20 @@ export default function CoachRecord() {
       )}
 
       {editingEligibility && (
-        <div className="coach-modal-overlay" onClick={() => setEditingEligibility(false)}>
+        <div className="coach-modal-overlay" onClick={() => { if (!recordContentSaving.eligibility) setEditingEligibility(false); }}>
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Edit Eligibility Requirements</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingEligibility(false)}><Icon name="close" /></button>
+              <button className="coach-modal-close" type="button" onClick={() => setEditingEligibility(false)} disabled={recordContentSaving.eligibility}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveEligibility}>
               <label>
                 Requirements Notes
-                <textarea value={eligibilityForm.notes} onChange={(e) => setEligibilityForm({ ...eligibilityForm, notes: e.target.value })} rows="12" style={{ width: '100%', padding: '8px', margin: '5px 0', fontFamily: 'inherit', fontSize: '13px' }} />
+                <textarea value={eligibilityForm.notes} onChange={(e) => setEligibilityForm({ ...eligibilityForm, notes: e.target.value })} rows="12" disabled={recordContentSaving.eligibility} style={{ width: '100%', padding: '8px', margin: '5px 0', fontFamily: 'inherit', fontSize: '13px' }} />
               </label>
               <div className="coach-edit-actions">
-                <button className="secondary-btn" type="button" onClick={() => setEditingEligibility(false)}>Cancel</button>
-                <button className="primary-btn" type="submit">Save Requirements</button>
+                <button className="secondary-btn" type="button" onClick={() => setEditingEligibility(false)} disabled={recordContentSaving.eligibility}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={recordContentSaving.eligibility}>{recordContentSaving.eligibility ? 'Saving...' : 'Save Requirements'}</button>
               </div>
             </form>
           </div>
@@ -1687,28 +1853,28 @@ export default function CoachRecord() {
       )}
 
       {editingDirector && (
-        <div className="coach-modal-overlay" onClick={() => setEditingDirector(false)}>
+        <div className="coach-modal-overlay" onClick={() => { if (!recordContentSaving.director) setEditingDirector(false); }}>
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Edit Sports Director Info</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingDirector(false)}><Icon name="close" /></button>
+              <button className="coach-modal-close" type="button" onClick={() => setEditingDirector(false)} disabled={recordContentSaving.director}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveDirector}>
               <label>
                 Event Label
-                <input value={directorForm.eventLabel} onChange={(e) => setDirectorForm({ ...directorForm, eventLabel: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={directorForm.eventLabel} onChange={(e) => setDirectorForm({ ...directorForm, eventLabel: e.target.value })} disabled={recordContentSaving.director} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <label>
                 Director Name
-                <input value={directorForm.name} onChange={(e) => setDirectorForm({ ...directorForm, name: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={directorForm.name} onChange={(e) => setDirectorForm({ ...directorForm, name: e.target.value })} disabled={recordContentSaving.director} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <label>
                 Director Title
-                <input value={directorForm.title} onChange={(e) => setDirectorForm({ ...directorForm, title: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={directorForm.title} onChange={(e) => setDirectorForm({ ...directorForm, title: e.target.value })} disabled={recordContentSaving.director} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <div className="coach-edit-actions">
-                <button className="secondary-btn" type="button" onClick={() => setEditingDirector(false)}>Cancel</button>
-                <button className="primary-btn" type="submit">Save Director Info</button>
+                <button className="secondary-btn" type="button" onClick={() => setEditingDirector(false)} disabled={recordContentSaving.director}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={recordContentSaving.director}>{recordContentSaving.director ? 'Saving...' : 'Save Director Info'}</button>
               </div>
             </form>
           </div>
@@ -1776,28 +1942,28 @@ export default function CoachRecord() {
       )}
 
       {editingEvent && (
-        <div className="coach-modal-overlay" onClick={() => setEditingEvent(false)}>
+        <div className="coach-modal-overlay" onClick={() => { if (!recordContentSaving.formHeader) setEditingEvent(false); }}>
           <div className="coach-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Modify Sheet Headers</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setEditingEvent(false)}><Icon name="close" /></button>
+              <button className="coach-modal-close" type="button" onClick={() => setEditingEvent(false)} disabled={recordContentSaving.formHeader}><Icon name="close" /></button>
             </div>
             <form className="coach-edit-form" onSubmit={handleSaveEvent}>
               <label>
                 Olympics Title
-                <input value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} disabled={recordContentSaving.formHeader} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <label>
                 Schedule & Location Line
-                <input value={eventForm.schedule} onChange={(e) => setEventForm({ ...eventForm, schedule: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={eventForm.schedule} onChange={(e) => setEventForm({ ...eventForm, schedule: e.target.value })} disabled={recordContentSaving.formHeader} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <label>
                 Institution
-                <input value={eventForm.institution} onChange={(e) => setEventForm({ ...eventForm, institution: e.target.value })} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
+                <input value={eventForm.institution} onChange={(e) => setEventForm({ ...eventForm, institution: e.target.value })} disabled={recordContentSaving.formHeader} style={{ width: '100%', padding: '6px', margin: '5px 0', fontSize: '12px' }} />
               </label>
               <div className="coach-edit-actions">
-                <button className="secondary-btn" type="button" onClick={() => setEditingEvent(false)}>Cancel</button>
-                <button className="primary-btn" type="submit">Save Headers</button>
+                <button className="secondary-btn" type="button" onClick={() => setEditingEvent(false)} disabled={recordContentSaving.formHeader}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={recordContentSaving.formHeader}>{recordContentSaving.formHeader ? 'Saving...' : 'Save Headers'}</button>
               </div>
             </form>
           </div>
