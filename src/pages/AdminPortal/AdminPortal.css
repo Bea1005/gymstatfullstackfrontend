@@ -1076,7 +1076,7 @@
 .db-stat-card__value { font-size: 38px; font-weight: 900; color: #1a1a1a; line-height: 1; }
 .db-stat-card__icon  { color: rgba(90,0,0,0.45); flex-shrink: 0; }
 
-.db-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.db-panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .db-panel  { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .db-panel__title { font-size: 15px; font-weight: 800; color: #7b1e1e; margin: 0 0 16px; padding-bottom: 12px; border-bottom: 2px solid #ffdc00; }
 
@@ -1094,6 +1094,14 @@
 .db-schedule-title { font-size: 14px; font-weight: 700; color: #222; }
 .db-schedule-date  { font-size: 12px; color: #888; }
 .db-schedule-time  { font-size: 12px; font-weight: 700; color: #7b1e1e; white-space: nowrap; }
+.db-due-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+.db-due-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f3f3f3; }
+.db-due-item:last-child { border-bottom: none; }
+.db-due-item__info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.db-due-item__info span { overflow-wrap: anywhere; }
+.db-due-item__status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.db-due-reference { font-size: 11px; color: #777; overflow-wrap: anywhere; }
+.db-due-status { font-size: 11px; font-weight: 700; color: #7b1e1e; }
 .db-view-all {
   margin-top: 16px; background: none; border: none;
   color: #7b1e1e; font-size: 13px; font-weight: 700;
@@ -1101,7 +1109,10 @@
 }
 .db-view-all:hover { color: #5a0000; }
 
-@media (max-width: 1024px) { .db-stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1024px) {
+  .db-stats { grid-template-columns: repeat(2, 1fr); }
+  .db-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 700px) {
   .db-banner__title { font-size: 36px; }
   .db-stats  { grid-template-columns: 1fr 1fr; }

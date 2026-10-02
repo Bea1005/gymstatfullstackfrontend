@@ -14,6 +14,8 @@ const AdminDashboard = () => {
   });
   const [activities, setActivities] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [dueBorrowings, setDueBorrowings] = useState([]);
+  const [borrowingLoadState, setBorrowingLoadState] = useState('loading');
 
   useEffect(() => {
     let mounted = true;
@@ -27,10 +29,12 @@ const AdminDashboard = () => {
         const data = await api.getAdminDashboard();
         if (!mounted) return;
 
-        const [scheduleResult, pendingRequestResult] = await Promise.allSettled([
+        const [scheduleResult, pendingRequestResult, borrowingResult] = await Promise.allSettled([
           api.getSchedules(),
-          api.getScheduleRequests({ status: 'pending' })
+          api.getScheduleRequests({ status: 'pending' }),
+          api.getBorrowingRecords(),
         ]);
+        if (!mounted) return;
 
         setStats({
           totalUsers: Number(data.totalUsers) || 0,
@@ -45,11 +49,25 @@ const AdminDashboard = () => {
         setSchedules(scheduleResult.status === 'fulfilled'
           ? getUpcomingSchedules(scheduleResult.value)
           : []);
+
+        if (borrowingResult.status === 'fulfilled') {
+          const borrowingRecords = Array.isArray(borrowingResult.value)
+            ? borrowingResult.value
+            : (Array.isArray(borrowingResult.value?.data) ? borrowingResult.value.data : []);
+          setDueBorrowings(getDueBorrowings(borrowingRecords));
+          setBorrowingLoadState('ready');
+        } else {
+          console.error('Admin dashboard borrowing fetch error:', borrowingResult.reason);
+          setDueBorrowings([]);
+          setBorrowingLoadState(getBorrowingErrorState(borrowingResult.reason));
+        }
       } catch (error) {
         if (!mounted) return;
         console.warn('Admin dashboard fetch error:', error);
         setActivities(DEMO_ACTIVITIES);
         setSchedules([]);
+        setDueBorrowings([]);
+        setBorrowingLoadState(getBorrowingErrorState(error));
       } finally {
         fetching = false;
       }
@@ -130,6 +148,41 @@ const AdminDashboard = () => {
           </div>
         </div>
 
+        {/* Due Borrowed Items */}
+        <div className="db-panel">
+          <h3 className="db-panel__title">Due Borrowed Items</h3>
+          <div className="db-due-list" aria-live="polite">
+            {borrowingLoadState === 'loading' && <p className="db-schedule-date">Loading borrowed items...</p>}
+            {borrowingLoadState === 'session-error' && <p className="db-schedule-date">Admin session expired. Please sign in again.</p>}
+            {borrowingLoadState === 'authorization-error' && <p className="db-schedule-date">You are not authorized to view borrowing records.</p>}
+            {borrowingLoadState === 'route-error' && <p className="db-schedule-date">Borrowing records endpoint is unavailable.</p>}
+            {borrowingLoadState === 'server-error' && <p className="db-schedule-date">Borrowing records could not be loaded from the server.</p>}
+            {borrowingLoadState === 'error' && <p className="db-schedule-date">Unable to load due borrowed items. Check your connection and retry.</p>}
+            {borrowingLoadState === 'ready' && dueBorrowings.length === 0 && (
+              <p className="db-schedule-date">No due borrowed items</p>
+            )}
+            {borrowingLoadState === 'ready' && dueBorrowings.map((record) => (
+              <div className="db-due-item" key={record._id || record.id}>
+                <div className="db-due-item__info">
+                  <span className="db-schedule-title">{record.fullname || record.Name || 'Unknown borrower'}</span>
+                  <span className="db-schedule-date">{record.equipment || 'Unknown item'}</span>
+                  {record.referenceIds?.length > 0 && (
+                    <span className="db-due-reference">Ref: {record.referenceIds.join(', ')}</span>
+                  )}
+                  <span className="db-schedule-date">Due: {record.dueDate}</span>
+                </div>
+                <div className="db-due-item__status">
+                  <span className="db-schedule-time">{record.endTime}</span>
+                  <span className="db-due-status">{record.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="db-view-all" onClick={() => navigate('/admin/borrowing')}>
+            View Borrowing Records
+          </button>
+        </div>
+
         {/* Upcoming Schedules */}
         <div className="db-panel">
           <h3 className="db-panel__title">Upcoming Schedules</h3>
@@ -173,6 +226,66 @@ const getPendingRequestCount = (response) => {
   const requests = Array.isArray(response?.data) ? response.data : [];
   return requests.filter((request) => String(request.status || '').toLowerCase() === 'pending').length;
 };
+
+const getBorrowingErrorState = (error) => {
+  if (error?.status === 401 || error?.code === 'SESSION_EXPIRED') return 'session-error';
+  if (error?.status === 403) return 'authorization-error';
+  if (error?.status === 404) return 'route-error';
+  if (error?.status >= 500) return 'server-error';
+  return 'error';
+};
+
+const parseStoredDateParts = (value) => {
+  const dateText = value instanceof Date
+    ? value.toISOString().slice(0, 10)
+    : String(value || '').trim().slice(0, 10);
+  const match = dateText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  const parts = match.slice(1).map(Number);
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+  return { year: parts[0], month: parts[1], day: parts[2], text: dateText };
+};
+
+const parseStoredEndTime = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3]?.toUpperCase();
+  if (minutes > 59) return null;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    hours = (hours % 12) + (meridiem === 'PM' ? 12 : 0);
+  } else if (hours > 23) {
+    return null;
+  }
+  return { hours, minutes };
+};
+
+const getBorrowingDueDateTime = (record) => {
+  const dateParts = parseStoredDateParts(record.returnDate || record.borrowTimestamp?.date || record.borrowDate);
+  const timeParts = parseStoredEndTime(record.endTime);
+  if (!dateParts || !timeParts) return null;
+
+  return {
+    value: new Date(dateParts.year, dateParts.month - 1, dateParts.day, timeParts.hours, timeParts.minutes),
+    date: dateParts.text,
+  };
+};
+
+const getDueBorrowings = (records, now = new Date()) => records
+  .filter((record) => {
+    const status = String(record.status || '').trim().toLowerCase();
+    if (['returned', 'completed'].includes(status) || record.returnedAt || record.returnedTimestamp) return false;
+
+    const dueDateTime = getBorrowingDueDateTime(record);
+    return Boolean(dueDateTime && dueDateTime.value <= now);
+  })
+  .map((record) => ({ ...record, dueDate: getBorrowingDueDateTime(record).date }))
+  .sort((first, second) => getBorrowingDueDateTime(first).value - getBorrowingDueDateTime(second).value);
 
 const parseScheduleDateTime = (dateValue, timeValue, endOfDay = false) => {
   if (!dateValue) return null;
