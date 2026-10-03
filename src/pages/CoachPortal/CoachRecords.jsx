@@ -683,11 +683,6 @@ export default function CoachRecord() {
           image.src = athlete.photo;
           image.alt = athlete.fullname || 'Student athlete';
           photo.insertBefore(image, badgeElement);
-        } else if (photo) {
-          const emptyMark = document.createElement('span');
-          emptyMark.className = 'cell-x';
-          emptyMark.textContent = 'X';
-          photo.appendChild(emptyMark);
         }
         photo?.appendChild(badgeElement);
         const infoRows = card.querySelectorAll('.col-info-row');
@@ -1350,6 +1345,7 @@ export default function CoachRecord() {
           <div className="col-photo">
             <span className="cell-x">X</span>
           </div>
+          <div className="col-info-row" />
           <div className="col-info-row" />
           <div className="col-info-row" />
           <div className="col-info-row" />

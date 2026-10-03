@@ -9,9 +9,57 @@ import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
 import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
-import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
+import {
+  DEPARTMENT_OPTIONS,
+  SPORT_OPTIONS,
+  YEAR_LEVEL_OPTIONS
+} from '../../constants/studentRegistrationOptions';
 import './ScreenerPage.css';
 
+const normalizeYearLevel = (value) => {
+  const compactValue = String(value || '')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  if (!compactValue) return '';
+
+  const aliases = {
+    i: 'I',
+    '1': 'I',
+    '1st': 'I',
+    first: 'I',
+    firstyear: 'I',
+    '1styear': 'I',
+    year1: 'I',
+    yeari: 'I',
+    ii: 'II',
+    '2': 'II',
+    '2nd': 'II',
+    second: 'II',
+    secondyear: 'II',
+    '2ndyear': 'II',
+    year2: 'II',
+    yearii: 'II',
+    iii: 'III',
+    '3': 'III',
+    '3rd': 'III',
+    third: 'III',
+    thirdyear: 'III',
+    '3rdyear': 'III',
+    year3: 'III',
+    yeariii: 'III',
+    iv: 'IV',
+    '4': 'IV',
+    '4th': 'IV',
+    fourth: 'IV',
+    fourthyear: 'IV',
+    '4thyear': 'IV',
+    year4: 'IV',
+    yeariv: 'IV'
+  };
+
+  return aliases[compactValue] || '';
+};
 
 const getFileExtension = (fileName = '') => {
   const normalizedName = String(fileName).toLowerCase();
@@ -84,7 +132,6 @@ const ScreenerPage = () => {
   const departmentOptions = user?.role === 'screener'
     ? DEPARTMENT_OPTIONS.filter((department) => department !== user.department)
     : DEPARTMENT_OPTIONS;
-
   const loadRequirements = async (silent = false) => {
     if (requirementsRequestInProgressRef.current) return;
     requirementsRequestInProgressRef.current = true;
@@ -302,7 +349,8 @@ const ScreenerPage = () => {
     const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = departmentFilter === 'All' || student.department === departmentFilter;
     const matchesSport = sportFilter === 'All' || student.sport === sportFilter;
-    const matchesYear = yearLevelFilter === 'All' || student.yearLevel === yearLevelFilter;
+    const matchesYear = yearLevelFilter === 'All'
+      || normalizeYearLevel(student.yearLevel) === yearLevelFilter;
     
     return matchesSearch && matchesDept && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
