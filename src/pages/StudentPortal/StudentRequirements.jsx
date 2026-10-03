@@ -35,6 +35,15 @@ const formatUploadDateTime = (value) => {
   return `${datePart} | ${timePart}`;
 };
 
+const isStudentAnnouncementList = (announcements) => (
+  Array.isArray(announcements)
+  && announcements.every((announcement) => (
+    announcement
+    && (announcement._id || announcement.id)
+    && typeof announcement.isRead === 'boolean'
+  ))
+);
+
 // Detailed Announcement View Modal
 const AnnouncementDetailModal = ({ announcement, onClose }) => {
   if (!announcement) return null;
@@ -101,10 +110,10 @@ const AnnouncementDetailModal = ({ announcement, onClose }) => {
 };
 
 // Announcements component to be shown in modal
-const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [] }) => {
-  // Filter announcements, handle null/undefined
-  const validAnnouncements = Array.isArray(announcements) ? announcements.filter(a => a && a.type) : [];
-  const requirementAnnouncements = validAnnouncements.filter(a => a.type === 'requirement');
+const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [], loading, error }) => {
+  const announcementHistory = Array.isArray(announcements) ? announcements.filter((announcement) => (
+    announcement && announcement.type
+  )) : [];
 
   const getStatusStyle = (type) => {
     if (type === 'requirement') {
@@ -130,12 +139,22 @@ const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [] 
     <div className="modal-overlay" onClick={onClose}>
       <div className="announcements-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Icon name="megaphone" size={22} /> Announcements ({requirementAnnouncements.length})</h2>
+          <h2><Icon name="megaphone" size={22} /> Announcements ({announcementHistory.length})</h2>
           <button className="modal-close-btn" onClick={onClose}><Icon name="close" /></button>
         </div>
         <div className="modal-body no-scrollbar">
-          {requirementAnnouncements.length > 0 ? (
-            requirementAnnouncements.map((item) => (
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+              <p>Loading notifications...</p>
+            </div>
+          ) : (
+            <>
+              {error && (
+                <div role="alert" style={{ padding: '1rem 2rem', textAlign: 'center', color: '#991b1b' }}>
+                  <p>{error}</p>
+                </div>
+              )}
+              {announcementHistory.length > 0 ? announcementHistory.map((item) => (
               <div 
                 key={item._id || item.id} 
                 className="announcement-card clickable"
@@ -165,14 +184,15 @@ const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [] 
                   {item.type}
                 </span>
               </div>
-            ))
-          ) : (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-              <p><Icon name="folder" size={18} /> No requirement announcements at this time</p>
-              <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#999' }}>
-                Admin will publish requirements here
-              </p>
-            </div>
+              )) : !error && (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                  <p><Icon name="folder" size={18} /> No announcements at this time</p>
+                  <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#999' }}>
+                    Admin will publish requirements here
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -189,6 +209,8 @@ export default function StudentRequirements() {
   const [submissions, setSubmissions] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [announcementNotificationsLoaded, setAnnouncementNotificationsLoaded] = useState(false);
+  const [announcementNotificationsError, setAnnouncementNotificationsError] = useState('');
   const [loading, setLoading] = useState(false);
   const downloadInProgressRef = useRef(false);
   const viewInProgressRef = useRef(false);
@@ -246,6 +268,40 @@ export default function StudentRequirements() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const refreshNotifications = async () => {
+      try {
+        const response = await api.getStudentRequirementAnnouncements();
+        if (!active) return;
+        if (!isStudentAnnouncementList(response.data)) {
+          throw new Error('The notification response was invalid.');
+        }
+        setAnnouncements(response.data);
+        setAnnouncementNotificationsError('');
+        setAnnouncementNotificationsLoaded(true);
+      } catch (err) {
+        console.error('Failed to refresh requirement notifications:', err);
+        if (!active) return;
+        setAnnouncementNotificationsError('Unable to load notifications. Please try again.');
+        setAnnouncementNotificationsLoaded(true);
+      }
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshNotifications();
+    };
+    const intervalId = window.setInterval(refreshNotifications, 30000);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -259,13 +315,20 @@ export default function StudentRequirements() {
         setPublishedRequirements([]);
       }
 
-      // Fetch announcements from MongoDB
+      // Fetch requirement notifications and their read state for this student
       try {
-        const announcementsData = await api.getAnnouncements({ limit: 10 });
+        setAnnouncementNotificationsLoaded(false);
+        setAnnouncementNotificationsError('');
+        const announcementsData = await api.getStudentRequirementAnnouncements();
+        if (!isStudentAnnouncementList(announcementsData.data)) {
+          throw new Error('The notification response was invalid.');
+        }
         setAnnouncements(announcementsData.data || []);
       } catch (err) {
-        console.warn('⚠️ Warning: Failed to fetch announcements:', err);
-        setAnnouncements([]);
+        console.error('Failed to fetch requirement notifications:', err);
+        setAnnouncementNotificationsError('Unable to load notifications. Please try again.');
+      } finally {
+        setAnnouncementNotificationsLoaded(true);
       }
 
       // Fetch student submissions first so the counters can reflect the actual uploaded files
@@ -568,10 +631,23 @@ export default function StudentRequirements() {
   };
 
   const getUrgentCount = () => {
-    return announcements.filter(a => a.type === 'requirement').length;
+    return announcements.filter((announcement) => announcement.isRead === false).length;
   };
 
-  const handleSelectAnnouncement = (announcement) => {
+  const handleSelectAnnouncement = async (announcement) => {
+    if (!announcement.isRead) {
+      try {
+        await api.markStudentAnnouncementRead(announcement._id || announcement.id);
+        setAnnouncements((currentAnnouncements) => currentAnnouncements.map((item) => (
+          String(item._id || item.id) === String(announcement._id || announcement.id)
+            ? { ...item, isRead: true }
+            : item
+        )));
+      } catch (err) {
+        console.error('Failed to mark requirement notification as read:', err);
+        notify('error', 'Notification Update Failed', err.message || 'Unable to mark this notification as read.');
+      }
+    }
     setSelectedAnnouncement(announcement);
   };
 
@@ -679,7 +755,7 @@ export default function StudentRequirements() {
       <div className="notification-bell-container" onClick={() => setShowAnnouncements(true)}>
         <div className="notification-bell">
           <span className="bell-icon"><Icon name="bell" /></span>
-          {getUrgentCount() > 0 && (
+          {announcementNotificationsLoaded && !announcementNotificationsError && getUrgentCount() > 0 && (
             <span className="notification-badge">{getUrgentCount()}</span>
           )}
         </div>
@@ -691,6 +767,8 @@ export default function StudentRequirements() {
           onClose={() => setShowAnnouncements(false)} 
           onSelectAnnouncement={handleSelectAnnouncement}
           announcements={announcements}
+          loading={!announcementNotificationsLoaded}
+          error={announcementNotificationsError}
         />
       )}
 
@@ -1083,7 +1161,7 @@ export default function StudentRequirements() {
 
                 return (
                   <div key={req.id} className={`upload-card${req.id === 'cor' ? ' upload-card--optional' : ''} ${isRejected ? 'rejected-state' : ''}`}>
-                    {req.id === 'cor' && <span className="optional-requirement-label">UNREQUIRE DOCUMENTS</span>}
+                    {req.id === 'cor' && <span className="optional-requirement-label">OPTIONAL</span>}
                     <div className="upload-icon"><Icon name={req.icon} /></div>
                     <span className="upload-label">{req.label}</span>
 
@@ -1168,7 +1246,3 @@ export default function StudentRequirements() {
     </div>
   );
 }
-
-
-
-

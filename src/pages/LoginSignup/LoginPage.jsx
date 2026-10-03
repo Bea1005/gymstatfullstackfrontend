@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword } from "../../services/api";
+import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword, storeClientSessionMetadata } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./LoginPage.css";
@@ -72,21 +72,13 @@ export default function LoginPage() {
         console.info('[AUTH] Login success', {
           userId: data.user?.id || data.user?._id || id,
           role: resolvedRole,
-          sessionCookieVisible: document.cookie.includes('csrfToken='),
         });
         const normalizedUser = {
           ...data.user,
           role: resolvedRole,
         };
 
-        localStorage.setItem("role", resolvedRole);
-        localStorage.setItem("user", JSON.stringify(normalizedUser));
-        try {
-          sessionStorage.setItem("role", resolvedRole);
-          sessionStorage.setItem("user", JSON.stringify(normalizedUser));
-        } catch (e) {
-          console.warn('Session storage not available', e.message);
-        }
+        storeClientSessionMetadata(normalizedUser);
         console.info('[AUTH] User role saved', { role: resolvedRole });
 
         notify("success", "Login Successful", "Welcome back! Redirecting to your portal...");

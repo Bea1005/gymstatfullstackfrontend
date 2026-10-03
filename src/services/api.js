@@ -1,12 +1,7 @@
 // src/services/api.js
-// Use Vite proxy for development, full URL for production
+// Development uses the Vite proxy; production uses Vercel's same-origin API rewrite.
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/+$/, '');
-
-if (import.meta.env.PROD && /^http:\/\//i.test(configuredApiUrl)) {
-  throw new Error('VITE_API_URL must use HTTPS in production');
-}
-
-const API_URL = configuredApiUrl;
+const API_URL = import.meta.env.PROD ? '/api' : configuredApiUrl;
 const AUTH_ROLES = new Set(['student', 'coach', 'admin', 'screener']);
 const csrfTokenMemory = new Map();
 let csrfRecoveryPromise = null;
@@ -22,6 +17,20 @@ const createApiError = (message, code, details = {}) => {
   error.code = code;
   Object.assign(error, details);
   return error;
+};
+
+export const storeClientSessionMetadata = (user) => {
+  const role = String(user?.role || '').trim().toLowerCase();
+  const serializedUser = JSON.stringify(user);
+
+  for (const storageName of ['localStorage', 'sessionStorage']) {
+    try {
+      window[storageName].setItem('role', role);
+      window[storageName].setItem('user', serializedUser);
+    } catch (error) {
+      console.warn('[AUTH] Unable to cache non-sensitive session metadata', { storageName, name: error?.name });
+    }
+  }
 };
 
 const getPortalRole = () => {
@@ -90,7 +99,14 @@ const fetchWithTimeout = async (url, options = {}) => {
 const getCookie = (name) => {
   if (typeof document === 'undefined') return '';
   const prefix = `${name}=`;
-  return document.cookie.split('; ').find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) || '';
+  try {
+    return document.cookie.split('; ').find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) || '';
+  } catch (error) {
+    console.warn('[AUTH] Unable to read the CSRF cookie; recovering it from the API response', {
+      name: error?.name,
+    });
+    return '';
+  }
 };
 
 const getCsrfToken = () => {
@@ -209,7 +225,6 @@ const PUBLIC_ENDPOINTS = [
   '/refresh',
   '/logout',
   '/forgot-password',
-  '/student/announcements',
   '/health',
 ];
 
@@ -234,7 +249,10 @@ const isPublicEndpoint = (endpoint, method = 'GET') => {
     return false;
   }
 
-  return PUBLIC_ENDPOINTS.some(publicEndpoint => 
+  const isPublicAnnouncementsRequest = normalizedEndpoint === '/student/announcements'
+    || normalizedEndpoint.startsWith('/student/announcements?');
+
+  return isPublicAnnouncementsRequest || PUBLIC_ENDPOINTS.some(publicEndpoint =>
     normalizedEndpoint === publicEndpoint || 
     normalizedEndpoint.startsWith(publicEndpoint + '?') ||
     normalizedEndpoint.startsWith(publicEndpoint + '/')
@@ -449,7 +467,14 @@ export const getEquipmentById = async (id) => {
   });
 };
 
-// Register new equipment (auto-updates if exists, adds 1 unit)
+export const getEquipmentReferenceIds = async (type, quantity, name) => {
+  const params = new URLSearchParams({ type, quantity: String(quantity), name });
+  return apiRequest(`/admin/equipment/reference-ids?${params}`, {
+    method: 'GET',
+  });
+};
+
+// Register one or more individually referenced equipment units
 export const registerEquipment = async (equipmentData) => {
   return apiRequest('/admin/equipment', {
     method: 'POST',
@@ -457,7 +482,8 @@ export const registerEquipment = async (equipmentData) => {
       name: equipmentData.name,
       type: equipmentData.type,
       category: equipmentData.category || equipmentData.type,
-      referenceId: equipmentData.referenceId,
+      quantity: equipmentData.quantity,
+      referenceIds: equipmentData.referenceIds,
       condition: equipmentData.condition || 'Good'
     }),
   });
@@ -948,6 +974,18 @@ export const getAnnouncements = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   return apiRequest(`/student/announcements?${params}`, {
     method: 'GET',
+  });
+};
+
+export const getStudentRequirementAnnouncements = async () => {
+  return apiRequest('/student/announcements/notifications', {
+    method: 'GET',
+  });
+};
+
+export const markStudentAnnouncementRead = async (announcementId) => {
+  return apiRequest(`/student/announcements/${announcementId}/read`, {
+    method: 'PUT',
   });
 };
 

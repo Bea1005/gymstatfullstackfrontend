@@ -254,7 +254,7 @@ const StudentProfile = () => {
             );
           })}
           <div className="student-profile-field">
-            <span>Contact Information</span>
+            <span>Contact Number</span>
             {isEditing ? <input className="student-profile-input" value={form.contactNumber || ""} onChange={(event) => setForm((current) => ({ ...current, contactNumber: event.target.value }))} /> : <strong>{displayValue(user.contactNumber || user.phone || user.contact)}</strong>}
           </div>
           <div className="student-profile-field">

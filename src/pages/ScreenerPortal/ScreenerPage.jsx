@@ -8,7 +8,7 @@ import DocumentViewer from '../../components/DocumentViewer';
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
-import usePortalSession from '../../hooks/usePortalSession';
+import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import './ScreenerPage.css';
 
@@ -57,7 +57,7 @@ const ScreenerPage = () => {
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { authReady, user } = usePortalSession(['screener', 'admin'], 'Screener');
+  const { authReady, authError, user } = usePortalSession(['screener', 'admin'], 'Screener');
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -71,6 +71,9 @@ const ScreenerPage = () => {
   const { notify } = useNotifications();
   const hasNotifiedLoadErrorRef = useRef(false);
   const hasLoadedSuccessfullyRef = useRef(false);
+  const requirementsRequestInProgressRef = useRef(false);
+  const selectedStudentRef = useRef(selectedStudent);
+  selectedStudentRef.current = selectedStudent;
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,8 +86,11 @@ const ScreenerPage = () => {
     : DEPARTMENT_OPTIONS;
 
   const loadRequirements = async (silent = false) => {
+    if (requirementsRequestInProgressRef.current) return;
+    requirementsRequestInProgressRef.current = true;
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await api.getScreenerRequirements(participationType);
       const data = response?.data || [];
       // Ensure data is always an array to avoid rendering crashes
@@ -119,7 +125,8 @@ const ScreenerPage = () => {
         hasNotifiedLoadErrorRef.current = true;
       }
     } finally {
-      setLoading(false);
+      requirementsRequestInProgressRef.current = false;
+      if (!silent) setLoading(false);
     }
   };
 
@@ -189,7 +196,6 @@ const ScreenerPage = () => {
 
     window.addEventListener('gymstat-requirement-updated', handleRequirementUpdate);
     window.addEventListener('storage', handleStorageUpdate);
-
     return () => {
       window.clearInterval(refreshInterval);
       window.removeEventListener('gymstat-requirement-updated', handleRequirementUpdate);
@@ -197,10 +203,21 @@ const ScreenerPage = () => {
     };
   }, [authReady]);
 
+  const previewEntriesKey = JSON.stringify([
+    selectedStudent?.id || '',
+    (selectedStudent?.requirements?.documents || []).map((entry) => [
+      entry.submissionId,
+      getRequirementFileUrl(entry),
+      entry.fileName,
+      entry.fileType
+    ])
+  ]);
+
   useEffect(() => {
     let cancelled = false;
     const createdUrls = [];
-    const entries = (selectedStudent?.requirements?.documents || [])
+    const previewStudent = selectedStudentRef.current;
+    const entries = (previewStudent?.requirements?.documents || [])
       .map((entry) => [entry.submissionId, entry, getRequirementFileUrl(entry)])
       .filter(([, , fileUrl]) => Boolean(fileUrl));
 
@@ -234,7 +251,7 @@ const ScreenerPage = () => {
       cancelled = true;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [notify, selectedStudent]);
+  }, [notify, previewEntriesKey]);
 
   // Requirement labels are display metadata only; previews come from MongoDB file records.
   const requirementsTemplates = [
@@ -273,8 +290,6 @@ const ScreenerPage = () => {
   const confirmLogout = async () => {
     setShowLogoutModal(false);
     await api.logout();
-    localStorage.removeItem('role');
-    localStorage.removeItem('user');
     navigate('/login');
   };
 
@@ -357,7 +372,7 @@ const ScreenerPage = () => {
   };
 
   // --- VIEW 1: REQUIREMENTS SCREENING PORTAL DASHBOARD LIST ---
-  if (!authReady) return null;
+  if (!authReady) return authError ? <PortalSessionError /> : null;
 
   if (currentView === 'list') {
     return (
@@ -673,7 +688,6 @@ const ScreenerPage = () => {
               setApproveTarget(null);
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
-                window.dispatchEvent(new Event('gymstat-requirement-updated'));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
@@ -707,7 +721,6 @@ const ScreenerPage = () => {
               notify('screener-error', 'Requirement Rejected', message);
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
-                window.dispatchEvent(new Event('gymstat-requirement-updated'));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }

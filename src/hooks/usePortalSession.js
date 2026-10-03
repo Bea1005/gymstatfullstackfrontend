@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../services/api';
 
@@ -6,6 +6,7 @@ const usePortalSession = (allowedRoles, portalName) => {
   const navigate = useNavigate();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState(false);
   const allowedRolesKey = allowedRoles.map((role) => role.toLowerCase()).join('|');
 
   useEffect(() => {
@@ -16,6 +17,7 @@ const usePortalSession = (allowedRoles, portalName) => {
 
     const verifySession = async (force = false) => {
       const checkId = ++checkSequence;
+      setAuthError(false);
       try {
         const currentUser = await api.getCurrentUser({ force });
         if (!active || checkId !== checkSequence) return;
@@ -39,6 +41,9 @@ const usePortalSession = (allowedRoles, portalName) => {
           setAuthReady(false);
           setUser(null);
           navigate('/login', { replace: true });
+        } else {
+          setAuthReady(false);
+          setAuthError(true);
         }
       }
     };
@@ -64,7 +69,27 @@ const usePortalSession = (allowedRoles, portalName) => {
     };
   }, [allowedRolesKey, navigate, portalName]);
 
-  return { authReady, user };
+  return { authReady, user, authError };
 };
+
+export const PortalSessionError = () => createElement(
+  'div',
+  {
+    role: 'alert',
+    style: {
+      minHeight: '100vh',
+      display: 'grid',
+      placeItems: 'center',
+      padding: '24px',
+      color: '#6b0000',
+      textAlign: 'center',
+    },
+  },
+  createElement(
+    'p',
+    null,
+    'Unable to verify your session. Your session has not been cleared. Please reload or try again later.'
+  )
+);
 
 export default usePortalSession;

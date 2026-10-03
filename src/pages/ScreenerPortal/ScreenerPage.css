@@ -65,6 +65,11 @@
   white-space: nowrap;
 }
 
+.logout-btn:hover,
+.logout-btn:focus-visible {
+  color: #ffffff;
+}
+
 /* Metrics Cards Section */
 .metrics-row {
   display: grid;

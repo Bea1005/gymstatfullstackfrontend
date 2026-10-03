@@ -1326,8 +1326,6 @@ export default function CoachRecord() {
   const confirmLogout = async () => {
     setShowLogoutModal(false);
     await api.logout();
-    localStorage.removeItem('role');
-    localStorage.removeItem('user');
     navigate('/login', { replace: true });
   };
 

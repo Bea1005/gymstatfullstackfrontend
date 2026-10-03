@@ -4,14 +4,14 @@ import logoImage from '../../assets/logo.png';
 import Icon from '../../components/Icon';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import * as api from '../../services/api';
-import usePortalSession from '../../hooks/usePortalSession';
+import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import './AdminPortal.css';
 
 const AdminLayout = () => {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { authReady } = usePortalSession(['admin'], 'Admin');
+  const { authReady, authError } = usePortalSession(['admin'], 'Admin');
 
   const navItems = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: (
@@ -78,9 +78,6 @@ const AdminLayout = () => {
   const confirmLogout = async () => {
     setShowLogoutModal(false);
     await api.logout();
-    localStorage.removeItem('role');
-    localStorage.removeItem('user');
-    try { sessionStorage.removeItem('role'); sessionStorage.removeItem('user'); } catch { /* session storage may be unavailable */ }
     navigate('/login');
   };
 
@@ -90,7 +87,7 @@ const AdminLayout = () => {
 
   const closeMobileMenu = () => setMobileOpen(false);
 
-  if (!authReady) return null;
+  if (!authReady) return authError ? <PortalSessionError /> : null;
 
   return (
     <div className="admin-container">

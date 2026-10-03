@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useEffectEvent } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { getEquipment, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
+import { getEquipment, getEquipmentReferenceIds, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
 import Icon from '../../components/Icon';
 import './AdminPortal.css';
 
@@ -10,15 +10,17 @@ const today = () => {
   return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
 };
 
-// Sports equipment type options for dropdown
-const EQUIPMENT_TYPE_OPTIONS = [
-  'Balls',
-  'Rackets',
-  'Net',
-  'General',
-  'Sports Equipment'
-];
+const getEquipmentReferenceCode = (name, type) => {
+  const normalizedName = name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalizedType = type.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (['BASKETBALL', 'BASKETBALLS', 'BALLS'].includes(normalizedName)
+    || ['BASKETBALL', 'BASKETBALLS', 'BALLS'].includes(normalizedType)) {
+    return '1B';
+  }
+  return normalizedType;
+};
 
+// Sports equipment type options for dropdown
 // Sports equipment options - can now be freely typed in Equipment Name field
 const SPORTS_EQUIPMENT_OPTIONS = [
   'Basketball',
@@ -68,7 +70,12 @@ const calculateAvailable = (equipmentName, equipmentItems, borrowingRecords) => 
 export default function AdminEquipments({ borrowingRecords = [], onUpdateInventory }) {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ name: '', type: '', referenceId: '' });
+  const [form, setForm] = useState({ name: '', type: '', quantity: '1' });
+  const [generatedReferenceIds, setGeneratedReferenceIds] = useState([]);
+  const [selectedReferenceIds, setSelectedReferenceIds] = useState([]);
+  const [referenceIdsLoading, setReferenceIdsLoading] = useState(false);
+  const [referenceIdsError, setReferenceIdsError] = useState('');
+  const [referenceIdsRefreshKey, setReferenceIdsRefreshKey] = useState(0);
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -107,7 +114,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       return uniqueIds[0];
     }
 
-    return '-';
+    return uniqueIds.join(', ');
   };
 
   const mapEquipmentToUiShape = (equipment) => {
@@ -130,6 +137,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       referenceIds,
       condition: equipment.condition || 'Good',
       items: referenceIds.map((refId) => ({
+        id: equipment.id || equipment._id,
         referenceId: refId,
         condition: equipment.condition || 'Good'
       }))
@@ -174,6 +182,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
           ...group,
           referenceId: group.referenceIds[0] || '',
           items: group.items.map((entry) => ({
+            id: entry.id,
             referenceId: entry.referenceId,
             condition: entry.condition || 'Good'
           })),
@@ -193,6 +202,61 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
   useEffect(() => {
     loadEquipmentFromServerEvent();
   }, []);
+
+  useEffect(() => {
+    const quantityIsValid = /^\d+$/.test(form.quantity)
+      && Number.isSafeInteger(Number(form.quantity))
+      && Number(form.quantity) > 0;
+    const typeCode = getEquipmentReferenceCode(form.name, form.type);
+
+    setGeneratedReferenceIds([]);
+    setSelectedReferenceIds([]);
+    setReferenceIdsError('');
+
+    if (!form.name.trim() || !typeCode || !quantityIsValid) {
+      setReferenceIdsLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setReferenceIdsLoading(true);
+    getEquipmentReferenceIds(typeCode, Number(form.quantity), form.name.trim())
+      .then((response) => {
+        if (!active) return;
+        if (!Array.isArray(response?.referenceIds)
+          || response.referenceIds.length !== Number(form.quantity)) {
+          throw new Error('The equipment server did not return the requested number of Reference IDs.');
+        }
+        if (response.referenceIds.some((referenceId) => (
+          typeof referenceId !== 'string'
+          || !new RegExp(`^${typeCode}\\d{7}$`, 'i').test(referenceId)
+        ))) {
+          throw new Error(
+            'The equipment server returned IDs outside the required [Equipment Code][MM][DD][XXX] format. Restart or redeploy the backend, then retry.'
+          );
+        }
+        const referenceIdCodes = response.referenceIds.map((referenceId) => referenceId.slice(0, -7));
+        if (referenceIdCodes.some((code) => code !== referenceIdCodes[0])) {
+          throw new Error('The equipment server returned IDs with inconsistent equipment codes.');
+        }
+        if (new Set(response.referenceIds).size !== response.referenceIds.length) {
+          throw new Error('The equipment server returned duplicate Reference IDs. Retry after refreshing the equipment list.');
+        }
+        setGeneratedReferenceIds(response.referenceIds);
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error('Failed to generate equipment Reference IDs:', error);
+        setReferenceIdsError(error.message || 'Unable to generate Reference IDs.');
+      })
+      .finally(() => {
+        if (active) setReferenceIdsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [form.name, form.type, form.quantity, referenceIdsRefreshKey]);
 
   // Sync inventory with borrowing records
   useEffect(() => {
@@ -236,25 +300,48 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       return;
     }
 
-    if (!form.referenceId.trim()) {
-      setError('Reference ID is required.');
-      showToast('Reference ID is required.', 'error');
+    if (!/^\d+$/.test(form.quantity) || !Number.isSafeInteger(Number(form.quantity)) || Number(form.quantity) < 1) {
+      setError('Quantity must be a positive whole number.');
+      showToast('Quantity must be a positive whole number.', 'error');
+      return;
+    }
+
+    const quantity = Number(form.quantity);
+    if (referenceIdsLoading || generatedReferenceIds.length !== quantity) {
+      setError(referenceIdsError || 'Wait for Reference IDs to finish generating before registration.');
+      return;
+    }
+
+    if (selectedReferenceIds.length !== quantity
+      || generatedReferenceIds.some((referenceId) => !selectedReferenceIds.includes(referenceId))) {
+      setError('Select every generated Reference ID before registering equipment.');
+      showToast('Select every generated Reference ID before registering equipment.', 'error');
       return;
     }
 
     try {
       const response = await registerEquipment({
         name: form.name.trim(),
-        type: form.type.trim(),
-        category: form.type.trim(),
-        referenceId: form.referenceId.trim(),
+        type: getEquipmentReferenceCode(form.name, form.type),
+        category: 'Sports Equipment',
+        quantity,
+        referenceIds: generatedReferenceIds,
         condition: 'Good'
       });
 
+      if (response?.success !== true
+        || !Array.isArray(response.referenceIds)
+        || response.referenceIds.length !== quantity
+        || generatedReferenceIds.some((referenceId, index) => response.referenceIds[index] !== referenceId)) {
+        throw new Error('The server did not confirm saving all generated Reference IDs.');
+      }
+
       await loadEquipmentFromServer();
-      setForm({ name: '', type: '', referenceId: '' });
+      setForm({ name: '', type: '', quantity: '1' });
+      setGeneratedReferenceIds([]);
+      setSelectedReferenceIds([]);
       setError('');
-      showToast(response?.message || `Equipment saved to database successfully.`, 'success');
+      showToast(response?.message || 'Equipment registered successfully.', 'success');
 
       if (onUpdateInventory) {
         onUpdateInventory(items);
@@ -263,6 +350,11 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       console.error('Failed to save equipment to server:', submitError);
       setError(submitError.message || 'Unable to save equipment to the database.');
       showToast(submitError.message || 'Unable to save equipment to the database.', 'error');
+      if (submitError.status === 409) {
+        setGeneratedReferenceIds([]);
+        setSelectedReferenceIds([]);
+        setReferenceIdsRefreshKey((current) => current + 1);
+      }
     }
   };
 
@@ -311,12 +403,10 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         throw new Error('Equipment record not found.');
       }
 
-      const targetEquipmentId = equipmentToUpdate.referenceId === referenceId && equipmentToUpdate.id
-        ? equipmentToUpdate.id
-        : equipmentToUpdate.id;
+      const targetEquipmentId = equipmentToUpdate.items.find((item) => item.referenceId === referenceId)?.id
+        || equipmentToUpdate.id;
 
       await updateEquipment(targetEquipmentId, {
-        referenceId: referenceId || equipmentToUpdate.referenceId,
         condition: newCondition,
       });
       await loadEquipmentFromServer();
@@ -529,31 +619,70 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
             </div>
             <div className="eq-reg-group">
               <label className="eq-reg-label">EQUIPMENT TYPE</label>
-              <select
-                className="eq-reg-input eq-reg-select"
-                value={form.type}
-                onChange={e => { setForm(f => ({ ...f, type: e.target.value })); setError(''); }}
-              >
-                <option value="">Equipment Type</option>
-                {EQUIPMENT_TYPE_OPTIONS.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            </div>
-            <div className="eq-reg-group">
-              <label className="eq-reg-label">REFERENCE ID</label>
               <input
                 type="text"
                 className="eq-reg-input"
-                placeholder="e.g., EQ-001, BASK-01"
-                value={form.referenceId}
-                onChange={e => { setForm(f => ({ ...f, referenceId: e.target.value })); setError(''); }}
+                placeholder="e.g., BASK, VOL, SPAL"
+                value={form.type}
+                list="equipment-type-codes"
+                onChange={e => { setForm(f => ({ ...f, type: e.target.value })); setError(''); }}
               />
+              <datalist id="equipment-type-codes">
+                {[...new Set(items.map((equipment) => equipment.type).filter(Boolean))].map((typeCode) => (
+                  <option key={typeCode} value={typeCode} />
+                ))}
+              </datalist>
+            </div>
+            <div className="eq-reg-group">
+              <label className="eq-reg-label">QUANTITY</label>
+              <input
+                type="number"
+                className="eq-reg-input eq-reg-input--qty"
+                min="1"
+                step="1"
+                value={form.quantity}
+                onChange={e => { setForm(f => ({ ...f, quantity: e.target.value })); setError(''); }}
+              />
+            </div>
+            <div className="eq-reg-group">
+              <label className="eq-reg-label">REFERENCE ID</label>
+              <div className="eq-reg-input eq-reference-id-options" role="group" aria-label="Generated Reference IDs">
+                {referenceIdsLoading ? (
+                  <span>Generating Reference IDs…</span>
+                ) : referenceIdsError ? (
+                  <span className="eq-reference-id-error" role="alert">{referenceIdsError}</span>
+                ) : generatedReferenceIds.length > 0 ? (
+                  generatedReferenceIds.map((referenceId) => (
+                    <label className="eq-reference-id-option" key={referenceId}>
+                      <input
+                        type="checkbox"
+                        value={referenceId}
+                        checked={selectedReferenceIds.includes(referenceId)}
+                        required
+                        aria-required="true"
+                        onChange={(event) => {
+                          setSelectedReferenceIds((current) => (
+                            event.target.checked
+                              ? [...current, referenceId]
+                              : current.filter((selectedId) => selectedId !== referenceId)
+                          ));
+                          setError('');
+                        }}
+                      />
+                      <span>{referenceId}</span>
+                    </label>
+                  ))
+                ) : (
+                  <span>Select equipment type and quantity</span>
+                )}
+              </div>
             </div>
           </div>
           {error && <p className="eq-reg-error">{error}</p>}
           <div className="eq-reg-submit-row">
-            <button type="submit" className="eq-add-btn">+ ADD 1 UNIT TO INVENTORY</button>
+            <button type="submit" className="eq-add-btn">
+              + ADD {form.quantity || '0'} {form.quantity === '1' ? 'UNIT' : 'UNITS'} TO INVENTORY
+            </button>
           </div>
         </form>
       </div>

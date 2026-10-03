@@ -1,11 +1,11 @@
 import { Outlet } from 'react-router-dom';
-import usePortalSession from '../../hooks/usePortalSession';
+import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import './CoachPortal.css';
 
 const CoachLayout = () => {
-  const { authReady } = usePortalSession(['coach'], 'Coach');
+  const { authReady, authError } = usePortalSession(['coach'], 'Coach');
 
-  if (!authReady) return null;
+  if (!authReady) return authError ? <PortalSessionError /> : null;
 
   return (
     <div className="portal-container coach-portal-shell">
