@@ -83,29 +83,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const formatReferenceIdDisplay = (referenceIds = []) => {
-    const uniqueIds = [...new Set(referenceIds.filter(Boolean))].sort((a, b) => {
-      const matchA = a.match(/(.*?)(\d+)(.*)/);
-      const matchB = b.match(/(.*?)(\d+)(.*)/);
-
-      if (!matchA || !matchB) {
-        return a.localeCompare(b);
-      }
-
-      const prefixA = matchA[1];
-      const prefixB = matchB[1];
-      const numberA = Number(matchA[2]);
-      const numberB = Number(matchB[2]);
-      const suffixA = matchA[3];
-      const suffixB = matchB[3];
-
-      if (prefixA !== prefixB) {
-        return prefixA.localeCompare(prefixB);
-      }
-      if (suffixA !== suffixB) {
-        return suffixA.localeCompare(suffixB);
-      }
-      return numberA - numberB;
-    });
+    const uniqueIds = [...new Set(referenceIds.filter(Boolean))];
 
     if (uniqueIds.length === 0) {
       return '—';
@@ -114,7 +92,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       return uniqueIds[0];
     }
 
-    return uniqueIds.join(', ');
+    return '-';
   };
 
   const mapEquipmentToUiShape = (equipment) => {
