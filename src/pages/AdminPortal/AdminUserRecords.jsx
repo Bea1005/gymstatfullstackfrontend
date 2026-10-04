@@ -606,7 +606,7 @@ export default function AdminUserRecords() {
                 <option value="active">Active</option><option value="archived">Archived</option>
               </select>
               <select className="ur-dept-filter" value={studentDept} onChange={e => setStudentDept(e.target.value)}>
-                <option value="All">Department</option>
+                <option value="All">Program</option>
                 {DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
@@ -742,7 +742,7 @@ export default function AdminUserRecords() {
                 <option value="active">Active</option><option value="archived">Archived</option>
               </select>
               <select className="ur-dept-filter" value={screenerDept} onChange={e => setScreenerDept(e.target.value)}>
-                <option value="All">Department</option>
+                <option value="All">Program</option>
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
