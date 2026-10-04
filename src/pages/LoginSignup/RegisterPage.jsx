@@ -261,7 +261,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="login-field">
-              <label>Department</label>
+              <label>Program</label>
               <select
                 className={`login-input ${departmentError ? "input-error" : ""}`}
                 value={form.department}
@@ -271,7 +271,7 @@ export default function RegisterPage() {
                 }}
                 aria-invalid={Boolean(departmentError)}
               >
-                <option value="">Select Department</option>
+                <option value="">Select Program</option>
                 {DEPARTMENT_OPTIONS.map((department) => (
                   <option key={department} value={department}>{department}</option>
                 ))}

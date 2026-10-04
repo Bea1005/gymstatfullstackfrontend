@@ -1155,6 +1155,7 @@ export default function StudentRequirements() {
                 const isRejected = submissionStatus === 'rejected';
                 const isReusable = submission?.requirementStatus === 'reusable' || submission?.isReusable || (submission?.requirementType === 'psa' && submission?.importedFromPreviousYear);
                 const canReplaceReusable = isReusable && !isRejected;
+                const isApprovedMedicalOrCor = ['medical', 'cor'].includes(req.id) && submissionStatus === 'approved';
                 const isPsaApproved = req.id === 'psa' && submissionStatus === 'approved';
                 const rejectionReason = submission?.remarks || submission?.feedback || 'The screener marked this file as rejected. Please upload a corrected copy.';
                 const rejectionDate = submission?.reviewedAt ? new Date(submission.reviewedAt).toLocaleDateString() : 'Recently';
@@ -1176,9 +1177,13 @@ export default function StudentRequirements() {
                         customRequirementLabel: cardCustomRequirementLabel,
                       } : {})}
                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
-                      disabled={uploading || (locked && !isPsaApproved)}
+                      disabled={uploading || (locked && !isPsaApproved && !isApprovedMedicalOrCor)}
                     />
                     {isPsaApproved ? (
+                      <button className="upload-action-btn" disabled>
+                        ✓ Approved
+                      </button>
+                    ) : isApprovedMedicalOrCor ? (
                       <>
                         <button className="upload-action-btn" disabled>
                           ✓ Approved
