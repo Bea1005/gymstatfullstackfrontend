@@ -1155,6 +1155,7 @@ export default function StudentRequirements() {
                 const isRejected = submissionStatus === 'rejected';
                 const isReusable = submission?.requirementStatus === 'reusable' || submission?.isReusable || (submission?.requirementType === 'psa' && submission?.importedFromPreviousYear);
                 const canReplaceReusable = isReusable && !isRejected;
+                const isPsaApproved = req.id === 'psa' && submissionStatus === 'approved';
                 const rejectionReason = submission?.remarks || submission?.feedback || 'The screener marked this file as rejected. Please upload a corrected copy.';
                 const rejectionDate = submission?.reviewedAt ? new Date(submission.reviewedAt).toLocaleDateString() : 'Recently';
                 const savedFileName = uploadedFiles[req.id]?.name || submission?.fileName || req.savedFileName || '';
@@ -1175,15 +1176,30 @@ export default function StudentRequirements() {
                         customRequirementLabel: cardCustomRequirementLabel,
                       } : {})}
                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
-                      disabled={uploading || locked}
+                      disabled={uploading || (locked && !isPsaApproved)}
                     />
-                    <button
-                      className="upload-action-btn"
-                      onClick={() => triggerFileInput(req.id)}
-                      disabled={uploading || (locked && !canReplaceReusable)}
-                    >
-                      {locked && !canReplaceReusable ? '✓ Approved' : canReplaceReusable ? 'Replace / Update' : isSubmitted ? (isRejected ? 'Re-upload' : 'Submitted') : 'Upload'}
-                    </button>
+                    {isPsaApproved ? (
+                      <>
+                        <button className="upload-action-btn" disabled>
+                          ✓ Approved
+                        </button>
+                        <button
+                          className="upload-action-btn"
+                          onClick={() => triggerFileInput(req.id)}
+                          disabled={uploading}
+                        >
+                          Replace / Update
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="upload-action-btn"
+                        onClick={() => triggerFileInput(req.id)}
+                        disabled={uploading || (locked && !canReplaceReusable)}
+                      >
+                        {locked && !canReplaceReusable ? '✓ Approved' : canReplaceReusable ? 'Replace / Update' : isSubmitted ? (isRejected ? 'Re-upload' : 'Submitted') : 'Upload'}
+                      </button>
+                    )}
                     {isRejected && (
                       <div className="rejection-note">
                         <span className="rejection-pill"><Icon name="xCircle" size={16} /> Rejected</span>
@@ -1235,10 +1251,6 @@ export default function StudentRequirements() {
               })}
             </div>
             {!confirmUpload && requirementsAssuranceSection}
-
-            <button className="submit-all-btn" onClick={handleSubmitAll} disabled={uploading || !requirementsAssuranceAccepted}>
-              {uploading ? 'Uploading...' : 'Submit Requirements'}
-            </button>
 
           </section>
         )}

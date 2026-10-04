@@ -621,7 +621,7 @@ export default function AdminUserRecords() {
                       onChange={() => toggleAll(filtStudents, selStudents, setSelStudents)}
                     />
                   </th>
-                  <th>Name</th><th>Status</th><th>Sport</th><th>Department</th><th>Email address</th><th></th>
+                  <th>Name</th><th>Status</th><th>Sport</th><th>Program</th><th>Email address</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -685,7 +685,7 @@ export default function AdminUserRecords() {
               </div>
               <div className="ur-reg-row">
                 <div className="ur-reg-group">
-                  <label className="ur-reg-label">Department *</label>
+                  <label className="ur-reg-label">Program *</label>
                   <select className="ur-reg-input ur-reg-select" value={scrForm.dept}
                     onChange={e => setScrForm(f => ({ ...f, dept: e.target.value }))}>
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -757,7 +757,7 @@ export default function AdminUserRecords() {
                       onChange={() => toggleAll(filtScreeners, selScreeners, setSelScreeners)}
                     />
                   </th>
-                  <th>Name</th><th>Email address</th><th>Department</th><th>Status ↕</th><th></th>
+                  <th>Name</th><th>Email address</th><th>Program</th><th>Status ↕</th><th></th>
                 </tr>
               </thead>
               <tbody>

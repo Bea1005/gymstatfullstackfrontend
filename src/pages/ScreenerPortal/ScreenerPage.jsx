@@ -478,7 +478,7 @@ const ScreenerPage = () => {
           </div>
 
           <div className="filter-group">
-            <label>Department:</label>
+            <label>Program:</label>
             <select 
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
@@ -526,7 +526,7 @@ const ScreenerPage = () => {
               <thead>
                 <tr>
                   <th>Athlete Name</th>
-                  <th>Department</th>
+                  <th>Program</th>
                   <th>COR</th>
                   <th>MED</th>
                   <th>PSA</th>

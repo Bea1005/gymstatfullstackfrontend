@@ -150,7 +150,7 @@ const StudentProfile = () => {
     ["Student ID", user.id || user.studentNumber, false],
     ["Full Name", "fullname", true],
     ["Date of Birth", "dateOfBirth", true],
-    ["Department", "department", true],
+    ["Program", "department", true],
     ["Year Level", "yearLevel", true],
     ["Sport", "sports", true],
     ["Branch Campus", "branchCampus", true],
