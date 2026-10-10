@@ -10,9 +10,10 @@ import './AdminPortal.css';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const getUserActivityStatus = (user) => {
-  const explicitStatus = user?.status;
-  if (explicitStatus === 'Active' || explicitStatus === 'Inactive') {
-    return explicitStatus;
+  const explicitStatus = String(user?.status ?? '').trim();
+  const normalizedExplicitStatus = explicitStatus.toLowerCase();
+  if (normalizedExplicitStatus === 'active' || normalizedExplicitStatus === 'inactive') {
+    return normalizedExplicitStatus === 'active' ? 'Active' : 'Inactive';
   }
 
   const lastActiveAt = user?.lastActiveAt || user?.lastLoginAt || user?.lastSeenAt;
@@ -104,8 +105,16 @@ const DEPARTMENTS = DEPARTMENT_OPTIONS;
 const SPORTS      = ['Basketball','Volleyball','Swimming','Track & Field','Badminton','Softball','Boxing','Archery','Chess','Mobile Legends'];
 
 const COLORS   = ['#7b1e1e','#1565c0','#2e7d32','#6a1b9a','#e65100','#00695c','#4527a0','#ad1457'];
-const getColor = (name) => COLORS[name.charCodeAt(0) % COLORS.length];
-const getInit  = (name) => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+const getColor = (name) => {
+  const safeName = String(name ?? '').trim();
+  if (!safeName) return COLORS[0];
+  return COLORS[safeName.charCodeAt(0) % COLORS.length];
+};
+const getInit  = (name) => {
+  const safeName = String(name ?? '').trim();
+  if (!safeName) return '';
+  return safeName.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+};
 
 /* ── Reusable avatar ── */
 const Avatar = ({ name }) => (
@@ -113,11 +122,16 @@ const Avatar = ({ name }) => (
 );
 
 /* ── Reusable status badge ── */
-const StatusBadge = ({ status }) => (
-  <span className={`ur-status-badge ur-status-badge--${status === 'Active' ? 'active' : 'inactive'}`}>
-    <span className="ur-status-dot" /> {status}
-  </span>
-);
+const StatusBadge = ({ status }) => {
+  const normalizedStatus = String(status ?? '').trim();
+  const isActive = normalizedStatus.toLowerCase() === 'active';
+
+  return (
+    <span className={`ur-status-badge ur-status-badge--${isActive ? 'active' : 'inactive'}`}>
+      <span className="ur-status-dot" /> {normalizedStatus || 'Inactive'}
+    </span>
+  );
+};
 
 export default function AdminUserRecords() {
   // 'student' | 'screener'
@@ -195,17 +209,25 @@ export default function AdminUserRecords() {
   const toggleAll = (rows, sel, setter) => setter(sel.length === rows.length ? [] : rows.map(r => r.id));
 
   /* ── Filtered lists ── */
-  const filtStudents = sortUsersBySurname(students.filter(s =>
-    (studentDept === 'All' || s.dept === studentDept) &&
-    (s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-     s.email.toLowerCase().includes(studentSearch.toLowerCase()) ||
-     s.sport.toLowerCase().includes(studentSearch.toLowerCase()))
-  ));
-  const filtScreeners = sortUsersBySurname(screeners.filter(s =>
-    (screenerDept === 'All' || s.dept === screenerDept) &&
-    (s.name.toLowerCase().includes(screenerSearch.toLowerCase()) ||
-     s.email.toLowerCase().includes(screenerSearch.toLowerCase()))
-  ));
+  const studentSearchText = String(studentSearch ?? '').trim().toLowerCase();
+  const screenerSearchText = String(screenerSearch ?? '').trim().toLowerCase();
+
+  const filtStudents = sortUsersBySurname(students.filter(s => {
+    const name = String(s?.name ?? '').toLowerCase();
+    const email = String(s?.email ?? '').toLowerCase();
+    const sport = String(s?.sport ?? '').toLowerCase();
+
+    return (studentDept === 'All' || s.dept === studentDept)
+      && (name.includes(studentSearchText) || email.includes(studentSearchText) || sport.includes(studentSearchText));
+  }));
+
+  const filtScreeners = sortUsersBySurname(screeners.filter(s => {
+    const name = String(s?.name ?? '').toLowerCase();
+    const email = String(s?.email ?? '').toLowerCase();
+
+    return (screenerDept === 'All' || s.dept === screenerDept)
+      && (name.includes(screenerSearchText) || email.includes(screenerSearchText));
+  }));
 
   /* ── Register screener ── */
   const registerScreener = async (e) => {
@@ -289,15 +311,16 @@ export default function AdminUserRecords() {
         ))
         .map(normalizeUserRow);
       const department = isStudentTab ? studentDept : screenerDept;
-      const search = (isStudentTab ? studentSearch : screenerSearch).trim().toLowerCase();
-      let reportUsers = records.filter((user) => (
-        (department === 'All' || user.dept === department)
-        && (
-          user.name.toLowerCase().includes(search)
-          || user.email.toLowerCase().includes(search)
-          || (isStudentTab && user.sport.toLowerCase().includes(search))
-        )
-      ));
+      const currentSearch = isStudentTab ? studentSearch : screenerSearch;
+      const search = String(currentSearch ?? '').trim().toLowerCase();
+      let reportUsers = records.filter((user) => {
+        const name = String(user?.name ?? '').toLowerCase();
+        const email = String(user?.email ?? '').toLowerCase();
+        const sport = String(user?.sport ?? '').toLowerCase();
+
+        return (department === 'All' || user.dept === department)
+          && (name.includes(search) || email.includes(search) || (isStudentTab && sport.includes(search)));
+      });
 
       reportUsers = sortUsersBySurname(reportUsers);
 

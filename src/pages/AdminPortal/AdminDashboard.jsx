@@ -116,19 +116,40 @@ const AdminDashboard = () => {
       {/* ── Stat Cards ── */}
       <div className="db-stats">
         {[
-          { label: "TOTAL USER",       value: stats.totalUsers,      icon: <Icon name="users" size={38} />,    path: "/admin/student-athletes" },
+          { label: "TOTAL USER",       value: stats.totalUsers,      icon: <Icon name="users" size={38} />,    path: "/admin/user-records" },
           { label: "TOTAL EQUIPMENT",  value: stats.totalEquipments, icon: <Icon name="wrench" size={38} />,    path: "/admin/equipments" },
           { label: "BORROWED ITEMS",   value: stats.borrowedItems,   icon: <Icon name="clipboardCheck" size={38} />,   path: "/admin/borrowing" },
           { label: "PENDING REQS",     value: stats.pendingReqs,     icon: <Icon name="fileText" size={38} />,     path: "/admin/schedules" },
-        ].map((s) => (
-          <div key={s.label} className="db-stat-card" onClick={() => navigate(s.path)}>
-            <div className="db-stat-card__left">
-              <span className="db-stat-card__label">{s.label}</span>
-              <span className="db-stat-card__value">{s.value}</span>
+        ].map((s) => {
+          const isTotalUserCard = s.label === "TOTAL USER";
+          const onCardClick = isTotalUserCard ? () => navigate(s.path) : undefined;
+          const onCardKeyDown = isTotalUserCard
+            ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate(s.path);
+                }
+              }
+            : undefined;
+
+          return (
+            <div
+              key={s.label}
+              className="db-stat-card"
+              onClick={onCardClick}
+              onKeyDown={onCardKeyDown}
+              role={isTotalUserCard ? "button" : undefined}
+              tabIndex={isTotalUserCard ? 0 : undefined}
+              style={isTotalUserCard ? { cursor: "pointer" } : undefined}
+            >
+              <div className="db-stat-card__left">
+                <span className="db-stat-card__label">{s.label}</span>
+                <span className="db-stat-card__value">{s.value}</span>
+              </div>
+              <div className="db-stat-card__icon">{s.icon}</div>
             </div>
-            <div className="db-stat-card__icon">{s.icon}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ── Bottom Panels ── */}
@@ -136,7 +157,7 @@ const AdminDashboard = () => {
 
         {/* Latest Activities */}
         <div className="db-panel">
-          <h3 className="db-panel__title">Latest Activities</h3>
+          <h3 className="db-panel__title">User Registrations</h3>
           <div className="db-activity-list">
             {activities.map((a) => (
               <div key={a.id} className="db-activity-item">

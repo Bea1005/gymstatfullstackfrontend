@@ -61,6 +61,58 @@ const normalizeYearLevel = (value) => {
   return aliases[compactValue] || '';
 };
 
+const normalizeSportValue = (value) => {
+  const rawValue = String(value ?? '').trim();
+  if (!rawValue) return '';
+
+  const compactValue = rawValue
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!compactValue) return '';
+
+  const words = compactValue.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return '';
+
+  const hasGenderTag = words.includes('women') || words.includes('men');
+  if (!hasGenderTag) return words.join(' ');
+
+  const gender = words.includes('women') ? 'women' : 'men';
+  const remainingWords = words.filter((word) => word !== 'women' && word !== 'men');
+  return [...remainingWords, gender].join(' ');
+};
+
+const getStudentSportValues = (student = {}) => {
+  const parseSportValues = (value) => {
+    if (Array.isArray(value)) return value.flatMap(parseSportValues);
+    if (typeof value !== 'string') return [];
+
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return [];
+
+    if (trimmedValue.startsWith('[')) {
+      try {
+        const parsedValue = JSON.parse(trimmedValue);
+        if (Array.isArray(parsedValue)) return parsedValue.flatMap(parseSportValues);
+      } catch {
+        // Legacy multi-value strings are parsed below.
+      }
+    }
+
+    return trimmedValue.split(/[,/|;]+/).map((sport) => sport.trim()).filter(Boolean);
+  };
+
+  const savedSports = parseSportValues(student.sports)
+    .concat(parseSportValues(student.sport));
+
+  return Array.from(new Map(
+    savedSports
+      .map((sport) => [normalizeSportValue(sport), sport])
+      .filter(([normalizedSport]) => Boolean(normalizedSport))
+  ).values());
+};
+
 const getFileExtension = (fileName = '') => {
   const normalizedName = String(fileName).toLowerCase();
   return normalizedName.includes('.') ? normalizedName.slice(normalizedName.lastIndexOf('.')) : '';
@@ -132,6 +184,11 @@ const ScreenerPage = () => {
   const departmentOptions = user?.role === 'screener'
     ? DEPARTMENT_OPTIONS.filter((department) => department !== user.department)
     : DEPARTMENT_OPTIONS;
+  const sportFilterOptions = Array.from(new Map(
+    [...SPORT_OPTIONS, ...students.flatMap(getStudentSportValues)]
+      .map((sport) => [normalizeSportValue(sport), sport])
+      .filter(([normalizedSport]) => Boolean(normalizedSport))
+  ).values());
   const loadRequirements = async (silent = false) => {
     if (requirementsRequestInProgressRef.current) return;
     requirementsRequestInProgressRef.current = true;
@@ -348,7 +405,8 @@ const ScreenerPage = () => {
   const filteredStudents = students.filter((student) => {
     const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = departmentFilter === 'All' || student.department === departmentFilter;
-    const matchesSport = sportFilter === 'All' || student.sport === sportFilter;
+    const matchesSport = sportFilter === 'All'
+      || getStudentSportValues(student).includes(normalizeSportValue(sportFilter));
     const matchesYear = yearLevelFilter === 'All'
       || normalizeYearLevel(student.yearLevel) === yearLevelFilter;
     
@@ -497,7 +555,7 @@ const ScreenerPage = () => {
               onChange={(e) => setSportFilter(e.target.value)}
             >
               <option value="All">All</option>
-              {SPORT_OPTIONS.map((sport) => (
+              {sportFilterOptions.map((sport) => (
                 <option key={sport} value={sport}>{sport}</option>
               ))}
             </select>

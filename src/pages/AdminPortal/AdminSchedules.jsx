@@ -21,6 +21,8 @@ const parseScheduleTime = (value) => {
 };
 
 const timeToMinutes = (value) => parseScheduleTime(value)?.minutes ?? 0;
+const isActiveSchedule = (schedule) => String(schedule?.status || 'active').toLowerCase() === 'active';
+const sameScheduleId = (firstId, secondId) => String(firstId) === String(secondId);
 
 const AdminSchedules = () => {
   const [reservations, setReservations] = useState([
@@ -536,7 +538,7 @@ const AdminSchedules = () => {
     }
 
     const hasConflict = reservations.some((res) => {
-      if (res.id === formData.id) return false;
+      if (!isActiveSchedule(res) || sameScheduleId(res.id, formData.id)) return false;
 
       const existingStart = dateToDayStart(res.startDate);
       const existingEnd = dateToDayStart(res.endDate);
@@ -594,7 +596,7 @@ const AdminSchedules = () => {
       });
 
       const updatedReservations = formData.id
-        ? reservations.map((res) => (res.id === formData.id ? newEntry : res))
+        ? reservations.map((res) => (sameScheduleId(res.id, formData.id) ? newEntry : res))
         : [newEntry, ...reservations];
 
       saveApprovedSchedules(updatedReservations);
@@ -626,11 +628,42 @@ const AdminSchedules = () => {
     setConfirmCancelId(id);
   };
 
-  const confirmDelete = () => {
-    const updated = reservations.filter(res => res.id !== confirmCancelId);
-    saveApprovedSchedules(updated);
-    setToast({ message: 'Schedule Successfully Cancelled', type: 'success' });
-    setConfirmCancelId(null);
+  const confirmDelete = async () => {
+    if (!confirmCancelId) return;
+
+    const scheduleToCancel = reservations.find((schedule) => sameScheduleId(schedule.id, confirmCancelId));
+    if (!scheduleToCancel) {
+      setToast({ message: 'Unable to find this schedule. Please refresh and try again.', type: 'error' });
+      setConfirmCancelId(null);
+      return;
+    }
+
+    try {
+      const response = await api.updateSchedule(confirmCancelId, { status: 'cancelled' });
+      if (!response?.success || !response.data) {
+        throw new Error(response?.message || 'Unable to cancel schedule');
+      }
+
+      const updatedSchedule = normalizeScheduleEntry({
+        ...scheduleToCancel,
+        ...response.data,
+        id: response.data.id || response.data._id || scheduleToCancel.id,
+        status: 'cancelled'
+      });
+      const updatedReservations = reservations.map((schedule) => (
+        sameScheduleId(schedule.id, confirmCancelId) ? updatedSchedule : schedule
+      ));
+
+      saveApprovedSchedules(updatedReservations);
+      await loadSchedulesFromServer();
+      notifyScheduleRefresh();
+      setToast({ message: 'Schedule Successfully Cancelled', type: 'success' });
+    } catch (error) {
+      console.error('Error cancelling schedule:', error);
+      setToast({ message: 'Unable to cancel schedule. Please try again.', type: 'error' });
+    } finally {
+      setConfirmCancelId(null);
+    }
   };
 
   const cancelDelete = () => {
@@ -664,6 +697,7 @@ const AdminSchedules = () => {
 
   const getEventsForDate = (dateStr) => {
     return reservations.filter(r => {
+      if (!isActiveSchedule(r)) return false;
       const eventStart = new Date(r.startDate);
       const eventEnd = new Date(r.endDate);
       const prep = Number(r.prepDays || 0) || 0;
@@ -990,7 +1024,9 @@ const AdminSchedules = () => {
                       <td className="schedule-actions-cell">
                         <div className="schedule-action-buttons">
                           <button type="button" className="btn-edit-action" onClick={() => handleEdit(res)}>Edit schedule</button>
-                          <button type="button" className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel schedule</button>
+                          {isActiveSchedule(res) && (
+                            <button type="button" className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel schedule</button>
+                          )}
                         </div>
                       </td>
                     </tr>
