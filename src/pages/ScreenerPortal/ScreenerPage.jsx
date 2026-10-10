@@ -29,87 +29,78 @@ const normalizeYearLevel = (value) => {
     '1st': 'I',
     first: 'I',
     firstyear: 'I',
+    firstyearlevel: 'I',
     '1styear': 'I',
+    '1styearlevel': 'I',
     year1: 'I',
     yeari: 'I',
+    yearleveli: 'I',
+    yearlevel1: 'I',
     ii: 'II',
     '2': 'II',
     '2nd': 'II',
     second: 'II',
     secondyear: 'II',
+    secondyearlevel: 'II',
     '2ndyear': 'II',
+    '2ndyearlevel': 'II',
     year2: 'II',
     yearii: 'II',
+    yearlevelii: 'II',
+    yearlevel2: 'II',
     iii: 'III',
     '3': 'III',
     '3rd': 'III',
     third: 'III',
     thirdyear: 'III',
+    thirdyearlevel: 'III',
     '3rdyear': 'III',
+    '3rdyearlevel': 'III',
     year3: 'III',
     yeariii: 'III',
+    yearleveliii: 'III',
+    yearlevel3: 'III',
     iv: 'IV',
     '4': 'IV',
     '4th': 'IV',
     fourth: 'IV',
     fourthyear: 'IV',
+    fourthyearlevel: 'IV',
     '4thyear': 'IV',
+    '4thyearlevel': 'IV',
     year4: 'IV',
-    yeariv: 'IV'
+    yeariv: 'IV',
+    yearleveliv: 'IV',
+    yearlevel4: 'IV'
   };
 
   return aliases[compactValue] || '';
 };
 
+const normalizeDepartment = (value) => String(value ?? '')
+  .normalize('NFKC')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase();
+
 const normalizeSportValue = (value) => {
   const rawValue = String(value ?? '').trim();
   if (!rawValue) return '';
 
-  const compactValue = rawValue
-    .replace(/[-_]+/g, ' ')
+  return rawValue
+    .normalize('NFKC')
     .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!compactValue) return '';
-
-  const words = compactValue.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return '';
-
-  const hasGenderTag = words.includes('women') || words.includes('men');
-  if (!hasGenderTag) return words.join(' ');
-
-  const gender = words.includes('women') ? 'women' : 'men';
-  const remainingWords = words.filter((word) => word !== 'women' && word !== 'men');
-  return [...remainingWords, gender].join(' ');
+    .trim()
+    .toLocaleLowerCase();
 };
 
 const getStudentSportValues = (student = {}) => {
-  const parseSportValues = (value) => {
-    if (Array.isArray(value)) return value.flatMap(parseSportValues);
-    if (typeof value !== 'string') return [];
-
-    const trimmedValue = value.trim();
-    if (!trimmedValue) return [];
-
-    if (trimmedValue.startsWith('[')) {
-      try {
-        const parsedValue = JSON.parse(trimmedValue);
-        if (Array.isArray(parsedValue)) return parsedValue.flatMap(parseSportValues);
-      } catch {
-        // Legacy multi-value strings are parsed below.
-      }
-    }
-
-    return trimmedValue.split(/[,/|;]+/).map((sport) => sport.trim()).filter(Boolean);
-  };
-
-  const savedSports = parseSportValues(student.sports)
-    .concat(parseSportValues(student.sport));
-
+  const sports = Array.isArray(student.sports) ? student.sports : [];
   return Array.from(new Map(
-    savedSports
-      .map((sport) => [normalizeSportValue(sport), sport])
-      .filter(([normalizedSport]) => Boolean(normalizedSport))
+    sports
+      .filter((sport) => typeof sport === 'string')
+      .map((sport) => [normalizeSportValue(sport), sport.trim()])
+      .filter(([normalizedSport, sport]) => Boolean(normalizedSport && sport))
   ).values());
 };
 
@@ -181,13 +172,12 @@ const ScreenerPage = () => {
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
   const participationType = 'Intrams';
-  const departmentOptions = user?.role === 'screener'
-    ? DEPARTMENT_OPTIONS.filter((department) => department !== user.department)
-    : DEPARTMENT_OPTIONS;
-  const sportFilterOptions = Array.from(new Map(
-    [...SPORT_OPTIONS, ...students.flatMap(getStudentSportValues)]
-      .map((sport) => [normalizeSportValue(sport), sport])
-      .filter(([normalizedSport]) => Boolean(normalizedSport))
+  const departmentFilterOptions = Array.from(new Map(
+    [...DEPARTMENT_OPTIONS, ...students.map((student) => student.department)]
+      .filter((department) => typeof department === 'string' && department.trim())
+      .filter((department) => user?.role !== 'screener'
+        || normalizeDepartment(department) !== normalizeDepartment(user.department))
+      .map((department) => [normalizeDepartment(department), department.trim()])
   ).values());
   const loadRequirements = async (silent = false) => {
     if (requirementsRequestInProgressRef.current) return;
@@ -403,12 +393,15 @@ const ScreenerPage = () => {
 
   // Filter students based on search query and filters
   const filteredStudents = students.filter((student) => {
-    const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept = departmentFilter === 'All' || student.department === departmentFilter;
+    const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+    const matchesSearch = String(student.name || '').toLocaleLowerCase().includes(normalizedSearchQuery);
+    const matchesDept = departmentFilter === 'All'
+      || normalizeDepartment(student.department) === normalizeDepartment(departmentFilter);
     const matchesSport = sportFilter === 'All'
-      || getStudentSportValues(student).includes(normalizeSportValue(sportFilter));
+      || getStudentSportValues(student)
+        .some((sport) => normalizeSportValue(sport) === normalizeSportValue(sportFilter));
     const matchesYear = yearLevelFilter === 'All'
-      || normalizeYearLevel(student.yearLevel) === yearLevelFilter;
+      || normalizeYearLevel(student.yearLevel) === normalizeYearLevel(yearLevelFilter);
     
     return matchesSearch && matchesDept && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
@@ -542,7 +535,7 @@ const ScreenerPage = () => {
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
               <option value="All">All</option>
-              {departmentOptions.map((department) => (
+              {departmentFilterOptions.map((department) => (
                 <option key={department} value={department}>{department}</option>
               ))}
             </select>
@@ -555,7 +548,7 @@ const ScreenerPage = () => {
               onChange={(e) => setSportFilter(e.target.value)}
             >
               <option value="All">All</option>
-              {sportFilterOptions.map((sport) => (
+              {SPORT_OPTIONS.map((sport) => (
                 <option key={sport} value={sport}>{sport}</option>
               ))}
             </select>

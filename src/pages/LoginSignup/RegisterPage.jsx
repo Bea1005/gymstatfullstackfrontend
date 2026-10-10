@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { register as registerUser } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import Icon from "../../components/Icon";
-import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./RegisterPage.css";
 
@@ -18,6 +18,8 @@ export default function RegisterPage() {
     email: "",
     password: "",
     department: "",
+    yearLevel: "",
+    sport: "",
     id: ""  // ✅ Changed from studentId to id
   });
   
@@ -71,6 +73,11 @@ export default function RegisterPage() {
       return;
     }
     setDepartmentError("");
+
+    if (registrationRole === "student" && (!form.yearLevel || !form.sport)) {
+      notify("warning", "Missing Information", "Please select your year level and sport.");
+      return;
+    }
     
     // ✅ ID and Email are both required for all users
     if (!form.fullname || !form.email || !form.password || !confirmPassword || !form.id) {
@@ -278,6 +285,42 @@ export default function RegisterPage() {
               </select>
               {departmentError && <p className="password-match-error">{departmentError}</p>}
             </div>
+
+            {registrationRole === "student" && (
+              <>
+                <div className="login-field">
+                  <label htmlFor="registration-year-level">Year Level</label>
+                  <select
+                    id="registration-year-level"
+                    className="login-input"
+                    value={form.yearLevel}
+                    onChange={set("yearLevel")}
+                    required
+                  >
+                    <option value="">Select Year Level</option>
+                    {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
+                      <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="login-field">
+                  <label htmlFor="registration-sport">Sport</label>
+                  <select
+                    id="registration-sport"
+                    className="login-input"
+                    value={form.sport}
+                    onChange={set("sport")}
+                    required
+                  >
+                    <option value="">Select Sport</option>
+                    {SPORT_OPTIONS.map((sport) => (
+                      <option key={sport} value={sport}>{sport}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
 
             <button type="submit" className="login-submit-btn" disabled={loading}>
               {loading ? "Registering..." : "Sign Up"}
