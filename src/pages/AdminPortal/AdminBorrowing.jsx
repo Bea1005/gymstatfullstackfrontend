@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useEffectEvent } from 'react';
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
 import Icon from '../../components/Icon';
 import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
+import { getDueBorrowings, isBorrowingDeadlineApproaching } from '../../utils/borrowingDue';
 import {
   getEquipment,
   getBorrowingRecords,
@@ -54,6 +56,9 @@ const EMPTY_FORM = {
 };
 
 export default function AdminBorrowing({ onBorrowingChange }) {
+  const location = useLocation();
+  const recordsCardRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [records, setRecords] = useState([]);
   const [equipmentWithRefs, setEquipmentWithRefs] = useState({});
   const [allEquipment, setAllEquipment] = useState([]);
@@ -145,6 +150,20 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   }, []);
 
   useEffect(() => {
+    if (location.hash !== '#records') return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      recordsCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [location.hash]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
     if (onBorrowingChange) {
       onBorrowingChange(records);
     }
@@ -221,7 +240,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     return values;
   };
 
-  const totalEquipments = records.length;
+  const dueTransactions = getDueBorrowings(records).length;
   const itemsOut = records.filter((record) => ['Out', 'Out Now'].includes(record?.status)).length;
   const damagedItems = records.reduce((count, record) => {
     return count + getConditionValues(record).filter((condition) => condition === 'Damaged').length;
@@ -494,8 +513,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
       <div className="bw-stats">
         <div className="bw-stat-card">
-          <span className="bw-stat-label">TOTAL TRANSACTIONS</span>
-          <span className="bw-stat-value">{totalEquipments}</span>
+          <span className="bw-stat-label">DUE TRANSACTIONS</span>
+          <span className="bw-stat-value">{dueTransactions}</span>
         </div>
         <div className="bw-stat-card">
           <span className="bw-stat-label">ITEMS OUT</span>
@@ -678,7 +697,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       </div>
 
       {/* Transaction Records */}
-      <div className="bw-records-card">
+      <div className="bw-records-card" id="records" ref={recordsCardRef}>
         <div className="bw-records-header">
           <h3 className="bw-records-title">Transaction Records</h3>
           <div className="bw-search-box">
@@ -713,6 +732,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                 const isExpanded = expandedRows[record.id];
                 const hasMultipleItems = record.referenceIds && record.referenceIds.length > 1;
                 const isOngoing = isTransactionOngoing(record);
+                const isDeadlineApproaching = isBorrowingDeadlineApproaching(record, currentTime);
                 
                 return (
                   <React.Fragment key={record.id}>
@@ -820,11 +840,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                           </div>
                         ) : (
                           <button 
-                            className="bw-return-btn" 
+                            className={`bw-return-btn${isDeadlineApproaching ? ' bw-return-btn--warning' : ''}`}
                             onClick={() => handleReturn(record.id)}
                             style={{
-                              background: '#4caf50',
-                              color: 'white',
                               border: 'none',
                               borderRadius: '4px',
                               padding: '6px 12px',
@@ -1021,7 +1039,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               </div>
               
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Borrow Date</label>
+                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Borrowed Date</label>
                 <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.borrowTimestamp?.date || '—'}</p>
               </div>
               
@@ -1031,7 +1049,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               </div>
               
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>End Time</label>
+                <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Returned Time</label>
                 <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.endTime || '—'}</p>
               </div>
               

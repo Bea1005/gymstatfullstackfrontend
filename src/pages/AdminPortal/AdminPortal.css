@@ -1775,8 +1775,10 @@
 .bw-row--returned { opacity: 0.6; }
 .bw-td-name { font-weight: 600; color: #1a1a1a; }
 .bw-td-date { color: #888; font-size: 13px; }
-.bw-return-btn { background: #7b1e1e; color: #fff; border: none; padding: 7px 18px; border-radius: 6px; font-size: 12px; font-weight: 800; cursor: pointer; letter-spacing: 0.4px; transition: background 0.2s, transform 0.15s; }
-.bw-return-btn:hover { background: #5a0000; transform: translateY(-1px); }
+.bw-return-btn { background: #4caf50; color: #fff; border: none; padding: 7px 18px; border-radius: 6px; font-size: 12px; font-weight: 800; cursor: pointer; letter-spacing: 0.4px; transition: background 0.2s, transform 0.15s; }
+.bw-return-btn:hover { background: #45a049; transform: translateY(-1px); }
+.bw-return-btn--warning { background: #ffc107; color: #664d03; }
+.bw-return-btn--warning:hover { background: #e0a800; }
 .bw-returned-badge { font-size: 11px; font-weight: 700; color: #2e7d32; background: #e8f5e9; padding: 4px 10px; border-radius: 20px; }
 .bw-empty { text-align: center; color: #bbb; font-style: italic; padding: 32px !important; }
 
