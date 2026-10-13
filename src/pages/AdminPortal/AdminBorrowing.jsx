@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
+import React, { useState, useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
 import Icon from '../../components/Icon';
+import TimeInput from '../../components/TimeInput';
 import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
 import { getDueBorrowings, isBorrowingDeadlineApproaching } from '../../utils/borrowingDue';
 import {
   getEquipment,
   getBorrowingRecords,
   createBorrowingRecord,
+  getCurrentUser,
   updateBorrowingRecord,
 } from '../../services/api';
 import './AdminPortal.css';
@@ -17,6 +20,18 @@ const TIME_OPTIONS = [
   '10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','01:00 PM',
   '02:00 PM','03:00 PM','04:00 PM','05:00 PM','06:00 PM',
 ];
+
+const parseBorrowingTime = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  if (hour < 1 || hour > 12) return null;
+
+  return {
+    minutes: (hour % 12 + (match[3].toUpperCase() === 'PM' ? 12 : 0)) * 60 + Number(match[2]),
+  };
+};
 
 const CONDITION_OPTIONS = [
   { value: 'Good', label: 'Good', color: '#4caf50' },
@@ -65,6 +80,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const [timeErrors, setTimeErrors] = useState({ startTime: '', endTime: '' });
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [expandedRows, setExpandedRows] = useState({});
   const [selectedBorrowerDetails, setSelectedBorrowerDetails] = useState(null);
@@ -149,13 +165,11 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     fetchDataOnMount();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (location.hash !== '#records') return undefined;
 
-    const frameId = window.requestAnimationFrame(() => {
-      recordsCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    return () => window.cancelAnimationFrame(frameId);
+    recordsCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return undefined;
   }, [location.hash]);
 
   useEffect(() => {
@@ -251,7 +265,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
   // Determine if a transaction is ongoing based on status
   const isTransactionOngoing = (record) => {
-    if (record.status === 'Returned' || record.returnedTimestamp) {
+    const status = String(record.status || '').trim().toLowerCase();
+    if (['returned', 'completed'].includes(status) || record.returnedAt || record.returnedTimestamp) {
       return false;
     }
     return true;
@@ -325,6 +340,23 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       setToast({ message: 'Please select at least one Reference ID.', type: 'error' }); 
       return; 
     }
+
+    const startTime = parseBorrowingTime(form.startTime);
+    const endTime = form.endTime.trim() ? parseBorrowingTime(form.endTime) : null;
+    const nextTimeErrors = {
+      startTime: startTime ? '' : 'Enter a valid time, such as 9:00 AM.',
+      endTime: form.endTime.trim() && !endTime ? 'Enter a valid time, such as 5:00 PM.' : '',
+    };
+    if (startTime && endTime && endTime.minutes <= startTime.minutes) {
+      nextTimeErrors.endTime = 'End time must be later than start time.';
+    }
+    setTimeErrors(nextTimeErrors);
+    if (nextTimeErrors.startTime || nextTimeErrors.endTime) {
+      const timeError = nextTimeErrors.startTime || nextTimeErrors.endTime;
+      setError(timeError);
+      setToast({ message: timeError, type: 'error' });
+      return;
+    }
     
     try {
       const calculatedQuantity = form.selectedReferenceIds.length;
@@ -356,11 +388,19 @@ export default function AdminBorrowing({ onBorrowingChange }) {
         condition: null,
       };
       
-      await createBorrowingRecord(borrowingData);
+      try {
+        await createBorrowingRecord(borrowingData);
+      } catch (createError) {
+        if (createError.status !== 401) throw createError;
+
+        await getCurrentUser({ force: true });
+        await createBorrowingRecord(borrowingData);
+      }
       await fetchData();
 
       setForm(EMPTY_FORM);
       setError('');
+      setTimeErrors({ startTime: '', endTime: '' });
       setToast({ message: `Borrowed ${calculatedQuantity} item(s) successfully`, type: 'success' });
     } catch (error) {
       console.error('Error creating borrowing:', error);
@@ -666,25 +706,59 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               </div>
             </div>
             <div className="bw-form-group">
-              <label className="bw-form-label">START TIME</label>
-              <select
-                className="bw-form-input bw-form-select"
-                value={form.startTime}
-                onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-              >
-                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <label className="bw-form-label" htmlFor="borrowing-start-time">START TIME</label>
+              <div className="schedule-time-controls">
+                <TimeInput
+                  id="borrowing-start-time"
+                  label="Start time"
+                  className="schedule-time-picker"
+                  inputClassName="bw-form-input schedule-time-input"
+                  value={form.startTime}
+                  onChange={(nextStartTime) => {
+                    setForm((current) => ({ ...current, startTime: nextStartTime }));
+                    setTimeErrors((current) => ({ ...current, startTime: '' }));
+                    setError('');
+                  }}
+                  onBlur={() => setTimeErrors((current) => ({
+                    ...current,
+                    startTime: parseBorrowingTime(form.startTime) ? '' : 'Enter a valid time, such as 9:00 AM.',
+                  }))}
+                  options={TIME_OPTIONS}
+                  placeholder="e.g., 9:00 AM"
+                  invalid={Boolean(timeErrors.startTime)}
+                  describedBy={timeErrors.startTime ? 'borrowing-start-time-error' : undefined}
+                  required
+                />
+              </div>
+              {timeErrors.startTime && <small id="borrowing-start-time-error" className="schedule-time-error" role="alert">{timeErrors.startTime}</small>}
             </div>
             <div className="bw-form-group">
-              <label className="bw-form-label">END TIME</label>
-              <select
-                className="bw-form-input bw-form-select"
-                value={form.endTime}
-                onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-              >
-                <option value="">Select End Time...</option>
-                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <label className="bw-form-label" htmlFor="borrowing-end-time">END TIME</label>
+              <div className="schedule-time-controls">
+                <TimeInput
+                  id="borrowing-end-time"
+                  label="End time"
+                  className="schedule-time-picker"
+                  inputClassName="bw-form-input schedule-time-input"
+                  value={form.endTime}
+                  onChange={(nextEndTime) => {
+                    setForm((current) => ({ ...current, endTime: nextEndTime }));
+                    setTimeErrors((current) => ({ ...current, endTime: '' }));
+                    setError('');
+                  }}
+                  onBlur={() => setTimeErrors((current) => ({
+                    ...current,
+                    endTime: form.endTime.trim() && !parseBorrowingTime(form.endTime)
+                      ? 'Enter a valid time, such as 5:00 PM.'
+                      : '',
+                  }))}
+                  options={TIME_OPTIONS}
+                  placeholder="Select End Time..."
+                  invalid={Boolean(timeErrors.endTime)}
+                  describedBy={timeErrors.endTime ? 'borrowing-end-time-error' : undefined}
+                />
+              </div>
+              {timeErrors.endTime && <small id="borrowing-end-time-error" className="schedule-time-error" role="alert">{timeErrors.endTime}</small>}
             </div>
           </div>
 
@@ -733,11 +807,15 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                 const hasMultipleItems = record.referenceIds && record.referenceIds.length > 1;
                 const isOngoing = isTransactionOngoing(record);
                 const isDeadlineApproaching = isBorrowingDeadlineApproaching(record, currentTime);
+                const status = String(record.status || '').trim().toLowerCase();
+                const isDueWarning = isOngoing
+                  && !['overdue', 'returned', 'completed'].includes(status)
+                  && isDeadlineApproaching;
                 
                 return (
                   <React.Fragment key={record.id}>
                     {/* Main Transaction Row */}
-                    <tr className={`${isOngoing ? 'bw-row--ongoing' : ''} ${record.status === 'Returned' ? 'bw-row--returned' : ''}`.trim()}>
+                    <tr className={`${isOngoing ? 'bw-row--ongoing' : ''} ${isDueWarning ? 'bw-row--due' : ''} ${!isOngoing ? 'bw-row--returned' : ''}`.trim()}>
                       <td className="bw-td-name">
                         <button
                           onClick={() => setSelectedBorrowerDetails(record)}
@@ -762,10 +840,10 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                             fontWeight: 'bold',
                             padding: '2px 6px',
                             borderRadius: '12px',
-                            backgroundColor: '#4caf50',
-                            color: 'white'
+                            backgroundColor: isDueWarning ? '#ffdc00' : '#4caf50',
+                            color: isDueWarning ? '#5a0000' : 'white'
                           }}>
-                            ONGOING
+                            {isDueWarning ? 'DUE' : 'ONGOING'}
                           </span>
                         )}
                       </td>
@@ -952,9 +1030,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       <NotificationToast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
       
       {/* Borrower Details Modal */}
-      {selectedBorrowerDetails && (
-        <div className="modal-backdrop" onClick={() => setSelectedBorrowerDetails(null)}>
-          <div className="modal-card borrowing-details-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="borrower-details-title">
+      {selectedBorrowerDetails && createPortal(
+        <div className="bw-borrower-modal-backdrop" onClick={() => setSelectedBorrowerDetails(null)}>
+          <div className="bw-borrower-modal borrowing-details-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="borrower-details-title">
             <div className="modal-header">
               <h3 id="borrower-details-title">Borrower Details</h3>
             </div>
@@ -1119,7 +1197,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

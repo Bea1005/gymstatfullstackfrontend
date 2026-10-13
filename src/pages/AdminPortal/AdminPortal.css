@@ -1772,6 +1772,7 @@
 .bw-table tbody tr:last-child td { border-bottom: none; }
 .bw-table tbody tr:hover { background: #fafafa; }
 .bw-row--ongoing { outline: 2px solid rgba(76, 175, 80, 0.45); outline-offset: -2px; }
+.bw-row--due { outline: 2px solid #e6c200; outline-offset: -2px; }
 .bw-row--returned { opacity: 0.6; }
 .bw-td-name { font-weight: 600; color: #1a1a1a; }
 .bw-td-date { color: #888; font-size: 13px; }
@@ -1978,6 +1979,85 @@
 .bw-modal-confirm:hover {
   background: #45a049;
   transform: translateY(-2px);
+}
+
+.bw-borrower-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(18, 10, 10, 0.55);
+}
+
+.bw-borrower-modal {
+  width: min(520px, 100%);
+  max-height: min(90vh, 720px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid rgba(123, 30, 30, 0.16);
+  border-radius: 16px;
+  box-shadow: 0 36px 88px rgba(23, 13, 13, 0.18);
+}
+
+.bw-borrower-modal .modal-header {
+  padding: 16px 20px;
+  background: #7b1e1e;
+  color: #fff;
+}
+
+.bw-borrower-modal .modal-header h3 {
+  color: #fff;
+}
+
+.bw-borrower-modal .modal-body {
+  padding: 20px;
+}
+
+.bw-borrower-modal .modal-actions {
+  flex-wrap: wrap;
+  padding: 0 20px 20px;
+}
+
+.bw-borrower-modal .modal-btn {
+  min-width: 100px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bw-borrower-modal .modal-btn.modal-confirm {
+  background: #7b1e1e;
+  color: #ffdc00;
+}
+
+.bw-borrower-modal .modal-btn.modal-secondary {
+  background: #6b5555;
+  color: #fff;
+}
+
+@media (max-width: 520px) {
+  .bw-borrower-modal-backdrop {
+    padding: 14px;
+  }
+
+  .bw-borrower-modal {
+    max-height: calc(100dvh - 28px);
+  }
+
+  .bw-borrower-modal .modal-actions {
+    justify-content: center;
+  }
+
+  .bw-borrower-modal .modal-btn {
+    flex: 1 1 110px;
+  }
 }
 
 /* Returned row highlight */
