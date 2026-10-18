@@ -231,6 +231,34 @@
   min-width: 0;
 }
 
+.student-profile-sport-add-flow {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  background: #fffdf4;
+}
+
+.student-profile-sport-add-flow .student-profile-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.student-profile-preferred-category {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-light);
+  font-size: 0.78rem;
+}
+
+.student-profile-sport-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .student-profile-sport-row {
   display: flex;
   align-items: center;

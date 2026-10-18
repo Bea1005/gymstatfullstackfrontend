@@ -2,7 +2,13 @@ import React, { useEffect, useState } from "react";
 import * as api from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import {
+  PREFERRED_CATEGORY_OPTIONS,
+  REGISTRATION_CATEGORIES,
+} from "../../constants/registrationCategories";
 import "./StudentProfile.css";
+
+const MAX_PROFILE_SPORTS = 34;
 
 const normalizeDateForInput = (value) => {
   if (!value) return "";
@@ -45,6 +51,26 @@ const StudentProfile = () => {
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [addingSport, setAddingSport] = useState(false);
+  const [newSportCategory, setNewSportCategory] = useState("");
+  const [newSportSubcategory, setNewSportSubcategory] = useState("");
+  const [newSportValue, setNewSportValue] = useState("");
+  const [newPreferredCategory, setNewPreferredCategory] = useState("");
+  const selectedSportCategory = REGISTRATION_CATEGORIES.find(({ name }) => name === newSportCategory);
+  const selectedSportSubcategory = selectedSportCategory?.subcategories?.find(
+    ({ name }) => name === newSportSubcategory,
+  );
+  const newSportOptions = newSportCategory === "Sports Event"
+    ? selectedSportSubcategory?.sports || []
+    : selectedSportCategory?.events || [];
+
+  const resetNewSportSelection = () => {
+    setAddingSport(false);
+    setNewSportCategory("");
+    setNewSportSubcategory("");
+    setNewSportValue("");
+    setNewPreferredCategory("");
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -69,6 +95,19 @@ const StudentProfile = () => {
 
   const handleSave = async (event) => {
     event.preventDefault();
+    const currentSports = (form.sports || [])
+      .map((sport) => String(sport || "").trim());
+    const selectedSports = currentSports.filter(Boolean);
+    if (
+      currentSports.some((sport) => !sport)
+      || !selectedSports.length
+      || selectedSports.length > MAX_PROFILE_SPORTS
+      || new Set(selectedSports).size !== selectedSports.length
+    ) {
+      notify("warning", "Invalid Sports", "Select at least one valid sport or event and remove any duplicates before saving.");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -106,6 +145,7 @@ const StudentProfile = () => {
       }
       setPhotoFile(null);
       setPhotoPreview("");
+      resetNewSportSelection();
       setForm(getEditableProfileFields(updatedUser));
       localStorage.setItem("user", JSON.stringify(updatedUser));
       sessionStorage.setItem("user", JSON.stringify(updatedUser));
@@ -132,6 +172,45 @@ const StudentProfile = () => {
       setPhotoFile(null);
       setPhotoPreview("");
     }
+  };
+
+  const handleAddSport = () => {
+    if (
+      !selectedSportCategory
+      || (newSportCategory === "Sports Event" && !selectedSportSubcategory)
+      || !newSportOptions.includes(newSportValue)
+      || (newPreferredCategory && !PREFERRED_CATEGORY_OPTIONS.includes(newPreferredCategory))
+    ) {
+      notify("warning", "Incomplete Sport or Event", "Select a category and a valid sport or event before adding it.");
+      return;
+    }
+
+    const currentSports = (form.sports || []).filter(Boolean);
+    if (currentSports.includes(newSportValue)) {
+      notify("warning", "Duplicate Sport or Event", "This sport or event is already in your profile.");
+      return;
+    }
+    if (currentSports.length >= MAX_PROFILE_SPORTS) {
+      notify("warning", "Sport Limit Reached", `You can add up to ${MAX_PROFILE_SPORTS} sports or events.`);
+      return;
+    }
+
+    const sports = [...currentSports, newSportValue];
+    setForm((current) => ({ ...current, sports, sport: sports[0] || "" }));
+    resetNewSportSelection();
+  };
+
+  const handleExistingSportChange = (index, selectedSport) => {
+    if ((form.sports || []).some((sport, sportIndex) => sportIndex !== index && sport === selectedSport)) {
+      notify("warning", "Duplicate Sport or Event", "This sport or event is already in your profile.");
+      return;
+    }
+
+    setForm((current) => {
+      const sports = [...(current.sports || [])];
+      sports[index] = selectedSport;
+      return { ...current, sports, sport: sports[0] || "" };
+    });
   };
 
   const displayValue = (value) => value || "Not provided";
@@ -197,12 +276,8 @@ const StudentProfile = () => {
                         <select
                           className="student-profile-input"
                           value={sport}
-                          onChange={(event) => setForm((current) => {
-                            const sports = [...(current.sports || [])];
-                            sports[index] = event.target.value;
-                            return { ...current, sports, sport: sports[0] || "" };
-                          })}
-                          required={index === 0}
+                          onChange={(event) => handleExistingSportChange(index, event.target.value)}
+                          required
                         >
                           <option value="" disabled>Select Sport</option>
                           {sport && !SPORT_OPTIONS.includes(sport) && <option value={sport}>{sport}</option>}
@@ -214,10 +289,16 @@ const StudentProfile = () => {
                           <button
                             type="button"
                             className="student-profile-sport-add"
-                            onClick={() => setForm((current) => ({ ...current, sports: [...(current.sports || []), ""] }))}
-                            disabled={(form.sports || []).length >= SPORT_OPTIONS.length}
+                            onClick={() => {
+                              if (addingSport) {
+                                resetNewSportSelection();
+                              } else {
+                                setAddingSport(true);
+                              }
+                            }}
+                            disabled={(form.sports || []).filter(Boolean).length >= MAX_PROFILE_SPORTS}
                           >
-                            Add Sport
+                            {addingSport ? "Close Add Sport" : "Add Sport"}
                           </button>
                         ) : (
                           <button
@@ -234,6 +315,97 @@ const StudentProfile = () => {
                         )}
                       </div>
                     ))}
+                    {addingSport && (
+                      <div className="student-profile-sport-add-flow">
+                        <select
+                          className="student-profile-input"
+                          value={newSportCategory}
+                          onChange={(event) => {
+                            setNewSportCategory(event.target.value);
+                            setNewSportSubcategory("");
+                            setNewSportValue("");
+                            setNewPreferredCategory("");
+                          }}
+                        >
+                          <option value="">Select Category</option>
+                          {REGISTRATION_CATEGORIES.map(({ name }) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                        {newSportCategory === "Sports Event" && (
+                          <select
+                            className="student-profile-input"
+                            value={newSportSubcategory}
+                            onChange={(event) => {
+                              setNewSportSubcategory(event.target.value);
+                              setNewSportValue("");
+                              setNewPreferredCategory("");
+                            }}
+                          >
+                            <option value="">Select Sports Subcategory</option>
+                            {selectedSportCategory.subcategories.map(({ name }) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        )}
+                        {newSportOptions.length > 0 && (
+                          <select
+                            className="student-profile-input"
+                            value={newSportValue}
+                            onChange={(event) => setNewSportValue(event.target.value)}
+                          >
+                            <option value="">
+                              Select {newSportCategory === "Sports Event" ? "Sport" : "Event"}
+                            </option>
+                            {newSportOptions.map((option) => (
+                              <option
+                                key={option}
+                                value={option}
+                                disabled={(form.sports || []).includes(option)}
+                              >
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {newSportSubcategory === "Racket & Net Sports" && (
+                          <label className="student-profile-preferred-category">
+                            <span>Preferred Category (not saved to profile)</span>
+                            <select
+                              className="student-profile-input"
+                              value={newPreferredCategory}
+                              onChange={(event) => setNewPreferredCategory(event.target.value)}
+                            >
+                              <option value="">Select Preferred Category (Optional)</option>
+                              {PREFERRED_CATEGORY_OPTIONS.map((category) => (
+                                <option key={category} value={category}>{category}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <div className="student-profile-sport-add-actions">
+                          <button
+                            type="button"
+                            className="student-profile-sport-add"
+                            onClick={handleAddSport}
+                            disabled={
+                              !newSportValue
+                              || (form.sports || []).includes(newSportValue)
+                              || (form.sports || []).filter(Boolean).length >= MAX_PROFILE_SPORTS
+                            }
+                          >
+                            Add Selected Sport/Event
+                          </button>
+                          <button
+                            type="button"
+                            className="student-profile-sport-remove"
+                            onClick={resetNewSportSelection}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : value === "branchCampus" || value === "department" || value === "yearLevel" ? (
                   <select className="student-profile-input" value={form[value] || ""} onChange={(event) => setForm((current) => ({ ...current, [value]: event.target.value }))}>
@@ -263,7 +435,7 @@ const StudentProfile = () => {
           </div>
         </div>
         {isEditing && <form className="student-profile-form-actions" onSubmit={handleSave}>
-          <button type="button" className="student-profile-button student-profile-button--quiet" onClick={() => setIsEditing(false)}>Cancel</button>
+          <button type="button" className="student-profile-button student-profile-button--quiet" onClick={() => { resetNewSportSelection(); setIsEditing(false); }}>Cancel</button>
           <button type="submit" className="student-profile-button" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
         </form>}
       </section>
