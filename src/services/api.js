@@ -421,9 +421,8 @@ export const register = async (userData) => {
       password: userData.password,
       department: userData.department || "",
       yearLevel: userData.yearLevel || "",
-      ...(userData.role === "student"
-        ? { sport: userData.sport || "", sports: userData.sports || [userData.sport].filter(Boolean) }
-        : {}),
+      sport: userData.sport || "",
+      sports: userData.sports || [userData.sport].filter(Boolean),
       id: userData.id,
       role: userData.role || "student"
     }),

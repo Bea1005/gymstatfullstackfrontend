@@ -886,6 +886,55 @@
   padding: 16px;
 }
 
+.coach-category-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  color: #777;
+}
+
+.coach-category-search > svg {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+}
+
+.coach-category-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 36px 9px 34px;
+  border: 1px solid #d8b400;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.coach-category-search input:focus-visible {
+  outline: 2px solid rgba(216, 180, 0, 0.45);
+  outline-offset: 1px;
+}
+
+.coach-category-search-clear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+}
+
+.coach-category-search-empty {
+  margin: 4px 0;
+  color: #666;
+  font-size: 13px;
+  text-align: center;
+}
+
 .coach-category-options {
   display: grid;
   gap: 8px;

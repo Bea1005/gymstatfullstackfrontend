@@ -16,6 +16,7 @@ import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import disqualifiedStamp from '../../assets/GymstatStamps/Disqualified.png';
 import noDocumentsStamp from '../../assets/GymstatStamps/NoDocuments.png';
 import * as api from '../../services/api';
+import { filterCoachCategoryOptions } from './coachCategorySearch';
 import './CoachPortal.css';
 
 const CAMPUS_OPTIONS = ['', 'Boac Main', 'Santa Cruz', 'Gasan', 'Torrijos'];
@@ -32,42 +33,6 @@ const formatDateOfBirth = (value) => {
     ? dateText
     : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 };
-
-const sportCategoryOptions = [
-  'Volleyball Women',
-  'Volleyball Men',
-  'Basketball Women',
-  'Basketball Men',
-  'Beach Volleyball Women',
-  'Beach Volleyball Men',
-  'Badminton Women',
-  'Badminton Men',
-  'Table Tennis Women',
-  'Table Tennis Men',
-  'Lawn Tennis Women',
-  'Lawn Tennis Men',
-  'Sepak Takraw Women',
-  'Sepak Takraw Men',
-  'Athletics Women',
-  'Athletics Men',
-  'Swimming Women',
-  'Swimming Men',
-  'Chess Women',
-  'Chess Men',
-  'Taekwondo Women',
-  'Taekwondo Men',
-  'Arnis Women',
-  'Arnis Men',
-  'Dancesport',
-  'Futsal Women',
-  'Futsal Men',
-  'Football Women',
-  'Football Men',
-  'Softball Women',
-  'Softball Men',
-  'Mobile Legends Women',
-  'Mobile Legends Men',
-];
 
 const DEFAULT_STAFF_ROLES = ['COACH', 'ASST. COACH', 'TRAINER', 'CHAPERONE', 'OTHER FACULTY'];
 
@@ -196,6 +161,13 @@ export default function CoachRecord() {
   const [editingEligibility, setEditingEligibility] = useState(false);
   const [editingDirector, setEditingDirector] = useState(false);
   const [showSportDropdown, setShowSportDropdown] = useState(false);
+  const [sportCategorySearch, setSportCategorySearch] = useState('');
+  const filteredSportOptions = filterCoachCategoryOptions(sportCategorySearch);
+
+  const closeSportCategoryModal = () => {
+    setShowSportDropdown(false);
+    setSportCategorySearch('');
+  };
 
   const [eligibilityRequirements, setEligibilityRequirements] = useState({
     notes:
@@ -1285,7 +1257,7 @@ export default function CoachRecord() {
     activeSportRef.current = sport;
     studentSearchRequestRef.current += 1;
     setCoachProfile((prev) => ({ ...prev, mainSport: sport }));
-    setShowSportDropdown(false);
+    closeSportCategoryModal();
     setStudentDirectorySearch('');
     setStudentSearchResults([]);
     void loadStudentSearchDirectory(sport).catch(() => {});
@@ -1548,7 +1520,10 @@ export default function CoachRecord() {
             <button
               className="info-value sport-category-select"
               type="button"
-              onClick={() => setShowSportDropdown((show) => !show)}
+              onClick={() => {
+                setSportCategorySearch('');
+                setShowSportDropdown((show) => !show);
+              }}
               aria-haspopup="dialog"
               aria-expanded={showSportDropdown}
             >
@@ -1621,18 +1596,42 @@ export default function CoachRecord() {
       {/* ================= MODALS ================= */}
 
       {showSportDropdown && (
-        <div className="coach-modal-overlay" onClick={() => setShowSportDropdown(false)}>
+        <div className="coach-modal-overlay" onClick={closeSportCategoryModal}>
           <div className="coach-modal-card coach-category-modal" onClick={(event) => event.stopPropagation()}>
             <div className="coach-modal-header">
               <h3 className="coach-modal-title">Select Category</h3>
-              <button className="coach-modal-close" type="button" onClick={() => setShowSportDropdown(false)}><Icon name="close" /></button>
+              <button className="coach-modal-close" type="button" onClick={closeSportCategoryModal}><Icon name="close" /></button>
+            </div>
+            <div className="coach-category-search">
+              <Icon name="search" size={17} />
+              <input
+                type="search"
+                value={sportCategorySearch}
+                onChange={(event) => setSportCategorySearch(event.target.value)}
+                placeholder="Search categories or events"
+                aria-label="Search sports categories and events"
+              />
+              {sportCategorySearch && (
+                <button
+                  type="button"
+                  className="coach-category-search-clear"
+                  onClick={() => setSportCategorySearch('')}
+                  aria-label="Clear category search"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              )}
             </div>
             <div className="coach-category-options">
-              {sportCategoryOptions.map((sport) => (
-                <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
-                  {sport}
-                </button>
-              ))}
+              {filteredSportOptions.length ? (
+                filteredSportOptions.map((sport) => (
+                  <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
+                    {sport}
+                  </button>
+                ))
+              ) : (
+                <p className="coach-category-search-empty">No matching categories or events found</p>
+              )}
             </div>
           </div>
         </div>

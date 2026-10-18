@@ -1,3 +1,5 @@
+import { REGISTRATION_SPORT_EVENT_OPTIONS } from './registrationCategories.js';
+
 export const DEPARTMENT_OPTIONS = [
   'Bachelor of Science in Information Technology',
   'Bachelor of Science in Information Systems',
@@ -24,7 +26,7 @@ export const DEPARTMENT_OPTIONS = [
 
 export const YEAR_LEVEL_OPTIONS = ['I', 'II', 'III', 'IV'];
 
-export const SPORT_OPTIONS = [
+export const SPORT_OPTIONS = [...new Set([
   'Volleyball Women',
   'Volleyball Men',
   'Basketball Women',
@@ -58,4 +60,5 @@ export const SPORT_OPTIONS = [
   'Baseball Men',
   'Mobile Legends Women',
   'Mobile Legends Men',
-];
+  ...REGISTRATION_SPORT_EVENT_OPTIONS,
+])];

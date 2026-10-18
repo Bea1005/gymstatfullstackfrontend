@@ -3,7 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { register as registerUser } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import Icon from "../../components/Icon";
-import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import {
+  PREFERRED_CATEGORY_OPTIONS,
+  REGISTRATION_CATEGORIES,
+} from "../../constants/registrationCategories";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./RegisterPage.css";
 
@@ -28,8 +32,16 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [departmentError, setDepartmentError] = useState("");
+  const [mainCategory, setMainCategory] = useState("");
+  const [sportSubcategory, setSportSubcategory] = useState("");
+  const [preferredCategory, setPreferredCategory] = useState("");
 
   const registrationRole = /^\d{4}-\d{4}$/.test(form.id.trim()) ? "coach" : "student";
+  const selectedCategory = REGISTRATION_CATEGORIES.find(({ name }) => name === mainCategory);
+  const selectedSubcategory = selectedCategory?.subcategories?.find(({ name }) => name === sportSubcategory);
+  const specificOptions = mainCategory === "Sports Event"
+    ? selectedSubcategory?.sports || []
+    : selectedCategory?.events || [];
 
   const set = (key) => (e) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
@@ -74,8 +86,18 @@ export default function RegisterPage() {
     }
     setDepartmentError("");
 
-    if (registrationRole === "student" && (!form.yearLevel || !form.sport)) {
-      notify("warning", "Missing Information", "Please select your year level and sport.");
+    if (
+      !selectedCategory
+      || (mainCategory === "Sports Event" && !selectedSubcategory)
+      || !specificOptions.includes(form.sport)
+      || (preferredCategory && !PREFERRED_CATEGORY_OPTIONS.includes(preferredCategory))
+    ) {
+      notify("warning", "Missing Information", "Please select a category and a valid sport or event.");
+      return;
+    }
+
+    if (registrationRole === "student" && !form.yearLevel) {
+      notify("warning", "Missing Information", "Please select your year level.");
       return;
     }
     
@@ -287,39 +309,101 @@ export default function RegisterPage() {
             </div>
 
             {registrationRole === "student" && (
-              <>
-                <div className="login-field">
-                  <label htmlFor="registration-year-level">Year Level</label>
-                  <select
-                    id="registration-year-level"
-                    className="login-input"
-                    value={form.yearLevel}
-                    onChange={set("yearLevel")}
-                    required
-                  >
-                    <option value="">Select Year Level</option>
-                    {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
-                      <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="login-field">
+                <label htmlFor="registration-year-level">Year Level</label>
+                <select
+                  id="registration-year-level"
+                  className="login-input"
+                  value={form.yearLevel}
+                  onChange={set("yearLevel")}
+                  required
+                >
+                  <option value="">Select Year Level</option>
+                  {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
+                    <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-                <div className="login-field">
-                  <label htmlFor="registration-sport">Sport</label>
-                  <select
-                    id="registration-sport"
-                    className="login-input"
-                    value={form.sport}
-                    onChange={set("sport")}
-                    required
-                  >
-                    <option value="">Select Sport</option>
-                    {SPORT_OPTIONS.map((sport) => (
-                      <option key={sport} value={sport}>{sport}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
+            <div className="login-field">
+              <label htmlFor="registration-main-category">Sports</label>
+              <select
+                id="registration-main-category"
+                className="login-input"
+                value={mainCategory}
+                onChange={(event) => {
+                  setMainCategory(event.target.value);
+                  setSportSubcategory("");
+                  setPreferredCategory("");
+                  setForm((prev) => ({ ...prev, sport: "" }));
+                }}
+                required
+              >
+                <option value="">Select Category</option>
+                {REGISTRATION_CATEGORIES.map(({ name }) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+
+            {mainCategory === "Sports Event" && (
+              <div className="login-field">
+                <label htmlFor="registration-sport-subcategory">Sports Subcategory</label>
+                <select
+                  id="registration-sport-subcategory"
+                  className="login-input"
+                  value={sportSubcategory}
+                  onChange={(event) => {
+                    setSportSubcategory(event.target.value);
+                    setPreferredCategory("");
+                    setForm((prev) => ({ ...prev, sport: "" }));
+                  }}
+                  required
+                >
+                  <option value="">Select Sports Subcategory</option>
+                  {selectedCategory.subcategories.map(({ name }) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {specificOptions.length > 0 && (
+              <div className="login-field">
+                <label htmlFor="registration-sport">
+                  {mainCategory === "Sports Event" ? "Sport" : "Event"}
+                </label>
+                <select
+                  id="registration-sport"
+                  className="login-input"
+                  value={form.sport}
+                  onChange={set("sport")}
+                  required
+                >
+                  <option value="">Select {mainCategory === "Sports Event" ? "Sport" : "Event"}</option>
+                  {specificOptions.map((sport) => (
+                    <option key={sport} value={sport}>{sport}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {sportSubcategory === "Racket & Net Sports" && (
+              <div className="login-field">
+                <label htmlFor="registration-preferred-category">Preferred Category (Optional)</label>
+                <select
+                  id="registration-preferred-category"
+                  className="login-input"
+                  value={preferredCategory}
+                  onChange={(event) => setPreferredCategory(event.target.value)}
+                >
+                  <option value="">Select Preferred Category</option>
+                  {PREFERRED_CATEGORY_OPTIONS.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
             )}
 
             <button type="submit" className="login-submit-btn" disabled={loading}>
