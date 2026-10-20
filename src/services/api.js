@@ -346,6 +346,7 @@ const apiRequest = async (endpoint, options = {}) => {
         ? 'The service is temporarily unavailable. Please try again.'
         : `Request failed (${response.status}). Please check your information and try again.`), 'API_ERROR', {
         status: response.status,
+        responseData: typeof data === 'object' && data !== null ? data : undefined,
       });
     }
     
@@ -426,6 +427,20 @@ export const register = async (userData) => {
       id: userData.id,
       role: userData.role || "student"
     }),
+  });
+};
+
+export const verifyRegistrationOtp = async (email, otp) => {
+  return apiRequest('/register/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+};
+
+export const resendRegistrationOtp = async (email) => {
+  return apiRequest('/register/resend', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
   });
 };
 

@@ -588,3 +588,37 @@ body {
 .login-right-inner {
   animation: fadeIn 0.4s ease-out;
 }
+
+.registration-verification-form {
+  max-width: 420px;
+}
+
+.registration-verification-notice {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.registration-verification-notice-success {
+  color: #14532d;
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.registration-verification-notice-warning {
+  color: #854d0e;
+  border-color: #fde047;
+  background: #fefce8;
+}
+
+.registration-resend-btn {
+  align-self: center;
+  margin-top: 12px;
+  padding: 8px 12px;
+}
