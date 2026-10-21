@@ -10,16 +10,6 @@ const today = () => {
   return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
 };
 
-const getEquipmentReferenceCode = (name, type) => {
-  const normalizedName = name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const normalizedType = type.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (['BASKETBALL', 'BASKETBALLS', 'BALLS'].includes(normalizedName)
-    || ['BASKETBALL', 'BASKETBALLS', 'BALLS'].includes(normalizedType)) {
-    return '1B';
-  }
-  return normalizedType;
-};
-
 // Sports equipment type options for dropdown
 // Sports equipment options - can now be freely typed in Equipment Name field
 const SPORTS_EQUIPMENT_OPTIONS = [
@@ -72,7 +62,6 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ name: '', type: '', quantity: '1' });
   const [generatedReferenceIds, setGeneratedReferenceIds] = useState([]);
-  const [selectedReferenceIds, setSelectedReferenceIds] = useState([]);
   const [referenceIdsLoading, setReferenceIdsLoading] = useState(false);
   const [referenceIdsError, setReferenceIdsError] = useState('');
   const [referenceIdsRefreshKey, setReferenceIdsRefreshKey] = useState(0);
@@ -92,11 +81,10 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       return uniqueIds[0];
     }
 
-    return '-';
+    return uniqueIds.join(', ');
   };
 
   const mapEquipmentToUiShape = (equipment) => {
-    const normalizedType = equipment.type || equipment.category || 'Sports Equipment';
     const normalizedReferenceId = equipment.referenceId || '';
     const referenceIds = Array.isArray(equipment.referenceIds)
       ? equipment.referenceIds.filter(Boolean)
@@ -107,7 +95,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
     return {
       id: equipment.id || equipment._id,
       name: equipment.name,
-      type: normalizedType,
+      type: equipment.type,
       total: Number(equipment.total ?? equipment.totalStock ?? 1),
       available: Number(equipment.available ?? equipment.totalStock ?? 1),
       date: equipment.createdAt ? new Date(equipment.createdAt).toLocaleDateString() : today(),
@@ -133,10 +121,11 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         serverItems.forEach((equipment) => {
           const normalizedName = equipment.name || 'Unknown Equipment';
           const item = mapEquipmentToUiShape(equipment);
-          const existing = groupedEquipment.get(normalizedName);
+          const groupingKey = JSON.stringify([normalizedName, item.type]);
+          const existing = groupedEquipment.get(groupingKey);
 
           if (!existing) {
-            groupedEquipment.set(normalizedName, {
+            groupedEquipment.set(groupingKey, {
               ...item,
               referenceIds: [...item.referenceIds],
               items: [...item.items],
@@ -185,20 +174,19 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
     const quantityIsValid = /^\d+$/.test(form.quantity)
       && Number.isSafeInteger(Number(form.quantity))
       && Number(form.quantity) > 0;
-    const typeCode = getEquipmentReferenceCode(form.name, form.type);
+    const equipmentType = form.type.trim();
 
     setGeneratedReferenceIds([]);
-    setSelectedReferenceIds([]);
     setReferenceIdsError('');
 
-    if (!form.name.trim() || !typeCode || !quantityIsValid) {
+    if (!form.name.trim() || !equipmentType || !quantityIsValid) {
       setReferenceIdsLoading(false);
       return undefined;
     }
 
     let active = true;
     setReferenceIdsLoading(true);
-    getEquipmentReferenceIds(typeCode, Number(form.quantity), form.name.trim())
+    getEquipmentReferenceIds(equipmentType, Number(form.quantity), form.name.trim())
       .then((response) => {
         if (!active) return;
         if (!Array.isArray(response?.referenceIds)
@@ -207,15 +195,11 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         }
         if (response.referenceIds.some((referenceId) => (
           typeof referenceId !== 'string'
-          || !new RegExp(`^${typeCode}\\d{7}$`, 'i').test(referenceId)
+          || !/^[A-Z0-9]{1,4}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}$/i.test(referenceId)
         ))) {
           throw new Error(
-            'The equipment server returned IDs outside the required [Equipment Code][MM][DD][XXX] format. Restart or redeploy the backend, then retry.'
+            'The equipment server returned IDs outside the required short [Equipment Code][MM][DD][XXX] format.'
           );
-        }
-        const referenceIdCodes = response.referenceIds.map((referenceId) => referenceId.slice(0, -7));
-        if (referenceIdCodes.some((code) => code !== referenceIdCodes[0])) {
-          throw new Error('The equipment server returned IDs with inconsistent equipment codes.');
         }
         if (new Set(response.referenceIds).size !== response.referenceIds.length) {
           throw new Error('The equipment server returned duplicate Reference IDs. Retry after refreshing the equipment list.');
@@ -286,21 +270,14 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
     const quantity = Number(form.quantity);
     if (referenceIdsLoading || generatedReferenceIds.length !== quantity) {
-      setError(referenceIdsError || 'Wait for Reference IDs to finish generating before registration.');
-      return;
-    }
-
-    if (selectedReferenceIds.length !== quantity
-      || generatedReferenceIds.some((referenceId) => !selectedReferenceIds.includes(referenceId))) {
-      setError('Select every generated Reference ID before registering equipment.');
-      showToast('Select every generated Reference ID before registering equipment.', 'error');
+      setError(referenceIdsError || 'Reference IDs are still being generated. Please wait before registering.');
       return;
     }
 
     try {
       const response = await registerEquipment({
         name: form.name.trim(),
-        type: getEquipmentReferenceCode(form.name, form.type),
+        type: form.type.trim(),
         category: 'Sports Equipment',
         quantity,
         referenceIds: generatedReferenceIds,
@@ -310,14 +287,14 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       if (response?.success !== true
         || !Array.isArray(response.referenceIds)
         || response.referenceIds.length !== quantity
-        || generatedReferenceIds.some((referenceId, index) => response.referenceIds[index] !== referenceId)) {
-        throw new Error('The server did not confirm saving all generated Reference IDs.');
+        || response.referenceIds.some((referenceId) => typeof referenceId !== 'string')
+        || new Set(response.referenceIds).size !== quantity) {
+        throw new Error('The server did not confirm saving unique Reference IDs for every unit.');
       }
 
       await loadEquipmentFromServer();
       setForm({ name: '', type: '', quantity: '1' });
       setGeneratedReferenceIds([]);
-      setSelectedReferenceIds([]);
       setError('');
       showToast(response?.message || 'Equipment registered successfully.', 'success');
 
@@ -330,7 +307,6 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       showToast(submitError.message || 'Unable to save equipment to the database.', 'error');
       if (submitError.status === 409) {
         setGeneratedReferenceIds([]);
-        setSelectedReferenceIds([]);
         setReferenceIdsRefreshKey((current) => current + 1);
       }
     }
@@ -433,7 +409,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
           referenceIds.length ? referenceIds.join('\n') : 'N/A',
           String(quantity),
           equipment.condition || 'Good',
-          equipment.type || equipment.category || 'Sports Equipment',
+          equipment.type || '',
         ];
       });
 
@@ -630,26 +606,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
                 ) : referenceIdsError ? (
                   <span className="eq-reference-id-error" role="alert">{referenceIdsError}</span>
                 ) : generatedReferenceIds.length > 0 ? (
-                  generatedReferenceIds.map((referenceId) => (
-                    <label className="eq-reference-id-option" key={referenceId}>
-                      <input
-                        type="checkbox"
-                        value={referenceId}
-                        checked={selectedReferenceIds.includes(referenceId)}
-                        required
-                        aria-required="true"
-                        onChange={(event) => {
-                          setSelectedReferenceIds((current) => (
-                            event.target.checked
-                              ? [...current, referenceId]
-                              : current.filter((selectedId) => selectedId !== referenceId)
-                          ));
-                          setError('');
-                        }}
-                      />
-                      <span>{referenceId}</span>
-                    </label>
-                  ))
+                  <span className="eq-reference-id-values">{generatedReferenceIds.join(', ')}</span>
                 ) : (
                   <span>Select equipment type and quantity</span>
                 )}
@@ -714,7 +671,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
                         </button>
                         {equipment.name}
                       </td>
-                      <td className="eq-td-type">{equipment.type || 'Sports Equipment'}</td>
+                      <td className="eq-td-type">{equipment.type}</td>
                       <td className="eq-td-refid" style={{ minWidth: '180px', maxWidth: '240px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
                         {formatReferenceIdDisplay(equipment.referenceIds || [equipment.referenceId])}
                       </td>
