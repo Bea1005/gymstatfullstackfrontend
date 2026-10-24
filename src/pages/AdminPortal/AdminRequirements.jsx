@@ -1,9 +1,22 @@
-import React, { useState, useEffect, useEffectEvent } from 'react';
-import { createRequirement, publishRequirement, getAllRequirements, deleteAdminRequirement, downloadPublishedRequirement } from '../../services/api';
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
+import { createRequirement, publishRequirement, getAllRequirements, updateAdminRequirement, deleteAdminRequirement, downloadPublishedRequirement } from '../../services/api';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import Icon from '../../components/Icon';
+import { REGISTRATION_CATEGORIES } from '../../constants/registrationCategories';
 import './AdminPortal.css';
+
+const REGISTRATION_SCOPE_GROUPS = REGISTRATION_CATEGORIES.map(({ name, events = [], subcategories = [] }) => ({
+  name,
+  groups: subcategories.length
+    ? subcategories.map(({ name: groupName, sports = [] }) => ({ name: groupName, items: sports }))
+    : [{ name: 'Events', items: events }]
+}));
+
+const parseRequirementScope = (sport) => String(sport || '')
+  .split('|')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const AdminRequirements = () => {
   const createEntryId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -16,17 +29,52 @@ const AdminRequirements = () => {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadedReqs, setUploadedReqs] = useState([]);
+  const [customRequirements, setCustomRequirements] = useState([]);
+  const [customRequirementForm, setCustomRequirementForm] = useState({
+    title: '',
+    description: '',
+    instructions: '',
+    targetStudents: 'all',
+    scopeItems: []
+  });
+  const [editingCustomRequirement, setEditingCustomRequirement] = useState(null);
+  const [savingCustomRequirement, setSavingCustomRequirement] = useState(false);
+  const [publishingCustomRequirementId, setPublishingCustomRequirementId] = useState('');
+  const [customRequirementToArchive, setCustomRequirementToArchive] = useState(null);
+  const [archivingCustomRequirement, setArchivingCustomRequirement] = useState(false);
+  const savingCustomRequirementRef = useRef(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [activeRequirementsTab, setActiveRequirementsTab] = useState('upload');
+
+  const handleRequirementsTabKeyDown = (event) => {
+    const nextTab = {
+      ArrowRight: 'student',
+      ArrowLeft: 'upload',
+      Home: 'upload',
+      End: 'student'
+    }[event.key];
+
+    if (!nextTab || nextTab === activeRequirementsTab) return;
+
+    event.preventDefault();
+    setActiveRequirementsTab(nextTab);
+    document.getElementById(`admin-requirements-${nextTab}-tab`)?.focus();
+  };
 
   const loadRequirements = async () => {
     try {
       setLoading(true);
-      const response = await getAllRequirements({ status: 'published' });
+      const [response, customResponse] = await Promise.all([
+        getAllRequirements({ status: 'published' }),
+        getAllRequirements({ type: 'other' })
+      ]);
       
       // Transform MongoDB data to match component format
-      const formattedReqs = response.data.map(req => ({
+      const formattedReqs = (response.data || [])
+        .filter((req) => !(req.type === 'other' && !req.file?.filename && !req.file?.path))
+        .map(req => ({
         id: req._id,
         title: req.title,
         description: req.description,
@@ -46,9 +94,20 @@ const AdminRequirements = () => {
         _id: req._id,
         status: req.status,
         file: req.file
-      }));
+        }));
       
       setUploadedReqs(formattedReqs);
+      setCustomRequirements((customResponse.data || [])
+        .filter((requirement) => (
+          requirement.type === 'other'
+          && !requirement.file?.filename
+          && !requirement.file?.path
+        ))
+        .map((requirement) => ({
+          ...requirement,
+          id: requirement._id,
+          isArchived: requirement.status === 'archived' || requirement.isActive === false
+        })));
     } catch (error) {
       console.error('Error loading requirements:', error);
       showToast('Failed to load requirements from database', 'error');
@@ -58,6 +117,15 @@ const AdminRequirements = () => {
   };
 
   const loadRequirementsOnMount = useEffectEvent(loadRequirements);
+
+  const broadcastRequirementUpdate = () => {
+    try {
+      localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
+      window.dispatchEvent(new Event('gymstat-requirement-updated'));
+    } catch (error) {
+      console.warn('Could not broadcast requirement update', error.message);
+    }
+  };
 
   // Load requirements from MongoDB on component mount
   useEffect(() => {
@@ -158,6 +226,157 @@ const AdminRequirements = () => {
     }
   };
 
+  const resetCustomRequirementForm = () => {
+    setCustomRequirementForm({
+      title: '',
+      description: '',
+      instructions: '',
+      targetStudents: 'all',
+      scopeItems: []
+    });
+    setEditingCustomRequirement(null);
+  };
+
+  const handleEditCustomRequirement = (requirement) => {
+    setEditingCustomRequirement(requirement);
+    setCustomRequirementForm({
+      title: requirement.title || '',
+      description: requirement.description || '',
+      instructions: requirement.instructions || '',
+      targetStudents: requirement.targetStudents || 'all',
+      scopeItems: requirement.targetStudents === 'sport-specific'
+        ? parseRequirementScope(requirement.sport)
+        : []
+    });
+  };
+
+  const handleSaveCustomRequirement = async (event) => {
+    event.preventDefault();
+    if (savingCustomRequirementRef.current) return;
+
+    const title = customRequirementForm.title.trim();
+    const description = customRequirementForm.description.trim();
+    const instructions = customRequirementForm.instructions.trim();
+    const scopeItems = [...new Set(customRequirementForm.scopeItems)];
+    if (!title) {
+      showToast('Enter a requirement name.', 'error');
+      return;
+    }
+    if (customRequirementForm.targetStudents === 'sport-specific' && scopeItems.length === 0) {
+      showToast('Select at least one sport or event, or choose All Sports and Events.', 'error');
+      return;
+    }
+
+    const dueDate = editingCustomRequirement?.dueDate
+      ? new Date(editingCustomRequirement.dueDate).toISOString()
+      : (() => {
+        const date = new Date();
+        date.setDate(date.getDate() + 30);
+        return date.toISOString();
+      })();
+    const requirementData = {
+      title,
+      description,
+      instructions,
+      type: 'other',
+      sport: customRequirementForm.targetStudents === 'sport-specific' ? scopeItems.join(' | ') : 'General',
+      targetStudents: customRequirementForm.targetStudents,
+      dueDate,
+      priority: editingCustomRequirement?.priority || 'medium',
+      isActive: true,
+      ...(editingCustomRequirement?.isArchived ? { status: 'published' } : {})
+    };
+
+    let createdRequirementId = '';
+    try {
+      savingCustomRequirementRef.current = true;
+      setSavingCustomRequirement(true);
+      if (editingCustomRequirement) {
+        const response = await updateAdminRequirement(editingCustomRequirement._id, requirementData);
+        if (response?.success === false) {
+          throw new Error(response.message || 'Failed to update custom requirement.');
+        }
+        showToast(`Requirement "${title}" updated.`, 'success');
+      } else {
+        const createResponse = await createRequirement(requirementData);
+        if (!createResponse?.success) {
+          throw new Error(createResponse?.message || 'Failed to create custom requirement.');
+        }
+        const requirementId = createResponse.data?._id || createResponse.data?.id;
+        if (!requirementId) {
+          throw new Error('Requirement was created but no ID was returned.');
+        }
+        createdRequirementId = requirementId;
+        const publishResponse = await publishRequirement(requirementId);
+        if (!publishResponse?.success) {
+          throw new Error(publishResponse?.message || 'Failed to publish custom requirement.');
+        }
+        showToast(`Requirement "${title}" added for students.`, 'success');
+      }
+
+      resetCustomRequirementForm();
+      await loadRequirements();
+      broadcastRequirementUpdate();
+    } catch (error) {
+      console.error('Failed to save custom requirement:', error);
+      if (createdRequirementId) {
+        resetCustomRequirementForm();
+        await loadRequirements();
+        showToast('Requirement was saved as a draft. Publish it from the requirements list when ready.', 'error');
+        return;
+      }
+      showToast(error.message || 'Unable to save custom requirement.', 'error');
+    } finally {
+      savingCustomRequirementRef.current = false;
+      setSavingCustomRequirement(false);
+    }
+  };
+
+  const publishCustomRequirementDraft = async (requirement) => {
+    if (!requirement?._id || publishingCustomRequirementId) return;
+    try {
+      setPublishingCustomRequirementId(requirement._id);
+      const response = await publishRequirement(requirement._id);
+      if (!response?.success) {
+        throw new Error(response?.message || 'Failed to publish requirement.');
+      }
+      showToast(`Requirement "${requirement.title}" published.`, 'success');
+      await loadRequirements();
+      broadcastRequirementUpdate();
+    } catch (error) {
+      console.error('Failed to publish custom requirement:', error);
+      showToast(error.message || 'Unable to publish requirement.', 'error');
+    } finally {
+      setPublishingCustomRequirementId('');
+    }
+  };
+
+  const archiveCustomRequirement = async () => {
+    if (!customRequirementToArchive || archivingCustomRequirement) return;
+    try {
+      setArchivingCustomRequirement(true);
+      const response = await updateAdminRequirement(customRequirementToArchive._id, {
+        status: 'archived',
+        isActive: false
+      });
+      if (response?.success === false) {
+        throw new Error(response.message || 'Failed to archive requirement.');
+      }
+      showToast(`Requirement "${customRequirementToArchive.title}" archived.`, 'success');
+      setCustomRequirementToArchive(null);
+      if (editingCustomRequirement?._id === customRequirementToArchive._id) {
+        resetCustomRequirementForm();
+      }
+      await loadRequirements();
+      broadcastRequirementUpdate();
+    } catch (error) {
+      console.error('Failed to archive custom requirement:', error);
+      showToast(error.message || 'Unable to archive custom requirement.', 'error');
+    } finally {
+      setArchivingCustomRequirement(false);
+    }
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
 
@@ -240,6 +459,42 @@ const AdminRequirements = () => {
 
       <hr className="divider" />
 
+      <div className="admin-requirements-tabs" role="tablist" aria-label="Requirements sections">
+        <button
+          id="admin-requirements-upload-tab"
+          className={`admin-requirements-tab${activeRequirementsTab === 'upload' ? ' is-active' : ''}`}
+          type="button"
+          role="tab"
+          aria-selected={activeRequirementsTab === 'upload'}
+          tabIndex={activeRequirementsTab === 'upload' ? 0 : -1}
+          aria-controls="admin-requirements-upload-panel admin-requirements-list-panel"
+          onClick={() => setActiveRequirementsTab('upload')}
+          onKeyDown={handleRequirementsTabKeyDown}
+        >
+          Upload Requirements
+        </button>
+        <button
+          id="admin-requirements-student-tab"
+          className={`admin-requirements-tab${activeRequirementsTab === 'student' ? ' is-active' : ''}`}
+          type="button"
+          role="tab"
+          aria-selected={activeRequirementsTab === 'student'}
+          tabIndex={activeRequirementsTab === 'student' ? 0 : -1}
+          aria-controls="admin-requirements-student-panel"
+          onClick={() => setActiveRequirementsTab('student')}
+          onKeyDown={handleRequirementsTabKeyDown}
+        >
+          Add Student Requirements
+        </button>
+      </div>
+
+      <div
+        id="admin-requirements-upload-panel"
+        className="admin-requirements-panel"
+        role="tabpanel"
+        aria-labelledby="admin-requirements-upload-tab"
+        hidden={activeRequirementsTab !== 'upload'}
+      >
       {/* UPLOAD PANEL */}
       <div className="upload-section-panel">
         <div className="upload-maroon-card">
@@ -248,7 +503,7 @@ const AdminRequirements = () => {
             <h3>Upload New Requirement</h3>
           </div>
           
-          <form className="admin-upload-form" onSubmit={handleUpload}>
+          <form className="requirement-document-upload-form" onSubmit={handleUpload}>
             <div className="requirement-entry-card">
               <div className="requirement-name-section">
                 {requirementNameEntries.map((entry) => (
@@ -329,7 +584,260 @@ const AdminRequirements = () => {
           </form>
         </div>
       </div>
+      </div>
 
+      <div
+        id="admin-requirements-student-panel"
+        className="admin-requirements-panel"
+        role="tabpanel"
+        aria-labelledby="admin-requirements-student-tab"
+        hidden={activeRequirementsTab !== 'student'}
+      >
+      <section className="admin-requirements-list">
+        <div className="admin-reqs-header">
+          <h3><Icon name="document" size={20} /> Custom Student Requirements</h3>
+          <p>Create requirements students can submit from their Upload New tab.</p>
+        </div>
+
+        <form className="admin-upload-form" onSubmit={handleSaveCustomRequirement}>
+          <div className="requirement-entry-card">
+            <div className="input-field-group">
+              <label htmlFor="custom-requirement-title">Requirement Name</label>
+              <input
+                id="custom-requirement-title"
+                className="modern-text-input"
+                type="text"
+                maxLength={120}
+                value={customRequirementForm.title}
+                onChange={(event) => setCustomRequirementForm((current) => ({
+                  ...current,
+                  title: event.target.value
+                }))}
+                placeholder="e.g., Updated Medical Clearance"
+                required
+              />
+            </div>
+            <div className="input-field-group">
+              <label htmlFor="custom-requirement-description">Details</label>
+              <textarea
+                id="custom-requirement-description"
+                className="modern-text-input"
+                rows={3}
+                maxLength={1000}
+                value={customRequirementForm.description}
+                onChange={(event) => setCustomRequirementForm((current) => ({
+                  ...current,
+                  description: event.target.value
+                }))}
+                placeholder="Describe what students need to submit."
+              />
+            </div>
+            <div className="input-field-group">
+              <label htmlFor="custom-requirement-instructions">Submission Instructions</label>
+              <textarea
+                id="custom-requirement-instructions"
+                className="modern-text-input"
+                rows={2}
+                maxLength={1000}
+                value={customRequirementForm.instructions}
+                onChange={(event) => setCustomRequirementForm((current) => ({
+                  ...current,
+                  instructions: event.target.value
+                }))}
+                placeholder="Optional instructions for students."
+              />
+            </div>
+            <div className="input-field-group">
+              <label id="custom-requirement-sports-label">Sports and Events</label>
+              <details className="requirement-sport-picker">
+                <summary aria-labelledby="custom-requirement-sports-label">
+                  {customRequirementForm.targetStudents === 'all'
+                    ? 'All Sports and Events'
+                    : customRequirementForm.scopeItems.length
+                      ? `${customRequirementForm.scopeItems.length} item${customRequirementForm.scopeItems.length === 1 ? '' : 's'} selected`
+                      : 'Select sports and events'}
+                </summary>
+                <div className="requirement-sport-options" role="group" aria-labelledby="custom-requirement-sports-label">
+                  <label className="requirement-sport-option">
+                    <input
+                      type="checkbox"
+                      checked={customRequirementForm.targetStudents === 'all'}
+                      onChange={(event) => setCustomRequirementForm((current) => ({
+                        ...current,
+                        targetStudents: event.target.checked ? 'all' : 'sport-specific',
+                        scopeItems: []
+                      }))}
+                    />
+                    <span>All Sports and Events</span>
+                  </label>
+                  {REGISTRATION_SCOPE_GROUPS.map((category) => (
+                    <div className="requirement-sport-category" key={category.name}>
+                      <label className="requirement-sport-option requirement-sport-category-option">
+                        <input
+                          type="checkbox"
+                          checked={category.groups.flatMap(({ items }) => items).every((item) => (
+                            customRequirementForm.scopeItems.includes(item)
+                          ))}
+                          disabled={customRequirementForm.targetStudents === 'all'}
+                          onChange={(event) => setCustomRequirementForm((current) => {
+                            const categoryItems = category.groups.flatMap(({ items }) => items);
+                            const nextItems = event.target.checked
+                              ? [...current.scopeItems, ...categoryItems]
+                              : current.scopeItems.filter((item) => !categoryItems.includes(item));
+                            return {
+                              ...current,
+                              targetStudents: 'sport-specific',
+                              scopeItems: [...new Set(nextItems)]
+                            };
+                          })}
+                        />
+                        <strong>{category.name}</strong>
+                      </label>
+                      {category.groups.map((group) => (
+                        <div className="requirement-sport-subcategory" key={group.name}>
+                          {category.groups.length > 1 && (
+                            <label className="requirement-sport-option requirement-sport-subcategory-option">
+                              <input
+                                type="checkbox"
+                                checked={group.items.every((item) => customRequirementForm.scopeItems.includes(item))}
+                                disabled={customRequirementForm.targetStudents === 'all'}
+                                onChange={(event) => setCustomRequirementForm((current) => {
+                                  const nextItems = event.target.checked
+                                    ? [...current.scopeItems, ...group.items]
+                                    : current.scopeItems.filter((item) => !group.items.includes(item));
+                                  return {
+                                    ...current,
+                                    targetStudents: 'sport-specific',
+                                    scopeItems: [...new Set(nextItems)]
+                                  };
+                                })}
+                              />
+                              <span>{group.name}</span>
+                            </label>
+                          )}
+                          <div className="requirement-sport-category-items">
+                            {group.items.map((item) => (
+                              <label key={item} className="requirement-sport-option">
+                                <input
+                                  type="checkbox"
+                                  checked={customRequirementForm.scopeItems.includes(item)}
+                                  disabled={customRequirementForm.targetStudents === 'all'}
+                                  onChange={(event) => setCustomRequirementForm((current) => {
+                                    const nextItems = event.target.checked
+                                      ? [...current.scopeItems, item]
+                                      : current.scopeItems.filter((selectedItem) => selectedItem !== item);
+                                    return {
+                                      ...current,
+                                      targetStudents: 'sport-specific',
+                                      scopeItems: [...new Set(nextItems)]
+                                    };
+                                  })}
+                                />
+                                <span>{item}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </details>
+              {customRequirementForm.targetStudents === 'sport-specific' && customRequirementForm.scopeItems.length > 0 && (
+                <p className="requirement-sport-selection-summary">
+                  Selected: {customRequirementForm.scopeItems.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="requirement-submit-row">
+            <button type="submit" className="primary-upload-btn" disabled={savingCustomRequirement}>
+              {savingCustomRequirement
+                ? 'Saving...'
+                : editingCustomRequirement ? 'Save Changes' : 'Add Custom Requirement'}
+            </button>
+            {editingCustomRequirement && (
+              <button
+                type="button"
+                className="requirement-action-btn requirement-action-btn--secondary"
+                onClick={resetCustomRequirementForm}
+                disabled={savingCustomRequirement}
+              >
+                Cancel Edit
+              </button>
+            )}
+          </div>
+        </form>
+
+        {customRequirements.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '1.5rem', color: '#666' }}>
+            No custom requirements have been created.
+          </div>
+        ) : (
+          <div className="requirements-boxes-grid">
+            {customRequirements.map((requirement) => (
+              <div key={requirement._id} className="requirement-box">
+                <div className="requirement-box-icon">
+                  <Icon name="document" />
+                </div>
+                <div className="requirement-box-content">
+                  <h4>{requirement.title}</h4>
+                  {requirement.description && <p>{requirement.description}</p>}
+                  {requirement.instructions && <p><strong>Submission instructions:</strong> {requirement.instructions}</p>}
+                  {!requirement.description && !requirement.instructions && <p>No additional details.</p>}
+                  <div className="requirement-box-meta">
+                    <span className="meta-date">
+                      {requirement.isArchived
+                        ? 'Archived'
+                        : requirement.status === 'published' ? 'Published' : 'Draft'}
+                      {requirement.targetStudents === 'sport-specific'
+                        ? ` · ${parseRequirementScope(requirement.sport).join(', ')}`
+                        : ' · All Sports'}
+                    </span>
+                  </div>
+                  <div className="requirement-entry-actions btn-group" style={{ marginTop: '10px' }}>
+                    {requirement.status === 'draft' && (
+                      <button
+                        type="button"
+                        className="requirement-action-btn requirement-action-btn--secondary"
+                        onClick={() => publishCustomRequirementDraft(requirement)}
+                        disabled={Boolean(publishingCustomRequirementId)}
+                      >
+                        {publishingCustomRequirementId === requirement._id ? 'Publishing...' : 'Publish'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="requirement-action-btn requirement-action-btn--secondary"
+                      onClick={() => handleEditCustomRequirement(requirement)}
+                    >
+                      Edit
+                    </button>
+                    {!requirement.isArchived && (
+                      <button
+                        type="button"
+                        className="requirement-action-btn requirement-action-btn--danger"
+                        onClick={() => setCustomRequirementToArchive(requirement)}
+                      >
+                        Archive
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      </div>
+
+      <div
+        id="admin-requirements-list-panel"
+        className="admin-requirements-panel"
+        role="tabpanel"
+        aria-labelledby="admin-requirements-upload-tab"
+        hidden={activeRequirementsTab !== 'upload'}
+      >
       {/* ACTIVE REQUIREMENTS - Same design as Student Requirements */}
       <div className="admin-requirements-list">
         <div className="admin-reqs-header">
@@ -370,6 +878,7 @@ const AdminRequirements = () => {
         <div className="admin-reqs-note">
           <p><Icon name="info" size={16} /> <strong>Note:</strong> These Parent Consent forms are visible to all students. They can download and submit accomplished forms.</p>
         </div>
+      </div>
       </div>
 
       {/* Updated Modal Popup with Delete Button */}
@@ -412,6 +921,19 @@ const AdminRequirements = () => {
           onConfirm={performDelete}
           onCancel={() => setConfirmingDelete(false)}
           confirmDisabled={isDeleting}
+        />
+
+        <ConfirmModal
+          isOpen={Boolean(customRequirementToArchive)}
+          title="Archive Custom Requirement"
+          message={customRequirementToArchive
+            ? `Archive "${customRequirementToArchive.title}"? Students will no longer be able to submit it. Existing submissions will be preserved.`
+            : ''}
+          confirmText={archivingCustomRequirement ? 'Archiving...' : 'Archive'}
+          cancelText="Cancel"
+          onConfirm={archiveCustomRequirement}
+          onCancel={() => setCustomRequirementToArchive(null)}
+          confirmDisabled={archivingCustomRequirement}
         />
     </div>
   );

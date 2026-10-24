@@ -6,6 +6,7 @@ import Icon from '../../components/Icon';
 import TimeInput from '../../components/TimeInput';
 import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
 import { getDueBorrowings, isBorrowingDeadlineApproaching } from '../../utils/borrowingDue';
+import { getUniqueBorrowerCount } from './borrowerCount';
 import {
   getEquipment,
   getBorrowingRecords,
@@ -256,9 +257,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
   const dueTransactions = getDueBorrowings(records).length;
   const itemsOut = records.filter((record) => ['Out', 'Out Now'].includes(record?.status)).length;
-  const damagedItems = records.reduce((count, record) => {
-    return count + getConditionValues(record).filter((condition) => condition === 'Damaged').length;
-  }, 0);
+  const borrowerCount = getUniqueBorrowerCount(records);
   const lostItems = records.reduce((count, record) => {
     return count + getConditionValues(record).filter((condition) => condition === 'Lost').length;
   }, 0);
@@ -561,8 +560,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
           <span className="bw-stat-value">{itemsOut}</span>
         </div>
         <div className="bw-stat-card">
-          <span className="bw-stat-label">DAMAGED</span>
-          <span className="bw-stat-value" style={{ color: '#ff9800' }}>{damagedItems}</span>
+          <span className="bw-stat-label">BORROWERS</span>
+          <span className="bw-stat-value">{borrowerCount}</span>
         </div>
         <div className="bw-stat-card">
           <span className="bw-stat-label">LOST</span>

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useEffectEvent } from 'react';
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { getEquipment, getEquipmentReferenceIds, registerEquipment, updateEquipment, deleteEquipment } from '../../services/api';
 import Icon from '../../components/Icon';
+import { filterEquipmentGroups } from './equipmentSearch';
 import './AdminPortal.css';
 
 const today = () => {
@@ -36,31 +37,12 @@ const SPORTS_EQUIPMENT_OPTIONS = [
   'Racket'
 ];
 
-const calculateAvailable = (equipmentName, equipmentItems, borrowingRecords) => {
-  const activeEquipmentItems = (equipmentItems || []).filter(
-    (item) => (item?.condition || 'Good') !== 'Damaged'
-  );
-
-  if (!borrowingRecords || borrowingRecords.length === 0) {
-    return activeEquipmentItems.length;
-  }
-
-  const borrowedCount = borrowingRecords
-    .filter((record) => record.status === 'Out' && record.equipment === equipmentName)
-    .reduce((sum, record) => {
-      if (record.referenceIds && record.referenceIds.length) {
-        return sum + record.referenceIds.length;
-      }
-      return sum + (record.qty || 0);
-    }, 0);
-
-  return Math.max(0, activeEquipmentItems.length - borrowedCount);
-};
-
-export default function AdminEquipments({ borrowingRecords = [], onUpdateInventory }) {
+export default function AdminEquipments({ onUpdateInventory }) {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ name: '', type: '', quantity: '1' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const registrationInProgress = useRef(false);
   const [generatedReferenceIds, setGeneratedReferenceIds] = useState([]);
   const [referenceIdsLoading, setReferenceIdsLoading] = useState(false);
   const [referenceIdsError, setReferenceIdsError] = useState('');
@@ -86,6 +68,10 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
   const mapEquipmentToUiShape = (equipment) => {
     const normalizedReferenceId = equipment.referenceId || '';
+    const total = Number(equipment.total ?? equipment.totalStock ?? 1);
+    const onLoan = Number(equipment.onLoan ?? 0);
+    const available = Number(equipment.available ?? Math.max(0, total - onLoan));
+    const condition = equipment.condition || 'Good';
     const referenceIds = Array.isArray(equipment.referenceIds)
       ? equipment.referenceIds.filter(Boolean)
       : normalizedReferenceId
@@ -96,16 +82,21 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       id: equipment.id || equipment._id,
       name: equipment.name,
       type: equipment.type,
-      total: Number(equipment.total ?? equipment.totalStock ?? 1),
-      available: Number(equipment.available ?? equipment.totalStock ?? 1),
+      total,
+      available,
+      onLoan,
+      damagedUnits: condition === 'Damaged' ? total : 0,
       date: equipment.createdAt ? new Date(equipment.createdAt).toLocaleDateString() : today(),
       referenceId: normalizedReferenceId,
       referenceIds,
-      condition: equipment.condition || 'Good',
+      condition,
       items: referenceIds.map((refId) => ({
         id: equipment.id || equipment._id,
         referenceId: refId,
-        condition: equipment.condition || 'Good'
+        condition,
+        onLoan: Number(equipment.onLoan || 0),
+        available,
+        totalStock: total
       }))
     };
   };
@@ -138,6 +129,8 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
           existing.total = Number(existing.total || 0) + Number(item.total || 0);
           existing.available = Number(existing.available || 0) + Number(item.available || 0);
+          existing.onLoan = Number(existing.onLoan || 0) + Number(item.onLoan || 0);
+          existing.damagedUnits = Number(existing.damagedUnits || 0) + Number(item.damagedUnits || 0);
           existing.referenceId = nextReferenceIds[0] || '';
           existing.referenceIds = nextReferenceIds;
           existing.items = nextItems;
@@ -151,8 +144,12 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
           items: group.items.map((entry) => ({
             id: entry.id,
             referenceId: entry.referenceId,
-            condition: entry.condition || 'Good'
+            condition: entry.condition || 'Good',
+            available: Number(entry.available || 0),
+            onLoan: Number(entry.onLoan || 0),
+            totalStock: Number(entry.totalStock || 0)
           })),
+          onLoan: Number(group.onLoan || 0),
           condition: group.condition || 'Good'
         })));
       } else {
@@ -186,62 +183,49 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
     let active = true;
     setReferenceIdsLoading(true);
-    getEquipmentReferenceIds(equipmentType, Number(form.quantity), form.name.trim())
-      .then((response) => {
-        if (!active) return;
-        if (!Array.isArray(response?.referenceIds)
-          || response.referenceIds.length !== Number(form.quantity)) {
-          throw new Error('The equipment server did not return the requested number of Reference IDs.');
-        }
-        if (response.referenceIds.some((referenceId) => (
-          typeof referenceId !== 'string'
-          || !/^[A-Z0-9]{1,4}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}$/i.test(referenceId)
-        ))) {
-          throw new Error(
-            'The equipment server returned IDs outside the required short [Equipment Code][MM][DD][XXX] format.'
-          );
-        }
-        if (new Set(response.referenceIds).size !== response.referenceIds.length) {
-          throw new Error('The equipment server returned duplicate Reference IDs. Retry after refreshing the equipment list.');
-        }
-        setGeneratedReferenceIds(response.referenceIds);
-      })
-      .catch((error) => {
-        if (!active) return;
-        console.error('Failed to generate equipment Reference IDs:', error);
-        setReferenceIdsError(error.message || 'Unable to generate Reference IDs.');
-      })
-      .finally(() => {
-        if (active) setReferenceIdsLoading(false);
-      });
+    const requestTimer = window.setTimeout(() => {
+      getEquipmentReferenceIds(equipmentType, Number(form.quantity), form.name.trim())
+        .then((response) => {
+          if (!active) return;
+          if (!Array.isArray(response?.referenceIds)
+            || response.referenceIds.length !== Number(form.quantity)) {
+            throw new Error('The equipment server did not return the requested number of Reference IDs.');
+          }
+          if (response.referenceIds.some((referenceId) => (
+            typeof referenceId !== 'string'
+            || !/^[A-Z0-9]{1,4}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}$/i.test(referenceId)
+          ))) {
+            throw new Error(
+              'The equipment server returned IDs outside the required short [Equipment Code][MM][DD][XXX] format.'
+            );
+          }
+          if (new Set(response.referenceIds).size !== response.referenceIds.length) {
+            throw new Error('The equipment server returned duplicate Reference IDs. Retry after refreshing the equipment list.');
+          }
+          setGeneratedReferenceIds(response.referenceIds);
+        })
+        .catch((error) => {
+          if (!active) return;
+          console.error('Failed to generate equipment Reference IDs:', error);
+          setReferenceIdsError(error.message || 'Unable to generate Reference IDs.');
+        })
+        .finally(() => {
+          if (active) setReferenceIdsLoading(false);
+        });
+    }, 400);
 
     return () => {
       active = false;
+      window.clearTimeout(requestTimer);
     };
   }, [form.name, form.type, form.quantity, referenceIdsRefreshKey]);
 
-  // Sync inventory with borrowing records
-  useEffect(() => {
-    if (borrowingRecords && borrowingRecords.length > 0) {
-      setItems(prevItems => 
-        prevItems.map(equipment => ({
-          ...equipment,
-          available: calculateAvailable(equipment.name, equipment.items, borrowingRecords)
-        }))
-      );
-    }
-  }, [borrowingRecords]);
-
   const totalItems = items.length;
-  const inStock = items.filter(i => {
-    const available = i.available !== undefined ? i.available : i.items.length;
-    return available > 0;
-  }).length;
+  const damagedEquipmentUnits = items.reduce((sum, equipment) => (
+    sum + Number(equipment.damagedUnits || 0)
+  ), 0);
 
-  const filtered = items.filter(i =>
-    i.name.toLowerCase().includes(search.toLowerCase()) ||
-    i.items.some(item => item.referenceId.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = filterEquipmentGroups(items, search);
 
   const toggleExpand = (id) => {
     setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
@@ -249,6 +233,8 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
   const handleAdd = async (e) => {
     e.preventDefault();
+
+    if (registrationInProgress.current) return;
 
     if (!form.name.trim()) {
       setError('Please enter an equipment name.');
@@ -274,6 +260,9 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       return;
     }
 
+    registrationInProgress.current = true;
+    setIsSubmitting(true);
+
     try {
       const response = await registerEquipment({
         name: form.name.trim(),
@@ -288,18 +277,58 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         || !Array.isArray(response.referenceIds)
         || response.referenceIds.length !== quantity
         || response.referenceIds.some((referenceId) => typeof referenceId !== 'string')
-        || new Set(response.referenceIds).size !== quantity) {
+        || new Set(response.referenceIds).size !== quantity
+        || !Array.isArray(response.data)
+        || response.data.length !== quantity
+        || response.data.some((equipment) => (
+          !equipment || typeof equipment.referenceId !== 'string'
+        ))
+        || response.data.some((equipment) => !response.referenceIds.includes(equipment.referenceId))
+        || new Set(response.data.map((equipment) => equipment.referenceId)).size !== quantity) {
         throw new Error('The server did not confirm saving unique Reference IDs for every unit.');
       }
 
-      await loadEquipmentFromServer();
+      const nextItemsByKey = new Map(items.map((equipment) => [
+        JSON.stringify([equipment.name, equipment.type]),
+        { ...equipment, referenceIds: [...equipment.referenceIds], items: [...equipment.items] }
+      ]));
+
+      response.data.forEach((savedEquipment) => {
+        const savedItem = mapEquipmentToUiShape(savedEquipment);
+        const groupingKey = JSON.stringify([savedItem.name, savedItem.type]);
+        const existing = nextItemsByKey.get(groupingKey);
+
+        if (!existing) {
+          nextItemsByKey.set(groupingKey, savedItem);
+          return;
+        }
+
+        const existingReferenceIds = new Set(existing.referenceIds);
+        const newlyRegisteredItems = savedItem.items.filter(
+          (item) => !existingReferenceIds.has(item.referenceId)
+        );
+        if (newlyRegisteredItems.length === 0) return;
+
+        existing.referenceIds = [...existing.referenceIds, ...newlyRegisteredItems.map((item) => item.referenceId)];
+        existing.items = [...existing.items, ...newlyRegisteredItems];
+        existing.referenceId = existing.referenceIds[0] || '';
+        existing.total += newlyRegisteredItems.reduce((sum, item) => sum + Number(item.totalStock || 0), 0);
+        existing.available += newlyRegisteredItems.reduce((sum, item) => sum + Number(item.available || 0), 0);
+        existing.onLoan += newlyRegisteredItems.reduce((sum, item) => sum + Number(item.onLoan || 0), 0);
+        existing.damagedUnits += newlyRegisteredItems.reduce((sum, item) => (
+          sum + (item.condition === 'Damaged' ? Number(item.totalStock || 1) : 0)
+        ), 0);
+      });
+
+      const updatedItems = Array.from(nextItemsByKey.values());
+      setItems(updatedItems);
       setForm({ name: '', type: '', quantity: '1' });
       setGeneratedReferenceIds([]);
       setError('');
       showToast(response?.message || 'Equipment registered successfully.', 'success');
 
       if (onUpdateInventory) {
-        onUpdateInventory(items);
+        onUpdateInventory(updatedItems);
       }
     } catch (submitError) {
       console.error('Failed to save equipment to server:', submitError);
@@ -309,6 +338,9 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
         setGeneratedReferenceIds([]);
         setReferenceIdsRefreshKey((current) => current + 1);
       }
+    } finally {
+      registrationInProgress.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -360,22 +392,18 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
       const targetEquipmentId = equipmentToUpdate.items.find((item) => item.referenceId === referenceId)?.id
         || equipmentToUpdate.id;
 
-      await updateEquipment(targetEquipmentId, {
+      const response = await updateEquipment(targetEquipmentId, {
         condition: newCondition,
       });
+      if (response?.success !== true || response.data?.condition !== newCondition) {
+        throw new Error('The server did not confirm saving the selected equipment condition.');
+      }
       await loadEquipmentFromServer();
       showToast(`Condition updated to ${newCondition}`, 'success');
     } catch (updateError) {
       console.error('Failed to update equipment condition:', updateError);
       showToast(updateError.message || 'Unable to update condition in the database.', 'error');
     }
-  };
-
-  const getAvailableForDisplay = (equipment) => {
-    if (equipment.available !== undefined) {
-      return equipment.available;
-    }
-    return calculateAvailable(equipment.name, equipment.items, borrowingRecords);
   };
 
   const generateEquipmentReport = async (filter) => {
@@ -548,12 +576,12 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
 
       <div className="eq-stats">
         <div className="eq-stat-card">
-          <span className="eq-stat-label">TOTAL EQUIPMENT TYPES</span>
+          <span className="eq-stat-label">TOTAL EQUIPMENT</span>
           <span className="eq-stat-value">{totalItems}</span>
         </div>
         <div className="eq-stat-card">
-          <span className="eq-stat-label">AVAILABLE UNITS</span>
-          <span className="eq-stat-value">{inStock}</span>
+          <span className="eq-stat-label">DAMAGED EQUIPMENTS</span>
+          <span className="eq-stat-value">{damagedEquipmentUnits}</span>
         </div>
       </div>
 
@@ -615,8 +643,10 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
           </div>
           {error && <p className="eq-reg-error">{error}</p>}
           <div className="eq-reg-submit-row">
-            <button type="submit" className="eq-add-btn">
-              + ADD {form.quantity || '0'} {form.quantity === '1' ? 'UNIT' : 'UNITS'} TO INVENTORY
+            <button type="submit" className="eq-add-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
+              {isSubmitting
+                ? 'ADDING TO INVENTORY…'
+                : `ADD ${form.quantity || ''} ${form.quantity === '' ? '' : ''} TO INVENTORY`}
             </button>
           </div>
         </form>
@@ -631,7 +661,7 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
             </svg>
             <input
               className="eq-search-input"
-              placeholder="Search by name or reference ID..."
+              placeholder="Search by name, reference ID, or condition..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -653,8 +683,8 @@ export default function AdminEquipments({ borrowingRecords = [], onUpdateInvento
             </thead>
             <tbody>
               {filtered.map((equipment) => {
-                const available = getAvailableForDisplay(equipment);
-                const total = equipment.total || equipment.items.length;
+                const total = Number(equipment.total ?? equipment.items.length);
+                const available = Number(equipment.available ?? Math.max(0, total - Number(equipment.onLoan || 0)));
                 const quantityDisplay = `${available}/${total}`;
                 const isExpanded = expandedItems[equipment.id];
                 

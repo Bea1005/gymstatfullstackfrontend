@@ -203,12 +203,25 @@ const refreshSessionRequest = async () => {
   return refreshPromise;
 };
 
-const retryProtectedRequest = async (url, requestOptions) => {
-  const retry = () => fetchWithTimeout(url, requestOptions);
+const retryProtectedRequest = async (url, requestOptions, retryBeforeRefresh = true) => {
+  const retry = () => {
+    const headers = { ...requestOptions.headers };
+    if (!isSafeMethod(requestOptions.method)) {
+      Object.keys(headers)
+        .filter((name) => name.toLowerCase() === 'x-csrf-token')
+        .forEach((name) => delete headers[name]);
+      const csrfToken = getCsrfToken();
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    return fetchWithTimeout(url, { ...requestOptions, headers });
+  };
   if (typeof navigator !== 'undefined' && navigator.locks?.request) {
     return navigator.locks.request('gymstat-auth-refresh', async () => {
-      const responseAfterWaiting = await retry();
-      if (responseAfterWaiting.status !== 401) return responseAfterWaiting;
+      if (retryBeforeRefresh) {
+        const responseAfterWaiting = await retry();
+        if (responseAfterWaiting.status !== 401) return responseAfterWaiting;
+      }
       await refreshSessionRequest();
       return retry();
     });
@@ -216,6 +229,16 @@ const retryProtectedRequest = async (url, requestOptions) => {
 
   await refreshSessionRequest();
   return retry();
+};
+
+const isAdminRequirementMutation = (endpoint, method) => {
+  const normalizedMethod = String(method || '').toUpperCase();
+  if (isSafeMethod(normalizedMethod)) return false;
+
+  const pathname = String(endpoint || '').split('?')[0];
+  return pathname === '/requirements'
+    || /^\/requirements\/[a-f\d]{24}(?:\/publish)?$/i.test(pathname)
+    || /^\/requirements\/submissions\/[a-f\d]{24}\/review$/i.test(pathname);
 };
 
 // List of public endpoints that don't require authentication
@@ -300,14 +323,16 @@ const apiRequest = async (endpoint, options = {}) => {
       headers,
     });
 
-    if (response.status === 401 && !isPublic && !requestOptions.skipRefresh && isSafeMethod(requestOptions.method)) {
+    const canRefreshAfterUnauthorized = isSafeMethod(requestOptions.method)
+      || isAdminRequirementMutation(endpoint, requestOptions.method);
+    if (response.status === 401 && !isPublic && !requestOptions.skipRefresh && canRefreshAfterUnauthorized) {
       console.warn('[AUTH] Protected request returned 401', { endpoint });
       try {
         response = await retryProtectedRequest(fullUrl, {
           ...requestOptions,
           credentials: 'include',
           headers,
-        });
+        }, isSafeMethod(requestOptions.method));
         if (response.status === 401) {
           console.warn('[AUTH] Protected request remained unauthorized after refresh', { endpoint });
           clearExpiredSessionAndRedirect();

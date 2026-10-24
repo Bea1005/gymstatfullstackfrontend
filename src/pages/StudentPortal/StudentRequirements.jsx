@@ -35,171 +35,6 @@ const formatUploadDateTime = (value) => {
   return `${datePart} | ${timePart}`;
 };
 
-const isStudentAnnouncementList = (announcements) => (
-  Array.isArray(announcements)
-  && announcements.every((announcement) => (
-    announcement
-    && (announcement._id || announcement.id)
-    && typeof announcement.isRead === 'boolean'
-  ))
-);
-
-// Detailed Announcement View Modal
-const AnnouncementDetailModal = ({ announcement, onClose }) => {
-  if (!announcement) return null;
-
-  const getIconForAnnouncement = (title) => {
-    if (!title) return 'megaphone';
-    if (title.includes('Sport Event')) return 'trophy';
-    if (title.includes('Athlete Records')) return 'barChart';
-    if (title.includes('Sports Clearance')) return 'checkCircle';
-    if (title.includes('Medical Evaluation')) return 'stethoscope';
-    if (title.includes('Records Verification')) return 'search';
-    if (title.includes('Requirement')) return 'clipboard';
-    return 'megaphone';
-  };
-
-  const getStatusStyle = (type) => {
-    switch (type) {
-      case "requirement":
-        return { backgroundColor: "#fee2e2", color: "#991b1b" };
-      case "event":
-        return { backgroundColor: "#dbeafe", color: "#1e40af" };
-      case "training":
-        return { backgroundColor: "#dbeafe", color: "#1e40af" };
-      default:
-        return { backgroundColor: "#fef3c7", color: "#92400e" };
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="announcement-detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="header-icon"><Icon name={getIconForAnnouncement(announcement.title)} /></div>
-          <h2>{announcement.title || 'Announcement'}</h2>
-          <button className="modal-close-btn" onClick={onClose}><Icon name="close" /></button>
-        </div>
-        <div className="detail-modal-body">
-          <div className="detail-status">
-            <span 
-              className="detail-status-badge"
-              style={{ 
-                padding: '0.5rem 1rem', 
-                borderRadius: '9999px', 
-                fontSize: '0.875rem', 
-                fontWeight: '700', 
-                textTransform: 'uppercase',
-                ...getStatusStyle(announcement.type)
-              }}
-            >
-              {announcement.type || 'general'}
-            </span>
-            <span className="detail-date"><Icon name="calendar" size={16} /> Posted: {announcement.date ? new Date(announcement.date).toLocaleDateString() : 'Recently'}</span>
-          </div>
-          <div className="detail-description">
-            <p>{announcement.description || 'No description available'}</p>
-          </div>
-          <div className="detail-actions">
-            <button className="detail-close-btn" onClick={onClose}>Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Announcements component to be shown in modal
-const AnnouncementsModal = ({ onClose, onSelectAnnouncement, announcements = [], loading, error }) => {
-  const announcementHistory = Array.isArray(announcements) ? announcements.filter((announcement) => (
-    announcement && announcement.type
-  )) : [];
-
-  const getStatusStyle = (type) => {
-    if (type === 'requirement') {
-      return { backgroundColor: "#fee2e2", color: "#991b1b" };
-    }
-    if (type === 'event') {
-      return { backgroundColor: "#dbeafe", color: "#1e40af" };
-    }
-    if (type === 'training') {
-      return { backgroundColor: "#c7d2fe", color: "#3730a3" };
-    }
-    return { backgroundColor: "#fef3c7", color: "#92400e" };
-  };
-
-  const getIconForType = (type) => {
-    if (type === 'requirement') return 'clipboard';
-    if (type === 'event') return 'trophy';
-    if (type === 'training') return 'dumbbell';
-    return 'megaphone';
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="announcements-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2><Icon name="megaphone" size={22} /> Announcements ({announcementHistory.length})</h2>
-          <button className="modal-close-btn" onClick={onClose}><Icon name="close" /></button>
-        </div>
-        <div className="modal-body no-scrollbar">
-          {loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-              <p>Loading notifications...</p>
-            </div>
-          ) : (
-            <>
-              {error && (
-                <div role="alert" style={{ padding: '1rem 2rem', textAlign: 'center', color: '#991b1b' }}>
-                  <p>{error}</p>
-                </div>
-              )}
-              {announcementHistory.length > 0 ? announcementHistory.map((item) => (
-              <div 
-                key={item._id || item.id} 
-                className="announcement-card clickable"
-                onClick={() => onSelectAnnouncement(item)}
-              >
-                <div className="announcement-icon-left">
-                  <span className="announcement-icon"><Icon name={getIconForType(item.type)} /></span>
-                </div>
-                <div className="announcement-content">
-                  <h3>{item.title || 'Untitled Announcement'}</h3>
-                  <p>{(item.description || '').substring(0, 100)}...</p>
-                  <span className="announcement-date">
-                    Posted: {item.date ? new Date(item.date).toLocaleDateString() : 'Recently'}
-                  </span>
-                </div>
-                <span 
-                  className="announcement-status"
-                  style={{ 
-                    padding: '0.35rem 0.85rem', 
-                    borderRadius: '9999px', 
-                    fontSize: '0.75rem', 
-                    fontWeight: '700', 
-                    textTransform: 'uppercase',
-                    ...getStatusStyle(item.type)
-                  }}
-                >
-                  {item.type}
-                </span>
-              </div>
-              )) : !error && (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p><Icon name="folder" size={18} /> No announcements at this time</p>
-                  <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#999' }}>
-                    Admin will publish requirements here
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}; 
-
 export default function StudentRequirements() {
   const navigate = useNavigate();
   const { notify } = useNotifications();
@@ -208,19 +43,12 @@ export default function StudentRequirements() {
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [submissions, setSubmissions] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
-  const [announcementNotificationsLoaded, setAnnouncementNotificationsLoaded] = useState(false);
-  const [announcementNotificationsError, setAnnouncementNotificationsError] = useState('');
   const [loading, setLoading] = useState(false);
   const downloadInProgressRef = useRef(false);
   const viewInProgressRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSport, setSelectedSport] = useState('General');
   const participationType = 'Intrams';
-  const [customRequirementCards, setCustomRequirementCards] = useState([]);
-  const [customRequirementModal, setCustomRequirementModal] = useState(null);
-  const [showAnnouncements, setShowAnnouncements] = useState(false);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
   const [confirmUpload, setConfirmUpload] = useState(null);
   const [confirmPreviewUrl, setConfirmPreviewUrl] = useState('');
   const [previewModal, setPreviewModal] = useState(null);
@@ -242,7 +70,7 @@ export default function StudentRequirements() {
 
   useEffect(() => {
     fetchData();
-  }, [navigate]);
+  }, [navigate, selectedSport]);
 
   // Listen for admin deletions and refresh lists
   useEffect(() => {
@@ -266,41 +94,7 @@ export default function StudentRequirements() {
       window.removeEventListener('gymstat-requirement-updated', handler);
       window.removeEventListener('storage', handleStorageUpdate);
     };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    const refreshNotifications = async () => {
-      try {
-        const response = await api.getStudentRequirementAnnouncements();
-        if (!active) return;
-        if (!isStudentAnnouncementList(response.data)) {
-          throw new Error('The notification response was invalid.');
-        }
-        setAnnouncements(response.data);
-        setAnnouncementNotificationsError('');
-        setAnnouncementNotificationsLoaded(true);
-      } catch (err) {
-        console.error('Failed to refresh requirement notifications:', err);
-        if (!active) return;
-        setAnnouncementNotificationsError('Unable to load notifications. Please try again.');
-        setAnnouncementNotificationsLoaded(true);
-      }
-    };
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') refreshNotifications();
-    };
-    const intervalId = window.setInterval(refreshNotifications, 30000);
-    window.addEventListener('focus', refreshWhenVisible);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshWhenVisible);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-    };
-  }, []);
+  }, [selectedSport]);
 
   const fetchData = async () => {
     try {
@@ -309,26 +103,14 @@ export default function StudentRequirements() {
       // Fetch published requirements from MongoDB
       try {
         const publishedReqData = await api.getPublishedRequirements();
-        setPublishedRequirements(publishedReqData.data || []);
+        setPublishedRequirements(Array.isArray(publishedReqData?.data)
+          ? publishedReqData.data.filter((requirement) => (
+            requirement?.status === 'published' && requirement.isActive !== false
+          ))
+          : []);
       } catch (err) {
         console.warn('⚠️ Warning: Failed to fetch published requirements:', err);
         setPublishedRequirements([]);
-      }
-
-      // Fetch requirement notifications and their read state for this student
-      try {
-        setAnnouncementNotificationsLoaded(false);
-        setAnnouncementNotificationsError('');
-        const announcementsData = await api.getStudentRequirementAnnouncements();
-        if (!isStudentAnnouncementList(announcementsData.data)) {
-          throw new Error('The notification response was invalid.');
-        }
-        setAnnouncements(announcementsData.data || []);
-      } catch (err) {
-        console.error('Failed to fetch requirement notifications:', err);
-        setAnnouncementNotificationsError('Unable to load notifications. Please try again.');
-      } finally {
-        setAnnouncementNotificationsLoaded(true);
       }
 
       // Fetch student submissions first so the counters can reflect the actual uploaded files
@@ -355,6 +137,7 @@ export default function StudentRequirements() {
           reusable: statsData.data?.reusable ?? submissionsData.filter((item) => item.requirementStatus === 'reusable').length,
           total: statsData.data?.total ?? submissionsData.length
         };
+
         setStats(derivedStats);
       } catch (err) {
         console.warn('⚠️ Warning: Failed to fetch student stats:', err);
@@ -374,6 +157,30 @@ export default function StudentRequirements() {
       setLoading(false);
     }
   };
+
+  const adminCustomRequirementCards = [...new Map(
+    (Array.isArray(publishedRequirements) ? publishedRequirements : [])
+      .filter((requirement) => requirement?._id || requirement?.id)
+      .map((requirement) => [String(requirement._id || requirement.id), requirement])
+  ).values()]
+    .filter((requirement) => (
+      requirement?.type === 'other'
+      && !requirement.file?.filename
+      && !requirement.file?.path
+      && requirement.status === 'published'
+      && requirement.isActive !== false
+    ))
+    .map((requirement) => ({
+      id: String(requirement._id || requirement.id),
+      label: requirement.title,
+      description: requirement.description || '',
+      instructions: requirement.instructions || '',
+      icon: 'document',
+      isCustom: true,
+      requirementType: 'other',
+      customRequirementId: String(requirement._id || requirement.id),
+      customRequirementLabel: requirement.title
+    }));
 
   const handleFileChange = (requirementId, e, extra = {}) => {
     if (e.target.files && e.target.files[0]) {
@@ -441,7 +248,11 @@ export default function StudentRequirements() {
       setUploading(true);
 
       // Check if this is a re-upload of a rejected requirement
-      const submission = getSubmissionForRequirement(requirementId);
+      const submission = getSubmissionForRequirement(
+        uploadedRequirementType,
+        uploadedCustomRequirementId,
+        uploadedCustomRequirementLabel
+      );
       const isReuploadingRejected = submission?.status === 'rejected';
 
       await api.uploadRequirement(
@@ -480,111 +291,17 @@ export default function StudentRequirements() {
     }
   };
 
-  const handleSubmitAll = async () => {
-    const pendingUploads = Object.entries(uploadedFiles).filter(([, file]) => Boolean(file));
-
-    if (pendingUploads.length === 0) {
-      notify('error', 'No Files Selected', 'Select at least one file to submit.');
-      return;
-    }
-
-    if (!requirementsAssuranceAccepted) {
-      notify('error', 'Acceptance Required', 'Please confirm the submission assurance before submitting your requirements.');
-      return;
-    }
-
-    try {
-      setUploading(true);
-      for (const [requirementId, file] of pendingUploads) {
-        const matchingCard = [...customRequirementCards, ...persistedCustomRequirementCards].find((card) => card.id === requirementId);
-        const requirementType = matchingCard ? 'other' : requirementId;
-        const customRequirementId = matchingCard ? (matchingCard.customRequirementId || requirementId) : '';
-        const customRequirementLabel = matchingCard ? (matchingCard.customRequirementLabel || matchingCard.label || '') : '';
-        const existingPsaSubmission = requirementType === 'psa'
-          ? getSubmissionForRequirement('psa')
-          : null;
-        await api.uploadRequirement(
-          file,
-          requirementType,
-          selectedSport,
-          participationType,
-          customRequirementId,
-          customRequirementLabel,
-          existingPsaSubmission?._id || ''
-        );
-      }
-      notify('success', 'All Files Submitted', 'Your selected requirement files were uploaded successfully.');
-      notifyRequirementUpdate();
-      setUploadedFiles({});
-      setRequirementsAssuranceAccepted(false);
-      await fetchData();
-    } catch (err) {
-      notify('error', 'Submission Failed', err.message || 'Failed to upload files');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const addCustomRequirementCard = () => {
-    const requirementName = customRequirementModal?.requirementName?.trim();
-
-    if (!requirementName) {
-      notify('error', 'Requirement Name Required', 'Please enter a requirement name before continuing.');
-      return;
-    }
-
-    setCustomRequirementCards((prev) => {
-      const nextIndex = prev.filter((card) => card.participationType === participationType).length + 1;
-      const customId = `custom-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-      const label = requirementName || `Others Requirement ${nextIndex}`;
-      return [
-        ...prev,
-        {
-          id: customId,
-          label,
-          icon: 'document',
-          isCustom: true,
-          participationType,
-          customRequirementId: customId,
-          customRequirementLabel: label,
-        }
-      ];
-    });
-
-    setCustomRequirementModal(null);
-  };
-
-  const persistedCustomRequirementCards = (Array.isArray(submissions) ? submissions : [])
-    .filter((submission) => {
-      const hasCustomName = Boolean(submission?.customRequirementLabel && String(submission.customRequirementLabel).trim());
-      return (submission?.requirementType === 'other' || hasCustomName) && submission?.participationType === participationType;
-    })
-    .map((submission) => ({
-      id: submission.customRequirementId || submission._id || `custom-${submission.fileName || Date.now()}`,
-      label: submission.customRequirementLabel || 'Others Requirement',
-      icon: 'paperclip',
-      isCustom: true,
-      requirementType: 'other',
-      customRequirementId: submission.customRequirementId || submission._id || '',
-      customRequirementLabel: submission.customRequirementLabel || 'Others Requirement',
-      savedFileName: submission.fileName || '',
-      savedSubmissionId: submission._id || ''
-    }))
-    .filter((card, index, list) => list.findIndex((entry) => entry.id === card.id) === index);
-
   const visibleRequirementCards = [
     ...requirementTypes,
-    ...persistedCustomRequirementCards,
-    ...customRequirementCards.filter((card) => card.participationType === participationType),
-    { id: 'others-add', label: 'Others – Add Requirement', icon: 'plus', isAddCard: true }
+    ...adminCustomRequirementCards
   ];
 
   const getSubmissionForRequirement = (requirementId, customRequirementId = '', customRequirementLabel = '') => {
     return [...submissions]
       .filter((sub) => {
-        if (sub.requirementType === requirementId) return true;
+        if (requirementId !== 'other' && sub.requirementType === requirementId) return true;
         if (sub.requirementType === 'other') {
-          if (customRequirementId && (sub.customRequirementId === customRequirementId || sub._id === customRequirementId)) return true;
+          if (customRequirementId) return String(sub.customRequirementId) === String(customRequirementId);
           if (customRequirementLabel && sub.customRequirementLabel === customRequirementLabel) return true;
           if (sub._id === requirementId) return true;
         }
@@ -628,27 +345,6 @@ export default function StudentRequirements() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getUrgentCount = () => {
-    return announcements.filter((announcement) => announcement.isRead === false).length;
-  };
-
-  const handleSelectAnnouncement = async (announcement) => {
-    if (!announcement.isRead) {
-      try {
-        await api.markStudentAnnouncementRead(announcement._id || announcement.id);
-        setAnnouncements((currentAnnouncements) => currentAnnouncements.map((item) => (
-          String(item._id || item.id) === String(announcement._id || announcement.id)
-            ? { ...item, isRead: true }
-            : item
-        )));
-      } catch (err) {
-        console.error('Failed to mark requirement notification as read:', err);
-        notify('error', 'Notification Update Failed', err.message || 'Unable to mark this notification as read.');
-      }
-    }
-    setSelectedAnnouncement(announcement);
   };
 
   // Download requirement file
@@ -751,35 +447,6 @@ export default function StudentRequirements() {
 
   return (
     <div className="requirements-page gymstat-page">
-      {/* Notification Bell Icon */}
-      <div className="notification-bell-container" onClick={() => setShowAnnouncements(true)}>
-        <div className="notification-bell">
-          <span className="bell-icon"><Icon name="bell" /></span>
-          {announcementNotificationsLoaded && !announcementNotificationsError && getUrgentCount() > 0 && (
-            <span className="notification-badge">{getUrgentCount()}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Announcements Modal */}
-      {showAnnouncements && (
-        <AnnouncementsModal 
-          onClose={() => setShowAnnouncements(false)} 
-          onSelectAnnouncement={handleSelectAnnouncement}
-          announcements={announcements}
-          loading={!announcementNotificationsLoaded}
-          error={announcementNotificationsError}
-        />
-      )}
-
-      {/* Announcement Detail Modal */}
-      {selectedAnnouncement && (
-        <AnnouncementDetailModal 
-          announcement={selectedAnnouncement}
-          onClose={() => setSelectedAnnouncement(null)}
-        />
-      )}
-
       {confirmUpload && (
         <div className="modal-overlay" onClick={handleUndoUpload}>
           <div className="announcement-detail-modal requirements-upload-modal" onClick={(e) => e.stopPropagation()}>
@@ -833,45 +500,6 @@ export default function StudentRequirements() {
                 <button className="requirement-preview-cancel" onClick={closePreviewModal}>Cancel</button>
                 <button className="requirement-preview-download" onClick={() => handleDownloadSubmission(previewModal.submission)} disabled={loading}>
                   {loading ? 'Downloading...' : 'Download'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {customRequirementModal && (
-        <div className="modal-overlay" onClick={() => setCustomRequirementModal(null)}>
-          <div className="announcement-detail-modal custom-requirement-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Add Requirement</h2>
-              <button className="modal-close-btn" onClick={() => setCustomRequirementModal(null)}><Icon name="close" /></button>
-            </div>
-            <div className="detail-modal-body">
-              <div className="custom-requirement-field">
-                <label htmlFor="custom-requirement-name">
-                  Requirement Name
-                </label>
-                <input
-                  id="custom-requirement-name"
-                  type="text"
-                  value={customRequirementModal.requirementName}
-                  onChange={(e) => setCustomRequirementModal((prev) => ({ ...prev, requirementName: e.target.value }))}
-                  placeholder="Enter requirement name"
-                  autoFocus
-                />
-              </div>
-
-              <div className="custom-requirement-actions">
-                <button className="custom-requirement-cancel" onClick={() => setCustomRequirementModal(null)}>
-                  Cancel
-                </button>
-                <button
-                  className="custom-requirement-continue"
-                  onClick={addCustomRequirementCard}
-                  disabled={!customRequirementModal.requirementName?.trim()}
-                >
-                  Continue
                 </button>
               </div>
             </div>
@@ -941,9 +569,15 @@ export default function StudentRequirements() {
                 <p>Click on any form to view details or download</p>
               </div>
 
-              {publishedRequirements.length > 0 ? (
+              {publishedRequirements.filter((requirement) => (
+                !(requirement.type === 'other' && !requirement.file?.filename && !requirement.file?.path)
+              )).length > 0 ? (
                 <div className="requirements-boxes-grid">
-                  {publishedRequirements.map((req) => (
+                  {publishedRequirements
+                    .filter((requirement) => (
+                      !(requirement.type === 'other' && !requirement.file?.filename && !requirement.file?.path)
+                    ))
+                    .map((req) => (
                     <div 
                       key={req._id} 
                       className="requirement-box"
@@ -1133,18 +767,6 @@ export default function StudentRequirements() {
 
             <div className="upload-grid">
               {visibleRequirementCards.map((req) => {
-                if (req.isAddCard) {
-                  return (
-                    <div key={req.id} className="upload-card" style={{ cursor: 'pointer' }}>
-                      <div className="upload-icon"><Icon name={req.icon} /></div>
-                      <span className="upload-label">{req.label}</span>
-                      <button className="upload-action-btn" onClick={() => setCustomRequirementModal({ requirementName: '' })}>
-                        Add Requirement
-                      </button>
-                    </div>
-                  );
-                }
-
                 const isCustomCard = Boolean(req.isCustom);
                 const cardCustomRequirementId = req.customRequirementId || req.id;
                 const cardCustomRequirementLabel = req.customRequirementLabel || req.label;
@@ -1166,6 +788,10 @@ export default function StudentRequirements() {
                     {req.id === 'cor' && <span className="optional-requirement-label">OPTIONAL</span>}
                     <div className="upload-icon"><Icon name={req.icon} /></div>
                     <span className="upload-label">{req.label}</span>
+                    {isCustomCard && req.description && <p className="upload-description">{req.description}</p>}
+                    {isCustomCard && req.instructions && (
+                      <p className="upload-description"><strong>Instructions:</strong> {req.instructions}</p>
+                    )}
 
                     <input
                       type="file"
