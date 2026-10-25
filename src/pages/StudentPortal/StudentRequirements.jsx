@@ -44,8 +44,9 @@ export default function StudentRequirements() {
   const [submissions, setSubmissions] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
   const [loading, setLoading] = useState(false);
-  const downloadInProgressRef = useRef(false);
-  const viewInProgressRef = useRef(false);
+  const fileActionInProgressRef = useRef(false);
+  const uploadInProgressRef = useRef(false);
+  const importInProgressRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSport, setSelectedSport] = useState('General');
   const participationType = 'Intrams';
@@ -226,6 +227,7 @@ export default function StudentRequirements() {
   };
 
   const handleSubmitFile = async (requirementId, fileOverride) => {
+    if (uploadInProgressRef.current) return;
     const file = fileOverride || uploadedFiles[requirementId];
     const uploadedRequirementType = confirmUpload?.requirementType || requirementId;
     const uploadedCustomRequirementId = confirmUpload?.customRequirementId || '';
@@ -244,17 +246,11 @@ export default function StudentRequirements() {
       return;
     }
 
+    uploadInProgressRef.current = true;
     try {
       setUploading(true);
 
       // Check if this is a re-upload of a rejected requirement
-      const submission = getSubmissionForRequirement(
-        uploadedRequirementType,
-        uploadedCustomRequirementId,
-        uploadedCustomRequirementLabel
-      );
-      const isReuploadingRejected = submission?.status === 'rejected';
-
       await api.uploadRequirement(
         file,
         uploadedRequirementType,
@@ -265,11 +261,6 @@ export default function StudentRequirements() {
         existingPsaSubmission?._id || ''
       );
 
-      if (isReuploadingRejected) {
-        notify('success', 'Re-submission Successful', `✅ ${file.name} re-submitted successfully! Your updated document is now pending review.`);
-      } else {
-        notify('success', 'Submission Successful', `✅ ${file.name} submitted successfully!`);
-      }
       notifyRequirementUpdate();
       setUploadedFiles(prev => {
         const newFiles = { ...prev };
@@ -287,6 +278,7 @@ export default function StudentRequirements() {
     } catch (err) {
       notify('error', 'Submission Failed', err.message || 'Failed to upload file');
     } finally {
+      uploadInProgressRef.current = false;
       setUploading(false);
     }
   };
@@ -334,15 +326,16 @@ export default function StudentRequirements() {
   };
 
   const handleImportPreviousYearRequirements = async () => {
+    if (importInProgressRef.current) return;
+    importInProgressRef.current = true;
     try {
       setLoading(true);
-      const response = await api.importPreviousYearRequirements({});
-      const imported = Array.isArray(response?.data) ? response.data : [];
-      notify('success', imported.length > 0 ? 'Previous-Year Records Imported' : 'No Records Available', imported.length > 0 ? 'Eligible records were imported for reuse.' : 'There were no eligible prior-year records to import.');
+      await api.importPreviousYearRequirements({});
       await fetchData();
     } catch (err) {
       notify('error', 'Import Failed', err.message || 'Unable to import previous-year records.');
     } finally {
+      importInProgressRef.current = false;
       setLoading(false);
     }
   };
@@ -353,20 +346,20 @@ export default function StudentRequirements() {
       notify('error', 'Download Error', 'Invalid requirement. Please try again.');
       return;
     }
-    if (downloadInProgressRef.current) return;
-    downloadInProgressRef.current = true;
+    if (fileActionInProgressRef.current) return;
+    fileActionInProgressRef.current = true;
     
     try {
-      console.log(`📥 Downloading requirement: ${req.title}`);
       setLoading(true);
-      const result = await api.downloadPublishedRequirement(req._id, req.title || 'requirement.pdf');
-      const filename = result.filename || req.title || 'requirement.pdf';
-      notify('success', 'Download Successful', `✅ ${filename} downloaded successfully!`);
+      await api.downloadPublishedRequirement(
+        req._id,
+        req.file?.filename || req.fileName || req.title || 'requirement.pdf'
+      );
     } catch (err) {
       console.error('❌ Download error:', err);
       notify('error', 'Download Failed', `Failed to download: ${err.message || 'Unknown error'}`);
     } finally {
-      downloadInProgressRef.current = false;
+      fileActionInProgressRef.current = false;
       setLoading(false);
     }
   };
@@ -379,46 +372,53 @@ export default function StudentRequirements() {
   };
 
   const handleViewSubmission = async (submission) => {
-    if (!submission?._id) return;
-    if (viewInProgressRef.current) return;
-    viewInProgressRef.current = true;
+    if (!submission?._id) {
+      notify('error', 'Preview Failed', 'This submission does not have a valid file record.');
+      return;
+    }
+    if (fileActionInProgressRef.current) return;
+    fileActionInProgressRef.current = true;
     try {
       setLoading(true);
-      const previewData = await api.viewRequirement(submission._id, submission.fileName || 'uploaded-file', submission.participationType);
+      const previewData = await api.viewRequirement(
+        submission._id,
+        submission.fileName || 'uploaded-file',
+        submission.participationType || participationType
+      );
       setPreviewModal({
         url: previewData.url,
         fileType: previewData.fileType,
         filename: previewData.filename,
         submission
       });
-      notify('success', 'Preview Opened', `✅ ${submission.fileName || 'Uploaded file'} opened successfully!`);
     } catch (err) {
       console.error('❌ View error:', err);
       notify('error', 'Preview Failed', err.message || 'Unable to open this file right now.');
     } finally {
-      viewInProgressRef.current = false;
+      fileActionInProgressRef.current = false;
       setLoading(false);
     }
   };
 
   const handleDownloadSubmission = async (submission) => {
-    if (!submission?._id) return;
-    if (downloadInProgressRef.current) return;
-    downloadInProgressRef.current = true;
+    if (!submission?._id) {
+      notify('error', 'Download Failed', 'This submission does not have a valid file record.');
+      return;
+    }
+    if (fileActionInProgressRef.current) return;
+    fileActionInProgressRef.current = true;
     try {
       setLoading(true);
-      const result = await api.downloadRequirement(
+      await api.downloadRequirement(
         submission._id,
         submission.fileName || 'uploaded-file',
-        submission.participationType
+        submission.participationType || participationType
       );
-      const filename = result.filename || submission.fileName || 'uploaded-file';
-      notify('success', 'Download Successful', `✅ ${filename} downloaded successfully!`);
     } catch (err) {
       console.error('❌ Download error:', err);
       notify('error', 'Download Failed', err.message || 'Unable to download this file right now.');
     } finally {
-      downloadInProgressRef.current = false;
+      fileActionInProgressRef.current = false;
       setLoading(false);
     }
   };
@@ -566,22 +566,27 @@ export default function StudentRequirements() {
             <div className="admin-requirements-list">
               <div className="admin-reqs-header">
                 <h3><Icon name="document" size={20} /> Active Requirements</h3>
-                <p>Click on any form to view details or download</p>
+                <p>Published requirements for you to complete</p>
               </div>
 
-              {publishedRequirements.filter((requirement) => (
-                !(requirement.type === 'other' && !requirement.file?.filename && !requirement.file?.path)
-              )).length > 0 ? (
+              {publishedRequirements.length > 0 ? (
                 <div className="requirements-boxes-grid">
                   {publishedRequirements
-                    .filter((requirement) => (
-                      !(requirement.type === 'other' && !requirement.file?.filename && !requirement.file?.path)
-                    ))
-                    .map((req) => (
+                    .map((req) => {
+                      const hasFile = Boolean(req.file?.filename || req.file?.path);
+                      return (
                     <div 
                       key={req._id} 
                       className="requirement-box"
-                      onClick={() => handleOpenModal(req)}
+                      onClick={hasFile ? () => handleOpenModal(req) : undefined}
+                      role={hasFile ? 'button' : undefined}
+                      tabIndex={hasFile ? 0 : undefined}
+                      onKeyDown={hasFile ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleOpenModal(req);
+                        }
+                      } : undefined}
                     >
                       <div className="requirement-box-icon">
                         <Icon name="document" />
@@ -593,13 +598,17 @@ export default function StudentRequirements() {
                           <span className="meta-date">
                             <Icon name="calendar" size={16} /> Posted: {new Date(req.publishedAt || req.createdAt).toLocaleDateString()}
                           </span>
+                          {!hasFile && <span>Submit in Upload New</span>}
                         </div>
                       </div>
-                      <div className="requirement-box-arrow">
-                        <span className="arrow-icon"><Icon name="chevronRight" /></span>
-                      </div>
+                      {hasFile && (
+                        <div className="requirement-box-arrow">
+                          <span className="arrow-icon"><Icon name="chevronRight" /></span>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                      );
+                    })}
                 </div>
               ) : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
@@ -648,6 +657,15 @@ export default function StudentRequirements() {
                             </td>
                             <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.createdAt)}</td>
                             <td className="student-requirements-table-cell">
+                              <button
+                                type="button"
+                                className="submit-single-btn"
+                                onClick={() => handleViewSubmission(submission)}
+                                disabled={loading}
+                                aria-label={`View ${submission.fileName || 'uploaded document'}`}
+                              >
+                                <Icon name="eye" size={16} /> View
+                              </button>
                               <button
                                 type="button"
                                 className="student-requirement-download-btn"
@@ -724,7 +742,7 @@ export default function StudentRequirements() {
                             <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.uploadedAt || submission.createdAt)}</td>
                             <td className="student-requirements-table-cell">
                               <div className="import-records-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <button className="submit-single-btn" onClick={() => handleViewSubmission(submission)} aria-label={`View ${submission.fileName || 'uploaded document'}`}>
+                                <button type="button" className="submit-single-btn" onClick={() => handleViewSubmission(submission)} disabled={loading} aria-label={`View ${submission.fileName || 'uploaded document'}`}>
                                   <Icon name="eye" size={16} /> View
                                 </button>
                                 <button
@@ -846,13 +864,35 @@ export default function StudentRequirements() {
                           <Icon name="paperclip" size={16} /> {savedFileName}
                         </div>
                         {!uploadedFiles[req.id] && submission && (
-                          <button
-                            className="submit-single-btn"
-                            onClick={() => triggerFileInput(req.id)}
-                            disabled={uploading}
-                          >
-                            {uploading ? 'Uploading...' : 'Replace File'}
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="submit-single-btn"
+                              onClick={() => handleViewSubmission(submission)}
+                              disabled={loading || uploading}
+                              aria-label={`View ${savedFileName}`}
+                            >
+                              <Icon name="eye" size={16} /> View
+                            </button>
+                            <button
+                              type="button"
+                              className="student-requirement-download-btn"
+                              onClick={() => handleDownloadSubmission(submission)}
+                              disabled={loading || uploading}
+                              aria-label={`Download ${savedFileName}`}
+                              title="Download document"
+                            >
+                              <Icon name="download" size={18} />
+                            </button>
+                            <button
+                              type="button"
+                              className="submit-single-btn"
+                              onClick={() => triggerFileInput(req.id)}
+                              disabled={uploading}
+                            >
+                              {uploading ? 'Uploading...' : 'Replace File'}
+                            </button>
+                          </>
                         )}
                         {uploadedFiles[req.id] && (
                           <button

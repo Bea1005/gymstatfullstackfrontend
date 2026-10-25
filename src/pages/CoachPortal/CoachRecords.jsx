@@ -228,6 +228,7 @@ export default function CoachRecord() {
   const [loading, setLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [recordContentSaving, setRecordContentSaving] = useState({
     formHeader: false,
     eligibility: false,
@@ -239,6 +240,9 @@ export default function CoachRecord() {
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState({ type: null, id: null, name: '' });
   const staffSaveInProgressRef = useRef(false);
+  const athleteSaveInProgressRef = useRef(false);
+  const reportDownloadInProgressRef = useRef(false);
+  const editSaveInProgressRef = useRef(new Set());
   const coachRecordContentRequestRef = useRef(0);
   const coachRecordContentPromiseRef = useRef(null);
 
@@ -607,6 +611,9 @@ export default function CoachRecord() {
 
   // ---------------- Download report ----------------
   const handleDownloadReport = async () => {
+    if (reportDownloadInProgressRef.current) return;
+    reportDownloadInProgressRef.current = true;
+    setIsDownloadingReport(true);
     let exportRoot;
     let form;
     try {
@@ -807,12 +814,13 @@ export default function CoachRecord() {
       }
 
       doc.save(`STRASUC_${(coachProfile.mainSport || 'Report').replace(/[^a-z0-9]+/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-      setToast({ message: 'Report downloaded successfully!', type: 'success' });
     } catch (error) {
       console.error('Failed to generate report:', error);
       setToast({ message: 'Failed to generate report. Please try again.', type: 'error' });
     } finally {
       exportRoot?.remove();
+      reportDownloadInProgressRef.current = false;
+      setIsDownloadingReport(false);
     }
   };
 
@@ -954,10 +962,12 @@ export default function CoachRecord() {
 
   const handleSaveAthlete = async (event) => {
     event.preventDefault();
+    if (athleteSaveInProgressRef.current) return;
     if (!editForm.fullname.trim()) {
       setToast({ message: 'Please provide the student full name.', type: 'error' });
       return;
     }
+    athleteSaveInProgressRef.current = true;
     try {
       setIsSaving(true);
       const photoUrl = selectedFile ? imagePreview : editForm.photo;
@@ -981,7 +991,7 @@ export default function CoachRecord() {
       } else if (editingAthlete) {
         const { status, ...profileData } = athleteData;
         const savedStatus = normalizeAthleteStatus(status);
-        const badgeResponse = await api.updateCoachAthleteStatus(editingAthlete.id, savedStatus);
+        await api.updateCoachAthleteStatus(editingAthlete.id, savedStatus);
         const persistedAthletes = await api.getCoachAthletes(activeSportRef.current);
         const persistedAthlete = Array.isArray(persistedAthletes)
           ? persistedAthletes.find((athlete) => String(athlete._id || athlete.studentId || athlete.id) === String(editingAthlete.id))
@@ -1016,17 +1026,12 @@ export default function CoachRecord() {
           }
         }
         await fetchCoachData(activeSportRef.current);
-        setToast({
-          message: badgeResponse?.athleteStatus === persistedStatus
-            ? 'Student status badge updated successfully.'
-            : 'Student status badge saved and confirmed from the server.',
-          type: 'success',
-        });
         setEditingAthlete(null);
       }
     } catch (error) {
       setToast({ message: error.message || 'Unable to save student profile.', type: 'error' });
     } finally {
+      athleteSaveInProgressRef.current = false;
       setIsSaving(false);
       setSelectedFile(null);
     }
@@ -1046,7 +1051,8 @@ export default function CoachRecord() {
 
   const handleSaveEligibility = async (e) => {
     e.preventDefault();
-    if (recordContentSaving.eligibility) return;
+    if (recordContentSaving.eligibility || editSaveInProgressRef.current.has('eligibility')) return;
+    editSaveInProgressRef.current.add('eligibility');
     setRecordContentSaving((current) => ({ ...current, eligibility: true }));
     coachRecordContentRequestRef.current += 1;
     try {
@@ -1059,10 +1065,10 @@ export default function CoachRecord() {
       }
       setEligibilityRequirements({ notes: savedNotes });
       setEditingEligibility(false);
-      setToast({ message: 'Eligibility requirements updated.', type: 'success' });
     } catch (error) {
       setToast({ message: error.message || 'Unable to save eligibility requirements.', type: 'error' });
     } finally {
+      editSaveInProgressRef.current.delete('eligibility');
       setRecordContentSaving((current) => ({ ...current, eligibility: false }));
     }
   };
@@ -1084,7 +1090,8 @@ export default function CoachRecord() {
 
   const handleSaveDirector = async (e) => {
     e.preventDefault();
-    if (recordContentSaving.director) return;
+    if (recordContentSaving.director || editSaveInProgressRef.current.has('director')) return;
+    editSaveInProgressRef.current.add('director');
     setRecordContentSaving((current) => ({ ...current, director: true }));
     coachRecordContentRequestRef.current += 1;
     try {
@@ -1108,10 +1115,10 @@ export default function CoachRecord() {
         title: savedDirector.directorTitle,
       });
       setEditingDirector(false);
-      setToast({ message: 'Director information updated.', type: 'success' });
     } catch (error) {
       setToast({ message: error.message || 'Unable to save sports director information.', type: 'error' });
     } finally {
+      editSaveInProgressRef.current.delete('director');
       setRecordContentSaving((current) => ({ ...current, director: false }));
     }
   };
@@ -1194,7 +1201,9 @@ export default function CoachRecord() {
       setEditingStaffIndex(null);
       setIsAddingStaff(false);
       setSelectedStaffFile(null);
-      setToast({ message: isAddingStaff ? 'Faculty member added.' : 'Staff information updated.', type: 'success' });
+      if (isAddingStaff) {
+        setToast({ message: 'Faculty member added.', type: 'success' });
+      }
     } catch (error) {
       setToast({ message: error.message || 'Unable to save staff information.', type: 'error' });
     } finally {
@@ -1221,7 +1230,8 @@ export default function CoachRecord() {
 
   const handleSaveEvent = async (e) => {
     e.preventDefault();
-    if (recordContentSaving.formHeader) return;
+    if (recordContentSaving.formHeader || editSaveInProgressRef.current.has('formHeader')) return;
+    editSaveInProgressRef.current.add('formHeader');
     setRecordContentSaving((current) => ({ ...current, formHeader: true }));
     coachRecordContentRequestRef.current += 1;
     try {
@@ -1245,10 +1255,10 @@ export default function CoachRecord() {
         institution: savedHeader.institution,
       });
       setEditingEvent(false);
-      setToast({ message: 'Event details updated.', type: 'success' });
     } catch (error) {
       setToast({ message: error.message || 'Unable to save Coach Record headers.', type: 'error' });
     } finally {
+      editSaveInProgressRef.current.delete('formHeader');
       setRecordContentSaving((current) => ({ ...current, formHeader: false }));
     }
   };
@@ -1467,8 +1477,8 @@ export default function CoachRecord() {
           <img src={logoImage} alt="School logo" />
         </div>
         <div className="form-toolbar-right">
-          <button className="toolbar-btn ghost" type="button" onClick={handleDownloadReport}>
-            Download Report
+          <button className="toolbar-btn ghost" type="button" onClick={handleDownloadReport} disabled={isDownloadingReport}>
+            {isDownloadingReport ? 'Generating Report...' : 'Download Report'}
           </button>
           <button className="toolbar-btn" type="button" onClick={handleLogout}>
             Logout

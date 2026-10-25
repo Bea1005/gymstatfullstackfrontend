@@ -106,12 +106,13 @@ export default function StudentNotifications() {
   const { notify } = useNotifications();
   const [requirements, setRequirements] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [publishedRequirements, setPublishedRequirements] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [category, setCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
-  const markingRequirementsRead = useRef(false);
+  const markingNotificationIds = useRef(new Set());
 
   useEffect(() => {
     let active = true;
@@ -119,7 +120,8 @@ export default function StudentNotifications() {
     const refreshNotifications = async () => {
       const results = await Promise.allSettled([
         api.getStudentRequirements(),
-        api.getStudentRequirementAnnouncements()
+        api.getStudentRequirementAnnouncements(),
+        api.getPublishedRequirements()
       ]);
       const errors = [];
 
@@ -141,6 +143,16 @@ export default function StudentNotifications() {
           : new Error('The announcement notification response was invalid.');
         console.error('Failed to refresh student announcements:', error);
         errors.push('Other notifications could not be loaded.');
+      }
+
+      if (results[2].status === 'fulfilled' && Array.isArray(results[2].value?.data)) {
+        if (active) setPublishedRequirements(results[2].value.data);
+      } else {
+        const error = results[2].status === 'rejected'
+          ? results[2].reason
+          : new Error('The published requirement response was invalid.');
+        console.error('Failed to refresh published student requirements:', error);
+        errors.push('Requirement updates could not be loaded.');
       }
 
       if (active) {
@@ -167,80 +179,57 @@ export default function StudentNotifications() {
   }, []);
 
   const notifications = useMemo(
-    () => buildStudentNotifications(requirements, announcements),
-    [requirements, announcements]
+    () => buildStudentNotifications(requirements, announcements, publishedRequirements),
+    [requirements, announcements, publishedRequirements]
   );
   const visibleNotifications = filterStudentNotifications(notifications, category);
   const unreadCount = getUnreadStudentNotificationCount(notifications);
 
-  const markRequirementNotificationsRead = async () => {
-    if (markingRequirementsRead.current) return;
-
-    const unread = notifications.filter((notification) => (
-      notification.notificationSource === 'requirement' && notification.notificationUnread
-    ));
-    if (!unread.length) return;
-
-    markingRequirementsRead.current = true;
-    try {
-      const results = await Promise.allSettled(unread.map((notification) => (
-        api.markStudentRequirementNotificationRead(
-          notification._id || notification.id,
-          notification.participationType
-        )
-      )));
-      const readIds = new Set();
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          readIds.add(String(unread[index]._id || unread[index].id));
-        } else {
-          console.error('Failed to mark student requirement notification as read:', result.reason);
-        }
-      });
-
-      if (readIds.size > 0) {
-        const readAt = new Date().toISOString();
-        setRequirements((current) => current.map((requirement) => (
-          readIds.has(String(requirement._id || requirement.id))
-            ? { ...requirement, notificationReadAt: readAt }
-            : requirement
-        )));
-      }
-    } finally {
-      markingRequirementsRead.current = false;
-    }
-  };
-
   const handleNotifications = () => {
-    const nextOpen = !notificationsOpen;
-    setNotificationsOpen(nextOpen);
-    if (nextOpen) markRequirementNotificationsRead();
+    setNotificationsOpen((open) => !open);
   };
 
   const handleNotificationClick = async (notification) => {
-    if (notification.notificationSource === 'requirement') {
-      setNotificationsOpen(false);
-      navigate('/student/requirements');
-      return;
-    }
+    if (markingNotificationIds.current.has(notification.notificationId)) return;
 
-    const announcementId = notification._id || notification.id;
-    if (!notification.isRead) {
-      try {
+    markingNotificationIds.current.add(notification.notificationId);
+    try {
+      if (notification.notificationSource === 'requirement') {
+        if (notification.notificationUnread) {
+          await api.markStudentRequirementNotificationRead(
+            notification._id || notification.id,
+            notification.participationType
+          );
+          const readAt = new Date().toISOString();
+          setRequirements((current) => current.map((requirement) => (
+            String(requirement._id || requirement.id) === String(notification._id || notification.id)
+              ? { ...requirement, notificationReadAt: readAt }
+              : requirement
+          )));
+        }
+        setNotificationsOpen(false);
+        navigate('/student/requirements');
+        return;
+      }
+
+      if (notification.notificationUnread) {
+        const announcementId = notification._id || notification.id;
         await api.markStudentAnnouncementRead(announcementId);
         setAnnouncements((current) => current.map((announcement) => (
           String(announcement._id || announcement.id) === String(announcementId)
             ? { ...announcement, isRead: true }
             : announcement
         )));
-      } catch (error) {
-        console.error('Failed to mark student announcement as read:', error);
-        notify('error', 'Notification Update Failed', error.message || 'Unable to mark this notification as read.');
       }
-    }
 
-    setNotificationsOpen(false);
-    setSelectedAnnouncement(notification);
+      setNotificationsOpen(false);
+      setSelectedAnnouncement({ ...notification, isRead: true, notificationUnread: false });
+    } catch (error) {
+      console.error('Failed to mark student notification as read:', error);
+      notify('error', 'Notification Update Failed', error.message || 'Unable to mark this notification as read.');
+    } finally {
+      markingNotificationIds.current.delete(notification.notificationId);
+    }
   };
 
   if (location.pathname !== '/student/home') {
@@ -293,14 +282,14 @@ export default function StudentNotifications() {
                     const rejected = isRequirementSubmission
                       && String(notification.status).toLowerCase() === 'rejected';
                     const notificationTitle = isRequirementSubmission
-                      ? `${getRequirementLabel(notification)} - ${rejected ? 'Rejected' : 'Approved'}`
+                      ? `${getRequirementLabel(notification)} - ${rejected ? 'Returned' : 'Approved'}`
                       : notification.title || 'Announcement';
                     const notificationDate = notification.notificationDate;
 
                     return (
                       <button
                         type="button"
-                        className="sh-notification-item"
+                        className={`sh-notification-item ${notification.notificationUnread ? 'sh-notification-item--unread' : 'sh-notification-item--read'}`}
                         key={notification.notificationId}
                         onClick={() => handleNotificationClick(notification)}
                       >
@@ -310,6 +299,9 @@ export default function StudentNotifications() {
                         />
                         <span>
                           <strong>{notificationTitle}</strong>
+                          <small className={`sh-notification-status ${notification.notificationUnread ? 'sh-notification-status--unread' : ''}`}>
+                            {notification.notificationUnread ? 'Unread' : 'Read'}
+                          </small>
                           {isRequirementSubmission && rejected && (notification.remarks || notification.feedback) && (
                             <small>Reason: {notification.remarks || notification.feedback}</small>
                           )}

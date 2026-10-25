@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useEffectEvent } from 'react';
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import DocumentViewer from '../../components/DocumentViewer';
@@ -56,6 +56,12 @@ const AdminSchedules = () => {
   const [currentYear, setCurrentYear] = useState(currentDate.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(currentDate.getMonth());
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [downloadingCalendar, setDownloadingCalendar] = useState(false);
+  const [downloadingAttachment, setDownloadingAttachment] = useState(false);
+  const saveScheduleInProgressRef = useRef(false);
+  const calendarDownloadInProgressRef = useRef(false);
+  const attachmentDownloadInProgressRef = useRef(false);
   const [confirmCancelId, setConfirmCancelId] = useState(null);
   const [scheduleRequests, setScheduleRequests] = useState([]);
   const [requestPanelOpen, setRequestPanelOpen] = useState(false);
@@ -496,6 +502,7 @@ const AdminSchedules = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (saveScheduleInProgressRef.current) return;
     if (!formData.event) {
       setToast({ message: 'Error: Please enter an event name.', type: 'error' });
       return;
@@ -516,7 +523,13 @@ const AdminSchedules = () => {
       endTime: parsedEndTime ? '' : 'Enter a valid time, such as 2:45 PM.',
     };
     setTimeErrors(nextTimeErrors);
-    if (nextTimeErrors.startTime || nextTimeErrors.endTime) return;
+    if (nextTimeErrors.startTime || nextTimeErrors.endTime) {
+      setToast({
+        message: nextTimeErrors.startTime || nextTimeErrors.endTime,
+        type: 'error',
+      });
+      return;
+    }
 
     const dateToDayStart = (dateString) => {
       const date = new Date(dateString);
@@ -533,7 +546,9 @@ const AdminSchedules = () => {
     const scheduledStart = newStartDate.getTime() + newStartMin * 60000;
     const scheduledEnd = newEndDate.getTime() + newEndMin * 60000;
     if (scheduledEnd <= scheduledStart) {
-      setTimeErrors((current) => ({ ...current, endTime: 'End time must be later than start time.' }));
+      const message = 'End time must be later than start time.';
+      setTimeErrors((current) => ({ ...current, endTime: message }));
+      setToast({ message, type: 'error' });
       return;
     }
 
@@ -574,6 +589,8 @@ const AdminSchedules = () => {
       status: 'active',
     };
 
+    saveScheduleInProgressRef.current = true;
+    setSavingSchedule(true);
     try {
       const response = formData.id
         ? await api.updateSchedule(formData.id, payload)
@@ -602,12 +619,14 @@ const AdminSchedules = () => {
       saveApprovedSchedules(updatedReservations);
       await loadSchedulesFromServer();
       notifyScheduleRefresh();
-      setToast({ message: formData.id ? 'Schedule Successfully Updated' : 'Schedule Successfully Created and Saved to MongoDB', type: 'success' });
       setShowModal(false);
       resetForm();
     } catch (err) {
       console.error('Error saving schedule:', err);
       setToast({ message: 'Unable to save schedule to MongoDB. Please try again.', type: 'error' });
+    } finally {
+      saveScheduleInProgressRef.current = false;
+      setSavingSchedule(false);
     }
   };
 
@@ -718,143 +737,148 @@ const AdminSchedules = () => {
   };
 
   const handleDownloadCalendar = async () => {
-    const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
-    const pageWidth = 1100;
-    const pageHeight = 700;
-    const marginX = 56;
-    const marginY = 48;
-    const headerHeight = 72;
-    const weekdayHeight = 36;
-    const rows = Math.max(5, Math.ceil((firstDay + daysInMonth) / 7));
-    const cellWidth = (pageWidth - marginX * 2) / 7;
-    const cellHeight = (pageHeight - marginY * 2 - headerHeight - weekdayHeight) / rows;
+    if (calendarDownloadInProgressRef.current) return;
+    calendarDownloadInProgressRef.current = true;
+    setDownloadingCalendar(true);
+    try {
+      const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
+      const pageWidth = 1100;
+      const pageHeight = 700;
+      const marginX = 56;
+      const marginY = 48;
+      const headerHeight = 72;
+      const weekdayHeight = 36;
+      const rows = Math.max(5, Math.ceil((firstDay + daysInMonth) / 7));
+      const cellWidth = (pageWidth - marginX * 2) / 7;
+      const cellHeight = (pageHeight - marginY * 2 - headerHeight - weekdayHeight) / rows;
 
-    const escapeXml = (value) => String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+      const escapeXml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 
-    const wrapText = (text, maxChars) => {
-      const words = String(text).split(' ');
-      const lines = [];
-      let line = '';
+      const wrapText = (text, maxChars) => {
+        const words = String(text).split(' ');
+        const lines = [];
+        let line = '';
 
-      words.forEach((word) => {
-        const candidate = line ? `${line} ${word}` : word;
-        if (candidate.length <= maxChars) {
-          line = candidate;
-        } else {
-          if (line) lines.push(line);
-          line = word;
+        words.forEach((word) => {
+          const candidate = line ? `${line} ${word}` : word;
+          if (candidate.length <= maxChars) {
+            line = candidate;
+          } else {
+            if (line) lines.push(line);
+            line = word;
+          }
+        });
+
+        if (line) lines.push(line);
+        return lines.slice(0, 3);
+      };
+
+      const cells = [];
+      for (let i = 0; i < firstDay; i += 1) cells.push(null);
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        cells.push({ day, dateStr, events: sortEventsByTime(getEventsForDate(dateStr)) });
+      }
+      while (cells.length % 7 !== 0) cells.push(null);
+
+      const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}">`;
+      svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
+      svg += `<rect x="40" y="28" width="${pageWidth - 80}" height="${pageHeight - 56}" rx="18" fill="#ffffff" stroke="#e0e0e0" stroke-width="1.2"/>`;
+      svg += `<text x="${marginX}" y="${marginY + 24}" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#7b1e1e">${escapeXml(monthLabel)}</text>`;
+      svg += `<text x="${marginX}" y="${marginY + 50}" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#777">Short Bond Paper • Landscape</text>`;
+
+      weekdayLabels.forEach((dayName, index) => {
+        const x = marginX + index * cellWidth;
+        svg += `<rect x="${x}" y="${marginY + headerHeight}" width="${cellWidth}" height="${weekdayHeight}" fill="#f8f9fa" stroke="#e6e6e6" stroke-width="1"/>`;
+        svg += `<text x="${x + cellWidth / 2}" y="${marginY + headerHeight + 24}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#7b1e1e">${escapeXml(dayName)}</text>`;
+      });
+
+      cells.forEach((cell, index) => {
+        const row = Math.floor(index / 7);
+        const col = index % 7;
+        const x = marginX + col * cellWidth;
+        const y = marginY + headerHeight + weekdayHeight + row * cellHeight;
+        const hasDay = Boolean(cell);
+
+        svg += `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="8" fill="${hasDay ? '#ffffff' : '#fafafa'}" stroke="#e6e6e6" stroke-width="1"/>`;
+
+        if (hasDay) {
+          svg += `<text x="${x + 8}" y="${y + 18}" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#333">${cell.day}</text>`;
+
+          const visibleEvents = cell.events.slice(0, 3);
+          visibleEvents.forEach((event, eventIndex) => {
+            const eventY = y + 34 + eventIndex * 20;
+            const shortTitle = wrapText(event.event, 18);
+            const timeLine = wrapText(formatTimeDisplay(event.startTime, event.endTime), 18);
+            const lines = [...shortTitle, ...timeLine];
+            const color = '#2e7d32';
+
+            svg += `<rect x="${x + 7}" y="${eventY - 12}" width="${cellWidth - 14}" height="${12 + lines.length * 11}" rx="4" fill="#eef7ee"/>`;
+            lines.forEach((line, lineIndex) => {
+              const lineY = eventY + lineIndex * 10;
+              svg += `<text x="${x + 12}" y="${lineY}" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="${color}">${escapeXml(line)}</text>`;
+            });
+          });
         }
       });
 
-      if (line) lines.push(line);
-      return lines.slice(0, 3);
-    };
+      svg += `</svg>`;
 
-    const cells = [];
-    for (let i = 0; i < firstDay; i += 1) cells.push(null);
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      cells.push({ day, dateStr, events: sortEventsByTime(getEventsForDate(dateStr)) });
-    }
-    while (cells.length % 7 !== 0) cells.push(null);
+        const { jsPDF } = await import('jspdf');
+        await import('svg2pdf.js');
 
-    const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}">`;
-    svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
-    svg += `<rect x="40" y="28" width="${pageWidth - 80}" height="${pageHeight - 56}" rx="18" fill="#ffffff" stroke="#e0e0e0" stroke-width="1.2"/>`;
-    svg += `<text x="${marginX}" y="${marginY + 24}" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#7b1e1e">${escapeXml(monthLabel)}</text>`;
-    svg += `<text x="${marginX}" y="${marginY + 50}" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#777">Short Bond Paper • Landscape</text>`;
+        const parsedSvg = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        if (parsedSvg.querySelector('parsererror')) {
+          throw new Error('The calendar could not be prepared for PDF export.');
+        }
+        const svgElement = document.importNode(parsedSvg.documentElement, true);
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: [11, 8.5] });
+        const pdfPageWidth = doc.internal.pageSize.getWidth();
+        const pdfPageHeight = doc.internal.pageSize.getHeight();
 
-    weekdayLabels.forEach((dayName, index) => {
-      const x = marginX + index * cellWidth;
-      svg += `<rect x="${x}" y="${marginY + headerHeight}" width="${cellWidth}" height="${weekdayHeight}" fill="#f8f9fa" stroke="#e6e6e6" stroke-width="1"/>`;
-      svg += `<text x="${x + cellWidth / 2}" y="${marginY + headerHeight + 24}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#7b1e1e">${escapeXml(dayName)}</text>`;
-    });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(123, 30, 30);
+        doc.text('GYMSTAT CALENDAR', pdfPageWidth / 2, 0.36, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(90, 90, 90);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pdfPageWidth / 2, 0.57, { align: 'center' });
+        doc.setDrawColor(255, 220, 0);
+        doc.setLineWidth(0.015);
+        doc.line(pdfPageWidth / 2 - 0.45, 0.7, pdfPageWidth / 2 + 0.45, 0.7);
 
-    cells.forEach((cell, index) => {
-      const row = Math.floor(index / 7);
-      const col = index % 7;
-      const x = marginX + col * cellWidth;
-      const y = marginY + headerHeight + weekdayHeight + row * cellHeight;
-      const hasDay = Boolean(cell);
+        const pdfMargin = 0.5;
+        const headerAreaHeight = 0.88;
+        const bottomMargin = 0.5;
+        const availableWidth = pdfPageWidth - pdfMargin * 2;
+        const availableHeight = pdfPageHeight - headerAreaHeight - bottomMargin;
+        const scale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight);
+        const calendarWidth = pageWidth * scale;
+        const calendarHeight = pageHeight * scale;
+        const calendarX = (pdfPageWidth - calendarWidth) / 2;
+        const calendarY = headerAreaHeight + (availableHeight - calendarHeight) / 2;
 
-      svg += `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="8" fill="${hasDay ? '#ffffff' : '#fafafa'}" stroke="#e6e6e6" stroke-width="1"/>`;
-
-      if (hasDay) {
-        svg += `<text x="${x + 8}" y="${y + 18}" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#333">${cell.day}</text>`;
-
-        const visibleEvents = cell.events.slice(0, 3);
-        visibleEvents.forEach((event, eventIndex) => {
-          const eventY = y + 34 + eventIndex * 20;
-          const shortTitle = wrapText(event.event, 18);
-          const timeLine = wrapText(formatTimeDisplay(event.startTime, event.endTime), 18);
-          const lines = [...shortTitle, ...timeLine];
-          const color = '#2e7d32';
-
-          svg += `<rect x="${x + 7}" y="${eventY - 12}" width="${cellWidth - 14}" height="${12 + lines.length * 11}" rx="4" fill="#eef7ee"/>`;
-          lines.forEach((line, lineIndex) => {
-            const lineY = eventY + lineIndex * 10;
-            svg += `<text x="${x + 12}" y="${lineY}" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="${color}">${escapeXml(line)}</text>`;
-          });
+        await doc.svg(svgElement, {
+          x: calendarX,
+          y: calendarY,
+          width: calendarWidth,
+          height: calendarHeight,
         });
-      }
-    });
 
-    svg += `</svg>`;
-
-    try {
-      const { jsPDF } = await import('jspdf');
-      await import('svg2pdf.js');
-
-      const parsedSvg = new DOMParser().parseFromString(svg, 'image/svg+xml');
-      if (parsedSvg.querySelector('parsererror')) {
-        throw new Error('The calendar could not be prepared for PDF export.');
-      }
-      const svgElement = document.importNode(parsedSvg.documentElement, true);
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: [11, 8.5] });
-      const pdfPageWidth = doc.internal.pageSize.getWidth();
-      const pdfPageHeight = doc.internal.pageSize.getHeight();
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(123, 30, 30);
-      doc.text('GYMSTAT CALENDAR', pdfPageWidth / 2, 0.36, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(90, 90, 90);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, pdfPageWidth / 2, 0.57, { align: 'center' });
-      doc.setDrawColor(255, 220, 0);
-      doc.setLineWidth(0.015);
-      doc.line(pdfPageWidth / 2 - 0.45, 0.7, pdfPageWidth / 2 + 0.45, 0.7);
-
-      const pdfMargin = 0.5;
-      const headerAreaHeight = 0.88;
-      const bottomMargin = 0.5;
-      const availableWidth = pdfPageWidth - pdfMargin * 2;
-      const availableHeight = pdfPageHeight - headerAreaHeight - bottomMargin;
-      const scale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight);
-      const calendarWidth = pageWidth * scale;
-      const calendarHeight = pageHeight * scale;
-      const calendarX = (pdfPageWidth - calendarWidth) / 2;
-      const calendarY = headerAreaHeight + (availableHeight - calendarHeight) / 2;
-
-      await doc.svg(svgElement, {
-        x: calendarX,
-        y: calendarY,
-        width: calendarWidth,
-        height: calendarHeight,
-      });
-
-      doc.save(`gymnasium-schedule-${currentYear}-${String(currentMonth + 1).padStart(2, '0')}.pdf`);
-      setToast({ message: 'Calendar PDF downloaded successfully.', type: 'success' });
+        doc.save(`gymnasium-schedule-${currentYear}-${String(currentMonth + 1).padStart(2, '0')}.pdf`);
     } catch (error) {
       console.error('Failed to export calendar PDF:', error);
       setToast({ message: 'Unable to download the calendar PDF. Please try again.', type: 'error' });
+    } finally {
+      calendarDownloadInProgressRef.current = false;
+      setDownloadingCalendar(false);
     }
   };
 
@@ -974,7 +998,9 @@ const AdminSchedules = () => {
           <button type="button" onClick={handlePrevMonth} className="calendar-nav-btn" aria-label="View previous month">◀ Previous</button>
           <div className="calendar-title-group">
             <h2>{monthNames[currentMonth]} {currentYear}</h2>
-            <button type="button" onClick={handleDownloadCalendar} className="download-calendar-btn">Download Calendar</button>
+            <button type="button" onClick={handleDownloadCalendar} className="download-calendar-btn" disabled={downloadingCalendar}>
+              {downloadingCalendar ? 'Preparing Download...' : 'Download Calendar'}
+            </button>
           </div>
           <button type="button" onClick={handleNextMonth} className="calendar-nav-btn" aria-label="View next month">Next ▶</button>
         </div>
@@ -1172,7 +1198,9 @@ const AdminSchedules = () => {
 
               <div className="modal-buttons">
                 <button type="button" className="cancel-btn" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="confirm-btn">{formData.id ? 'Update Schedule' : 'Confirm Schedule'}</button>
+                <button type="submit" className="confirm-btn" disabled={savingSchedule}>
+                  {savingSchedule ? 'Saving...' : formData.id ? 'Update Schedule' : 'Confirm Schedule'}
+                </button>
               </div>
             </form>
           </div>
@@ -1311,6 +1339,9 @@ const AdminSchedules = () => {
                                 type="button"
                                 className="btn-download-attachment"
                                 onClick={async () => {
+                                  if (attachmentDownloadInProgressRef.current) return;
+                                  attachmentDownloadInProgressRef.current = true;
+                                  setDownloadingAttachment(true);
                                   let attachment;
                                   try {
                                     attachment = await getFileUrl(req.file);
@@ -1327,10 +1358,14 @@ const AdminSchedules = () => {
                                     }
                                   } catch (error) {
                                     setToast({ message: getAttachmentErrorMessage(error), type: 'error' });
+                                  } finally {
+                                    attachmentDownloadInProgressRef.current = false;
+                                    setDownloadingAttachment(false);
                                   }
                                 }}
+                                disabled={downloadingAttachment}
                               >
-                                Download
+                                {downloadingAttachment ? 'Downloading...' : 'Download'}
                               </button>
                             </div>
                           )}

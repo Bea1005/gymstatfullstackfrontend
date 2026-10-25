@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import '../../components/ConfirmModal.css';
 import './AdminPortal.css';
@@ -19,6 +19,10 @@ const AdminSettings = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const passwordSaveInProgressRef = useRef(false);
+  const emailSaveInProgressRef = useRef(false);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
   const closeToast = () => setToast({ message: '', type: 'success' });
@@ -38,6 +42,7 @@ const AdminSettings = () => {
   };
 
   const handleSavePassword = async () => {
+    if (passwordSaveInProgressRef.current) return;
     if (!currentPassword || !passwordInput || !confirmPassword) {
       setSettingsError('Current password, new password, and confirmation are required.');
       showToast('Current password, new password, and confirmation are required.', 'error');
@@ -56,6 +61,8 @@ const AdminSettings = () => {
       return;
     }
 
+    passwordSaveInProgressRef.current = true;
+    setSavingPassword(true);
     try {
       const response = await updateProfile({ currentPassword, newPassword: passwordInput });
       if (response.success) {
@@ -64,7 +71,6 @@ const AdminSettings = () => {
         setConfirmPassword('');
         setShowPasswordModal(false);
         setSettingsError('');
-        showToast(response.message || 'Password changed successfully!', 'success');
       } else {
         setSettingsError(response.message || 'Unable to update password.');
         showToast(response.message || 'Unable to update password.', 'error');
@@ -73,10 +79,14 @@ const AdminSettings = () => {
       const message = error.message || 'Unable to update password.';
       setSettingsError(message);
       showToast(message, 'error');
+    } finally {
+      passwordSaveInProgressRef.current = false;
+      setSavingPassword(false);
     }
   };
 
   const handleSaveEmail = async () => {
+    if (emailSaveInProgressRef.current) return;
     if (!emailInput.trim()) {
       setSettingsError('Email is required.');
       showToast('Email is required.', 'error');
@@ -88,13 +98,14 @@ const AdminSettings = () => {
       return;
     }
 
+    emailSaveInProgressRef.current = true;
+    setSavingEmail(true);
     try {
       const response = await updateProfile({ email: emailInput.trim() });
       if (response.success) {
         setAdminInfo({ ...adminInfo, email: emailInput.trim() });
         setShowEmailModal(false);
         setSettingsError('');
-        showToast(response.message || 'Email changed successfully!', 'success');
       } else {
         setSettingsError(response.message || 'Unable to update email.');
         showToast(response.message || 'Unable to update email.', 'error');
@@ -103,6 +114,9 @@ const AdminSettings = () => {
       const message = error.message || 'Unable to update email.';
       setSettingsError(message);
       showToast(message, 'error');
+    } finally {
+      emailSaveInProgressRef.current = false;
+      setSavingEmail(false);
     }
   };
 
@@ -259,8 +273,10 @@ const AdminSettings = () => {
               {settingsError && <p className="modal-error">{settingsError}</p>}
             </div>
             <div className="modal-actions">
-              <button className="modal-btn modal-cancel" onClick={() => setShowPasswordModal(false)}>Cancel</button>
-              <button className="modal-btn modal-confirm" onClick={handleSavePassword}>Save Password</button>
+              <button className="modal-btn modal-cancel" onClick={() => setShowPasswordModal(false)} disabled={savingPassword}>Cancel</button>
+              <button className="modal-btn modal-confirm" onClick={handleSavePassword} disabled={savingPassword}>
+                {savingPassword ? 'Saving...' : 'Save Password'}
+              </button>
             </div>
           </div>
         </div>
@@ -285,8 +301,10 @@ const AdminSettings = () => {
               {settingsError && <p className="modal-error">{settingsError}</p>}
             </div>
             <div className="modal-actions">
-              <button className="modal-btn modal-cancel" onClick={() => setShowEmailModal(false)}>Cancel</button>
-              <button className="modal-btn modal-confirm" onClick={handleSaveEmail}>Save Email</button>
+              <button className="modal-btn modal-cancel" onClick={() => setShowEmailModal(false)} disabled={savingEmail}>Cancel</button>
+              <button className="modal-btn modal-confirm" onClick={handleSaveEmail} disabled={savingEmail}>
+                {savingEmail ? 'Saving...' : 'Save Email'}
+              </button>
             </div>
           </div>
         </div>

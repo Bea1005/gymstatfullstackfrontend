@@ -7,6 +7,7 @@ import TimeInput from '../../components/TimeInput';
 import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
 import { getDueBorrowings, isBorrowingDeadlineApproaching } from '../../utils/borrowingDue';
 import { getUniqueBorrowerCount } from './borrowerCount';
+import { toggleEquipmentSelection, toggleEquipmentReferenceSelection } from './borrowingEquipmentSelection';
 import {
   getEquipment,
   getBorrowingRecords,
@@ -60,12 +61,18 @@ const getCurrentTimestamp = () => {
   return { date, time };
 };
 
+const getRecordEquipmentItems = (record) => (
+  Array.isArray(record.equipmentItems) && record.equipmentItems.length > 0
+    ? record.equipmentItems
+    : [{ equipment: record.equipment || '', referenceIds: record.referenceIds || [], quantity: record.qty || record.quantity || 1 }]
+);
+
 const EMPTY_FORM = { 
   fullname: '', 
   contactNo: '',
   facebookAccount: '',
-  equipment: '', 
-  selectedReferenceIds: [],
+  selectedEquipment: [],
+  selectedReferenceIdsByEquipment: {},
   date: todayStr(), 
   startTime: '09:00 AM',
   endTime: ''
@@ -74,6 +81,10 @@ const EMPTY_FORM = {
 export default function AdminBorrowing({ onBorrowingChange }) {
   const location = useLocation();
   const recordsCardRef = useRef(null);
+  const equipmentDropdownRef = useRef(null);
+  const borrowingCreateInProgressRef = useRef(false);
+  const borrowerSaveInProgressRef = useRef(false);
+  const conditionUpdatesInProgressRef = useRef(new Set());
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [records, setRecords] = useState([]);
   const [equipmentWithRefs, setEquipmentWithRefs] = useState({});
@@ -83,6 +94,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   const [error, setError] = useState('');
   const [timeErrors, setTimeErrors] = useState({ startTime: '', endTime: '' });
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [isEquipmentDropdownOpen, setIsEquipmentDropdownOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
   const [selectedBorrowerDetails, setSelectedBorrowerDetails] = useState(null);
   const [isEditingBorrower, setIsEditingBorrower] = useState(false);
@@ -179,6 +191,26 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   }, []);
 
   useEffect(() => {
+    if (!isEquipmentDropdownOpen) return undefined;
+
+    const closeOnOutsideClick = (event) => {
+      if (!equipmentDropdownRef.current?.contains(event.target)) {
+        setIsEquipmentDropdownOpen(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setIsEquipmentDropdownOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isEquipmentDropdownOpen]);
+
+  useEffect(() => {
     if (onBorrowingChange) {
       onBorrowingChange(records);
     }
@@ -189,8 +221,12 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     const equipmentRefs = equipmentWithRefs[equipmentName] || [];
 
     const borrowedRefIds = records
-      .filter(r => r.status === 'Out' && r.equipment === equipmentName)
-      .flatMap(r => r.referenceIds || []);
+      .filter((record) => record.status === 'Out')
+      .flatMap((record) => (
+        getRecordEquipmentItems(record)
+          .filter((item) => item.equipment === equipmentName)
+          .flatMap((item) => item.referenceIds || [])
+      ));
 
     return equipmentRefs.filter(ref => {
       if (!ref || !ref.id) return false;
@@ -210,6 +246,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
   // Update condition for a specific reference ID - now persists to MongoDB
   const updateReferenceCondition = async (recordId, refIndex, newCondition) => {
+    const updateKey = `${recordId}:${refIndex}`;
+    if (conditionUpdatesInProgressRef.current.has(updateKey)) return;
+    conditionUpdatesInProgressRef.current.add(updateKey);
     try {
       const record = records.find(r => r.id === recordId);
       if (!record) return;
@@ -226,14 +265,14 @@ export default function AdminBorrowing({ onBorrowingChange }) {
         }
         return record;
       }));
-
       await updateBorrowingRecord(recordId, { referenceConditions: updatedConditions });
-      setToast({ message: `Condition updated to ${newCondition}`, type: 'success' });
     } catch (error) {
       console.error('Error updating condition:', error);
       setToast({ message: 'Failed to update condition', type: 'error' });
       // Revert local state by refetching
       fetchData();
+    } finally {
+      conditionUpdatesInProgressRef.current.delete(updateKey);
     }
   };
 
@@ -286,41 +325,42 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     });
   };
 
-  const filtered = sortedRecords().filter(r =>
-    r.fullname.toLowerCase().includes(search.toLowerCase()) ||
-    r.equipment.toLowerCase().includes(search.toLowerCase()) ||
-    (r.referenceIds && r.referenceIds.some(ref => ref.toLowerCase().includes(search.toLowerCase())))
+  const filtered = sortedRecords().filter((record) =>
+    String(record.fullname || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(record.equipment || '').toLowerCase().includes(search.toLowerCase()) ||
+    getRecordEquipmentItems(record).some((item) =>
+      item.equipment.toLowerCase().includes(search.toLowerCase())
+      || item.referenceIds.some((referenceId) => referenceId.toLowerCase().includes(search.toLowerCase()))
+    )
   );
 
   const handleEquipmentChange = (equipmentName) => {
-    setForm(prev => ({
-      ...prev,
-      equipment: equipmentName,
-      selectedReferenceIds: []
+    setForm((current) => ({
+      ...current,
+      ...toggleEquipmentSelection(
+        current.selectedEquipment,
+        current.selectedReferenceIdsByEquipment,
+        equipmentName
+      ),
     }));
     setError('');
   };
 
-  const handleReferenceIdToggle = (refId) => {
-    setForm(prev => {
-      const currentSelected = prev.selectedReferenceIds || [];
-      if (currentSelected.includes(refId)) {
-        return {
-          ...prev,
-          selectedReferenceIds: currentSelected.filter(id => id !== refId)
-        };
-      } else {
-        return {
-          ...prev,
-          selectedReferenceIds: [...currentSelected, refId]
-        };
-      }
-    });
+  const handleReferenceIdToggle = (equipmentName, refId) => {
+    setForm((current) => ({
+      ...current,
+      selectedReferenceIdsByEquipment: toggleEquipmentReferenceSelection(
+        current.selectedReferenceIdsByEquipment,
+        equipmentName,
+        refId
+      ),
+    }));
     setError('');
   };
 
   const handleConfirm = async (e) => {
     e.preventDefault();
+    if (borrowingCreateInProgressRef.current) return;
     
     if (!form.fullname.trim()) { 
       setError('Full name is required.'); 
@@ -328,16 +368,34 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       return; 
     }
     
-    if (!form.equipment) { 
-      setError('Please select an equipment.'); 
-      setToast({ message: 'Please select an equipment.', type: 'error' }); 
-      return; 
+    if (form.selectedEquipment.length === 0) {
+      setError('Please select at least one equipment type.');
+      setToast({ message: 'Please select at least one equipment type.', type: 'error' });
+      return;
     }
-    
-    if (!form.selectedReferenceIds || form.selectedReferenceIds.length === 0) { 
-      setError('Please select at least one Reference ID.'); 
-      setToast({ message: 'Please select at least one Reference ID.', type: 'error' }); 
-      return; 
+
+    const equipmentItems = form.selectedEquipment.map((equipmentName) => {
+      const selectedReferenceIds = form.selectedReferenceIdsByEquipment[equipmentName] || [];
+      const availableIds = new Set(getAvailableReferenceIds(equipmentName).map((ref) => ref.id));
+      const invalidReferenceIds = selectedReferenceIds.filter((id) => !availableIds.has(id));
+      return { equipment: equipmentName, selectedReferenceIds, invalidReferenceIds };
+    });
+    const missingEquipmentIds = equipmentItems.filter((item) => item.selectedReferenceIds.length === 0);
+    const invalidEquipmentIds = equipmentItems.filter((item) => item.invalidReferenceIds.length > 0);
+    const selectedReferenceIds = equipmentItems.flatMap((item) => item.selectedReferenceIds);
+    if (missingEquipmentIds.length > 0 || invalidEquipmentIds.length > 0) {
+      const validationError = missingEquipmentIds.length > 0
+        ? 'Select at least one available Reference ID for every selected equipment type.'
+        : 'One or more selected Reference IDs are no longer available. Please review your selections.';
+      setError(validationError);
+      setToast({ message: validationError, type: 'error' });
+      return;
+    }
+    if (new Set(selectedReferenceIds).size !== selectedReferenceIds.length) {
+      const validationError = 'Reference IDs must be unique within the borrowing transaction.';
+      setError(validationError);
+      setToast({ message: validationError, type: 'error' });
+      return;
     }
 
     const startTime = parseBorrowingTime(form.startTime);
@@ -357,30 +415,39 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       return;
     }
     
+    borrowingCreateInProgressRef.current = true;
     try {
-      const calculatedQuantity = form.selectedReferenceIds.length;
-      const borrowTimestamp = { 
-        date: form.date, 
-        time: form.startTime 
+      const calculatedQuantity = selectedReferenceIds.length;
+      const borrowTimestamp = {
+        date: form.date,
+        time: form.startTime
       };
-      
-      const equipmentRefs = equipmentWithRefs[form.equipment] || [];
-      const referenceConditions = form.selectedReferenceIds.map(refId => {
-        const ref = equipmentRefs.find(r => r.id === refId);
-        return ref ? ref.condition : 'Good';
+      const savedEquipmentItems = equipmentItems.map((item) => {
+        const equipmentRefs = equipmentWithRefs[item.equipment] || [];
+        return {
+          equipment: item.equipment,
+          referenceIds: item.selectedReferenceIds,
+          referenceConditions: item.selectedReferenceIds.map((refId) => (
+            equipmentRefs.find((ref) => ref.id === refId)?.condition || 'Good'
+          )),
+          quantity: item.selectedReferenceIds.length,
+        };
       });
-      
+      const flattenedReferenceIds = savedEquipmentItems.flatMap((item) => item.referenceIds);
+      const flattenedReferenceConditions = savedEquipmentItems.flatMap((item) => item.referenceConditions);
+
       const borrowingData = {
         Name: form.fullname.trim(),
         fullname: form.fullname.trim(),
         contactNo: form.contactNo.trim(),
         facebookAccount: form.facebookAccount.trim(),
-        equipment: form.equipment,
+        equipment: savedEquipmentItems.map((item) => item.equipment).join(', '),
+        equipmentItems: savedEquipmentItems,
         quantity: calculatedQuantity,
         qty: calculatedQuantity,
-        referenceIds: form.selectedReferenceIds,
-        referenceConditions: referenceConditions,
-        borrowTimestamp: borrowTimestamp,
+        referenceIds: flattenedReferenceIds,
+        referenceConditions: flattenedReferenceConditions,
+        borrowTimestamp,
         endTime: form.endTime.trim(),
         returnedTimestamp: null,
         status: 'Out',
@@ -400,10 +467,11 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       setForm(EMPTY_FORM);
       setError('');
       setTimeErrors({ startTime: '', endTime: '' });
-      setToast({ message: `Borrowed ${calculatedQuantity} item(s) successfully`, type: 'success' });
     } catch (error) {
       console.error('Error creating borrowing:', error);
       setToast({ message: error.message || 'Failed to save borrowing record', type: 'error' });
+    } finally {
+      borrowingCreateInProgressRef.current = false;
     }
   };
 
@@ -467,7 +535,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   };
 
   const saveBorrowerDetails = async () => {
-    if (!selectedBorrowerDetails) {
+    if (!selectedBorrowerDetails || borrowerSaveInProgressRef.current) {
       return;
     }
 
@@ -477,6 +545,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       return;
     }
 
+    borrowerSaveInProgressRef.current = true;
     try {
       const updatedRecord = await updateBorrowingRecord(selectedBorrowerDetails.id || selectedBorrowerDetails._id, {
         Name: trimmedName,
@@ -497,10 +566,11 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       setSelectedBorrowerDetails(refreshedRecord);
       setIsEditingBorrower(false);
       setBorrowerEditForm({ fullname: '', contactNo: '', facebookAccount: '' });
-      setToast({ message: 'Borrower details updated successfully.', type: 'success' });
     } catch (error) {
       console.error('Error updating borrower details:', error);
       setToast({ message: error.message || 'Failed to update borrower details.', type: 'error' });
+    } finally {
+      borrowerSaveInProgressRef.current = false;
     }
   };
 
@@ -523,14 +593,13 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     }
   };
 
-  const availableRefIds = form.equipment ? getAvailableReferenceIds(form.equipment) : [];
   const uniqueEquipmentOptions = Array.from(
     new Map(
       allEquipment
         .filter(item => item?.name)
         .map(item => [item.name, item])
     ).values()
-  ).filter(item => getAvailableQuantity(item.name) > 0);
+  ).filter(item => getAvailableQuantity(item.name) > 0 || form.selectedEquipment.includes(item.name));
 
   // Keep the field in ISO format so the native date picker can display it correctly.
   const formattedDate = form.date || todayStr();
@@ -608,82 +677,123 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
           <div className="bw-form-group bw-form-group--full">
             <label className="bw-form-label">EQUIPMENT</label>
-            <select
-              className="bw-form-input bw-form-select"
-              value={form.equipment}
-              onChange={e => handleEquipmentChange(e.target.value)}
-            >
-              <option value="">Select Equipment...</option>
-              {uniqueEquipmentOptions.map(item => {
-                const available = getAvailableQuantity(item.name);
-                return available > 0 ? (
-                  <option key={item._id || item.name} value={item.name}>
-                    {item.name} (Available: {available})
-                  </option>
-                ) : null;
-              })}
-            </select>
-            {allEquipment.length === 0 && (
-              <p style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>
-                No equipment available in inventory. Please add equipment first.
-              </p>
-            )}
-          </div>
-
-          {form.equipment && (
-            <div className="bw-form-group bw-form-group--full">
-              <label className="bw-form-label">REFERENCE ID (Select one or more)</label>
-              <div className="bw-checkbox-group" style={{ 
-                maxHeight: '200px', 
-                overflowY: 'auto', 
-                border: '1px solid #ddd', 
-                borderRadius: '8px', 
-                padding: '10px',
-                backgroundColor: '#f9f9f9'
-              }}>
-                {availableRefIds.length === 0 ? (
-                  <p style={{ color: '#999', textAlign: 'center', margin: 0 }}>
-                    No available reference IDs for this equipment
-                  </p>
-                ) : (
-                  availableRefIds.map(ref => (
-                    <label key={ref.id} style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      cursor: 'pointer',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      transition: 'background-color 0.2s'
-                    }}>
-                      <input
-                        type="checkbox"
-                        value={ref.id}
-                        checked={form.selectedReferenceIds?.includes(ref.id) || false}
-                        onChange={() => handleReferenceIdToggle(ref.id)}
-                        style={{ marginRight: '8px' }}
-                      />
-                      <span>{ref.id}</span>
-                      <span style={{ 
-                        marginLeft: '8px', 
-                        fontSize: '11px', 
-                        padding: '2px 6px', 
-                        borderRadius: '12px',
-                        backgroundColor: ref.condition === 'Good' ? '#4caf50' : '#ff9800',
-                        color: 'white'
-                      }}>
-                        {ref.condition}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-              {form.selectedReferenceIds?.length > 0 && (
-                <p style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
-                  Selected: {form.selectedReferenceIds.length} item(s)
-                </p>
+            <div ref={equipmentDropdownRef} style={{ position: 'relative', zIndex: isEquipmentDropdownOpen ? 2 : 'auto' }}>
+              <button
+                type="button"
+                className="bw-form-input bw-form-select"
+                aria-expanded={isEquipmentDropdownOpen}
+                aria-controls="borrowing-equipment-options"
+                disabled={uniqueEquipmentOptions.length === 0}
+                onClick={() => setIsEquipmentDropdownOpen((isOpen) => !isOpen)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: '46px',
+                  textAlign: 'left',
+                  whiteSpace: 'normal',
+                }}
+              >
+                <span style={{ display: 'block', width: '100%', overflowWrap: 'anywhere' }}>
+                  {form.selectedEquipment.length > 0
+                    ? form.selectedEquipment.join(', ')
+                    : 'Select equipment'}
+                </span>
+              </button>
+              {isEquipmentDropdownOpen && (
+                <div
+                  id="borrowing-equipment-options"
+                  aria-label="Equipment options"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    left: 0,
+                    right: 0,
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    backgroundColor: '#fff',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.16)',
+                  }}
+                >
+                  {uniqueEquipmentOptions.map((item) => {
+                    const available = getAvailableQuantity(item.name);
+                    const checked = form.selectedEquipment.includes(item.name);
+                    return (
+                      <label key={item._id || item.name} style={{ display: 'block', marginBottom: '8px', cursor: 'pointer', color: '#1a1a1a' }}>
+                        <input
+                          type="checkbox"
+                          value={item.name}
+                          checked={checked}
+                          onChange={() => handleEquipmentChange(item.name)}
+                          style={{ marginRight: '8px' }}
+                        />
+                        <span>{item.name}</span>
+                        <span style={{ marginLeft: '8px', fontSize: '11px', color: '#666' }}>
+                          (Available: {available})
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          )}
+            {uniqueEquipmentOptions.length === 0 && (
+              <p style={{ color: '#999', fontSize: '12px', margin: 0 }}>
+                {allEquipment.length === 0
+                  ? 'No equipment available in inventory. Please add equipment first.'
+                  : 'No equipment is currently available to borrow.'}
+              </p>
+            )}
+            {form.selectedEquipment.map((equipmentName) => {
+              const availableRefIds = getAvailableReferenceIds(equipmentName);
+              const selectedReferenceIds = form.selectedReferenceIdsByEquipment[equipmentName] || [];
+              return (
+                <div key={equipmentName} style={{ marginTop: '12px' }}>
+                  <label className="bw-form-label">{equipmentName} REFERENCE IDs</label>
+                  <div className="bw-checkbox-group" style={{
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    backgroundColor: '#f9f9f9'
+                  }}>
+                    {availableRefIds.length === 0 ? (
+                      <p style={{ color: '#999', textAlign: 'center', margin: 0 }}>
+                        No available Reference IDs for this equipment.
+                      </p>
+                    ) : availableRefIds.map((ref) => (
+                      <label key={ref.id} style={{ display: 'block', marginBottom: '8px', cursor: 'pointer', padding: '4px' }}>
+                        <input
+                          type="checkbox"
+                          value={ref.id}
+                          checked={selectedReferenceIds.includes(ref.id)}
+                          onChange={() => handleReferenceIdToggle(equipmentName, ref.id)}
+                          style={{ marginRight: '8px' }}
+                        />
+                        <span>{ref.id}</span>
+                        <span style={{
+                          marginLeft: '8px',
+                          fontSize: '11px',
+                          padding: '2px 6px',
+                          borderRadius: '12px',
+                          backgroundColor: ref.condition === 'Good' ? '#4caf50' : '#ff9800',
+                          color: 'white'
+                        }}>
+                          {ref.condition}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>
+                    Quantity: {selectedReferenceIds.length}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="bw-form-row">
             <div className="bw-form-group">
@@ -803,7 +913,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               {filtered.map((record) => {
                 const conditionBadge = getConditionBadge(record.condition);
                 const isExpanded = expandedRows[record.id];
-                const hasMultipleItems = record.referenceIds && record.referenceIds.length > 1;
+                const recordEquipmentItems = getRecordEquipmentItems(record);
+                const hasMultipleItems = recordEquipmentItems.length > 1
+                  || (record.referenceIds && record.referenceIds.length > 1);
                 const isOngoing = isTransactionOngoing(record);
                 const isDeadlineApproaching = isBorrowingDeadlineApproaching(record, currentTime);
                 const status = String(record.status || '').trim().toLowerCase();
@@ -867,7 +979,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                             {isExpanded ? '▼' : '▶'}
                           </button>
                         )}
-                        {record.equipment}
+                        {recordEquipmentItems.map((item) => item.equipment).join(', ')}
                         {hasMultipleItems && (
                           <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>
                             ({record.referenceIds.length} items)
@@ -941,14 +1053,17 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                         {/* Reference ID values aligned under EQUIPMENT column */}
                         <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}>
                           <div style={{ padding: '8px 0' }}>
-                            {record.referenceIds.map((refId, idx) => (
-                              <div key={`ref-${idx}`} style={{ 
+                            {recordEquipmentItems.flatMap((item) => item.referenceIds.map((refId) => ({
+                              equipment: item.equipment,
+                              referenceId: refId,
+                            }))).map(({ equipment, referenceId }, idx) => (
+                              <div key={`ref-${idx}`} style={{
                                 padding: '6px 8px',
                                 borderBottom: idx < record.referenceIds.length - 1 ? '1px solid #eee' : 'none',
                                 fontFamily: 'monospace',
                                 fontSize: '12px'
                               }}>
-                                {refId}
+                                {recordEquipmentItems.length > 1 && <strong>{equipment}: </strong>}{referenceId}
                               </div>
                             ))}
                           </div>

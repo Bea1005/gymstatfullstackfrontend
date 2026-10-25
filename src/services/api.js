@@ -446,7 +446,6 @@ export const register = async (userData) => {
       email: userData.email,
       password: userData.password,
       department: userData.department || "",
-      yearLevel: userData.yearLevel || "",
       sport: userData.sport || "",
       sports: userData.sports || [userData.sport].filter(Boolean),
       id: userData.id,

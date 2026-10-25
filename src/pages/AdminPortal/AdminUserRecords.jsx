@@ -153,9 +153,11 @@ export default function AdminUserRecords() {
   const [scrForm,        setScrForm]        = useState({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
   const [scrPwShow,      setScrPwShow]      = useState(false);
   const [scrError,       setScrError]       = useState('');
+  const [creatingScreener, setCreatingScreener] = useState(false);
   const [toast,          setToast]          = useState({ message: '', type: 'success' });
   const [confirmDialog,  setConfirmDialog]  = useState({ open: false, message: '', action: null });
   const reportInProgressRef = useRef(false);
+  const screenerCreationInProgressRef = useRef(false);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
   const closeToast = () => setToast({ message: '', type: 'success' });
@@ -232,6 +234,7 @@ export default function AdminUserRecords() {
   /* ── Register screener ── */
   const registerScreener = async (e) => {
     e.preventDefault();
+    if (screenerCreationInProgressRef.current) return;
 
     const id = scrForm.id.trim();
     const email = scrForm.email.trim();
@@ -270,6 +273,8 @@ export default function AdminUserRecords() {
       return; 
     }
 
+    screenerCreationInProgressRef.current = true;
+    setCreatingScreener(true);
     try {
       const screenerData = {
         id,
@@ -284,11 +289,13 @@ export default function AdminUserRecords() {
       setScreeners(p => [newScreener, ...p]);
       setScrForm({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
       setScrError('');
-      showToast(`Screener account created for ${scrForm.email}`, 'success');
     } catch (error) {
       console.error('Error creating screener:', error);
       setScrError(error.message);
       showToast(error.message || 'Failed to create screener', 'error');
+    } finally {
+      screenerCreationInProgressRef.current = false;
+      setCreatingScreener(false);
     }
   };
 
@@ -454,7 +461,6 @@ export default function AdminUserRecords() {
 
       const date = new Date().toISOString().slice(0, 10);
       doc.save(`GYMSTAT_${role}_user_records_${date}.pdf`);
-      showToast('PDF report downloaded successfully', 'success');
     } catch (error) {
       console.error('Failed to generate user records PDF:', error);
       showToast(error?.message || 'Failed to generate user records PDF', 'error');
@@ -745,7 +751,7 @@ export default function AdminUserRecords() {
               </div>
               {scrError && <p className="ur-reg-error">{scrError}</p>}
               <div className="ur-reg-row ur-reg-row--center">
-                <button type="submit" className="ur-reg-submit">Register</button>
+                <button type="submit" className="ur-reg-submit" disabled={creatingScreener}>Register</button>
               </div>
             </form>
           </div>

@@ -1,22 +1,20 @@
-const DOCUMENT_KEYWORDS = /\b(documents?|files?|downloads?|availability)\b/i;
-
 export const getRequirementNotificationUnread = (notification) => {
   const reviewedAt = new Date(notification.reviewedAt || notification.updatedAt || 0).getTime();
   const readAt = new Date(notification.notificationReadAt || 0).getTime();
   return !readAt || readAt < reviewedAt;
 };
 
-const getAnnouncementCategory = (announcement) => {
-  if (String(announcement.type || '').toLowerCase() === 'requirement' || announcement.relatedRequirementId) {
-    return 'requirement';
-  }
-
-  const announcementText = `${announcement.title || ''} ${announcement.description || ''}`;
-  return DOCUMENT_KEYWORDS.test(announcementText) ? 'document' : 'other';
-};
-
-export const buildStudentNotifications = (requirements, announcements) => {
+export const buildStudentNotifications = (requirements, announcements, publishedRequirements = []) => {
   const notificationsById = new Map();
+  const publishedRequirementIds = new Set(
+    (Array.isArray(publishedRequirements) ? publishedRequirements : [])
+      .filter((requirement) => (
+        requirement
+        && requirement.status === 'published'
+        && requirement.isActive !== false
+      ))
+      .map((requirement) => String(requirement._id || requirement.id))
+  );
 
   (Array.isArray(requirements) ? requirements : [])
     .filter((requirement) => ['approved', 'rejected'].includes(String(requirement.status || '').toLowerCase()))
@@ -24,25 +22,36 @@ export const buildStudentNotifications = (requirements, announcements) => {
       const id = requirement._id || requirement.id;
       if (!id) return;
 
-      notificationsById.set(`requirement:${id}`, {
+      notificationsById.set('requirement:' + id, {
         ...requirement,
-        notificationId: `requirement:${id}`,
+        notificationId: 'requirement:' + id,
         notificationSource: 'requirement',
-        notificationCategory: 'requirement',
+        notificationCategory: 'document',
         notificationDate: requirement.reviewedAt || requirement.updatedAt || requirement.createdAt,
         notificationUnread: getRequirementNotificationUnread(requirement)
       });
     });
 
   (Array.isArray(announcements) ? announcements : []).forEach((announcement) => {
+    const relatedRequirementId = announcement.relatedRequirementId?._id
+      || announcement.relatedRequirementId;
+    if (
+      String(announcement.type || '').toLowerCase() !== 'requirement'
+      || announcement.isActive === false
+      || !relatedRequirementId
+      || !publishedRequirementIds.has(String(relatedRequirementId))
+    ) {
+      return;
+    }
+
     const id = announcement._id || announcement.id;
     if (!id) return;
 
-    notificationsById.set(`announcement:${id}`, {
+    notificationsById.set('announcement:' + id, {
       ...announcement,
-      notificationId: `announcement:${id}`,
+      notificationId: 'announcement:' + id,
       notificationSource: 'announcement',
-      notificationCategory: getAnnouncementCategory(announcement),
+      notificationCategory: 'requirement',
       notificationDate: announcement.date || announcement.updatedAt || announcement.createdAt,
       notificationUnread: announcement.isRead === false
     });
@@ -54,9 +63,9 @@ export const buildStudentNotifications = (requirements, announcements) => {
 };
 
 export const filterStudentNotifications = (notifications, category) => (
-  category === 'all'
-    ? notifications
-    : notifications.filter((notification) => notification.notificationCategory === category)
+  notifications.filter((notification) => (
+    category === 'all' || notification.notificationCategory === category
+  ))
 );
 
 export const getUnreadStudentNotificationCount = (notifications) => (

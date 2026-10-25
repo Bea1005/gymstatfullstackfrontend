@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import Icon from '../../components/Icon';
 import * as api from '../../services/api';
@@ -12,6 +12,7 @@ const StudentSettings = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const passwordSaveInProgressRef = useRef(false);
   const [settingsError, setSettingsError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
 
@@ -37,6 +38,7 @@ const StudentSettings = () => {
   };
 
   const handleSavePassword = async () => {
+    if (passwordSaveInProgressRef.current) return;
     if (!currentPassword || !newPassword || !confirmPassword) {
       setSettingsError('Please enter and confirm your new password.');
       setToast({ message: 'Please enter and confirm your new password.', type: 'error' });
@@ -53,17 +55,18 @@ const StudentSettings = () => {
       return;
     }
 
+    passwordSaveInProgressRef.current = true;
     setSavingPassword(true);
     setSettingsError('');
     try {
       await api.updateProfile({ currentPassword, newPassword });
       closePasswordModal();
-      setToast({ message: 'Password changed successfully.', type: 'success' });
     } catch (error) {
       const message = error.message || 'Unable to change password. Please try again.';
       setSettingsError(message);
       setToast({ message, type: 'error' });
     } finally {
+      passwordSaveInProgressRef.current = false;
       setSavingPassword(false);
     }
   };

@@ -44,6 +44,8 @@ const AdminRequirements = () => {
   const [archivingCustomRequirement, setArchivingCustomRequirement] = useState(false);
   const savingCustomRequirementRef = useRef(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const downloadInProgressRef = useRef(false);
+  const uploadInProgressRef = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [activeRequirementsTab, setActiveRequirementsTab] = useState('upload');
@@ -169,8 +171,9 @@ const AdminRequirements = () => {
   };
 
   const handleDownloadFromModal = async () => {
-    if (!selectedRequirement?._id || isDownloading) return;
+    if (!selectedRequirement?._id || downloadInProgressRef.current) return;
 
+    downloadInProgressRef.current = true;
     try {
       setIsDownloading(true);
       const fallbackFilename = selectedRequirement.file?.originalname
@@ -183,6 +186,7 @@ const AdminRequirements = () => {
       console.error('Failed to download requirement file:', error);
       showToast(error?.message || 'Unable to download this requirement file.', 'error');
     } finally {
+      downloadInProgressRef.current = false;
       setIsDownloading(false);
     }
   };
@@ -296,7 +300,6 @@ const AdminRequirements = () => {
         if (response?.success === false) {
           throw new Error(response.message || 'Failed to update custom requirement.');
         }
-        showToast(`Requirement "${title}" updated.`, 'success');
       } else {
         const createResponse = await createRequirement(requirementData);
         if (!createResponse?.success) {
@@ -311,7 +314,6 @@ const AdminRequirements = () => {
         if (!publishResponse?.success) {
           throw new Error(publishResponse?.message || 'Failed to publish custom requirement.');
         }
-        showToast(`Requirement "${title}" added for students.`, 'success');
       }
 
       resetCustomRequirementForm();
@@ -379,19 +381,24 @@ const AdminRequirements = () => {
 
   const handleUpload = async (e) => {
     e.preventDefault();
+    if (uploadInProgressRef.current) return;
 
-    const publishEntries = requirementFileEntries
-      .map((fileEntry, index) => ({
-        title: (requirementNameEntries[index]?.value || '').trim() || fileEntry.file?.name?.replace(/\.[^/.]+$/, '') || '',
-        file: fileEntry.file
-      }))
-      .filter((entry) => entry.file);
+    const entryCount = Math.max(requirementNameEntries.length, requirementFileEntries.length);
+    const publishEntries = Array.from({ length: entryCount }, (_, index) => ({
+      title: (requirementNameEntries[index]?.value || '').trim(),
+      file: requirementFileEntries[index]?.file || null
+    })).filter((entry) => entry.title || entry.file);
 
     if (publishEntries.length === 0) {
-      showToast('Please select at least one document to publish.', 'error');
+      showToast('Enter at least one requirement name to publish.', 'error');
+      return;
+    }
+    if (publishEntries.some((entry) => !entry.title)) {
+      showToast('Enter a requirement name for every requirement you want to publish.', 'error');
       return;
     }
 
+    uploadInProgressRef.current = true;
     try {
       setLoading(true);
 
@@ -399,11 +406,11 @@ const AdminRequirements = () => {
       dueDateObj.setDate(dueDateObj.getDate() + 30);
 
       for (const entry of publishEntries) {
-        const requirementTitle = entry.title.trim() || entry.file.name.replace(/\.[^/.]+$/, '');
+        const requirementTitle = entry.title;
         const requirementData = {
           title: requirementTitle,
           description: `Parent/Guardian consent for ${requirementTitle}`,
-          type: 'consent',
+          type: entry.file ? 'consent' : 'other',
           sport: 'General',
           dueDate: dueDateObj.toISOString(),
           priority: 'medium',
@@ -412,7 +419,7 @@ const AdminRequirements = () => {
           targetStudents: 'all'
         };
 
-        const createResponse = await createRequirement(requirementData, entry.file);
+        const createResponse = await createRequirement(requirementData, entry.file || undefined);
         if (!createResponse.success) {
           throw new Error(createResponse.message || 'Failed to create requirement');
         }
@@ -428,7 +435,6 @@ const AdminRequirements = () => {
         }
       }
 
-      showToast(`Successfully published ${publishEntries.length} requirement${publishEntries.length > 1 ? 's' : ''}.`, 'success');
       await loadRequirements();
 
       setRequirementNameEntries([{ id: createEntryId(), value: '' }]);
@@ -443,6 +449,7 @@ const AdminRequirements = () => {
       console.error('Error uploading requirements:', error);
       showToast(error.message || 'Failed to upload requirement', 'error');
     } finally {
+      uploadInProgressRef.current = false;
       setLoading(false);
     }
   };
@@ -508,7 +515,7 @@ const AdminRequirements = () => {
               <div className="requirement-name-section">
                 {requirementNameEntries.map((entry) => (
                   <div key={entry.id} className="input-field-group requirement-name-field">
-                    <label>Requirement Name</label>
+                    <label>Requirement Name *</label>
                     <div className="requirement-name-inline-row">
                       <input 
                         type="text" 
@@ -542,7 +549,7 @@ const AdminRequirements = () => {
               <div className="requirement-file-actions">
                 {requirementFileEntries.map((entry) => (
                   <div key={entry.id} className="input-field-group requirement-file-field">
-                    <label>Select Document</label>
+                    <label>Select Document (Optional)</label>
                     <div className="custom-file-upload">
                       <input 
                         type="file" 

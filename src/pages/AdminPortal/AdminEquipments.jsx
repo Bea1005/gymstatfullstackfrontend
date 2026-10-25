@@ -52,6 +52,9 @@ export default function AdminEquipments({ onUpdateInventory }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [expandedItems, setExpandedItems] = useState({});
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const equipmentConditionUpdatesRef = useRef(new Set());
+  const reportInProgressRef = useRef(false);
 
   const formatReferenceIdDisplay = (referenceIds = []) => {
     const uniqueIds = [...new Set(referenceIds.filter(Boolean))];
@@ -325,7 +328,6 @@ export default function AdminEquipments({ onUpdateInventory }) {
       setForm({ name: '', type: '', quantity: '1' });
       setGeneratedReferenceIds([]);
       setError('');
-      showToast(response?.message || 'Equipment registered successfully.', 'success');
 
       if (onUpdateInventory) {
         onUpdateInventory(updatedItems);
@@ -383,6 +385,9 @@ export default function AdminEquipments({ onUpdateInventory }) {
   };
 
   const updateItemCondition = async (equipmentId, referenceId, newCondition) => {
+    const updateKey = `${equipmentId}:${referenceId}`;
+    if (equipmentConditionUpdatesRef.current.has(updateKey)) return;
+    equipmentConditionUpdatesRef.current.add(updateKey);
     try {
       const equipmentToUpdate = items.find((item) => item.id === equipmentId);
       if (!equipmentToUpdate) {
@@ -399,14 +404,18 @@ export default function AdminEquipments({ onUpdateInventory }) {
         throw new Error('The server did not confirm saving the selected equipment condition.');
       }
       await loadEquipmentFromServer();
-      showToast(`Condition updated to ${newCondition}`, 'success');
     } catch (updateError) {
       console.error('Failed to update equipment condition:', updateError);
       showToast(updateError.message || 'Unable to update condition in the database.', 'error');
+    } finally {
+      equipmentConditionUpdatesRef.current.delete(updateKey);
     }
   };
 
   const generateEquipmentReport = async (filter) => {
+    if (reportInProgressRef.current) return;
+    reportInProgressRef.current = true;
+    setIsGeneratingReport(true);
     try {
       const { jsPDF } = await import('jspdf');
       const { autoTable } = await import('jspdf-autotable');
@@ -509,11 +518,13 @@ export default function AdminEquipments({ onUpdateInventory }) {
       const fileName = `Equipment_Masterlist_${filter}_${generatedAt.toISOString().slice(0, 10)}.pdf`;
       doc.save(fileName);
 
-      setToast({ message: 'Report downloaded successfully!', type: 'success' });
       setShowDownloadModal(false);
     } catch (err) {
       console.error('Failed to generate report:', err);
       setToast({ message: 'Failed to generate report. Please try again.', type: 'error' });
+    } finally {
+      reportInProgressRef.current = false;
+      setIsGeneratingReport(false);
     }
   };
 
@@ -542,24 +553,28 @@ export default function AdminEquipments({ onUpdateInventory }) {
               <button
                 className="eq-modal-option-btn"
                 onClick={() => generateEquipmentReport('all')}
+                disabled={isGeneratingReport}
               >
-                All Equipment
+                {isGeneratingReport ? 'Generating...' : 'All Equipment'}
               </button>
               <button
                 className="eq-modal-option-btn"
                 onClick={() => generateEquipmentReport('Good')}
+                disabled={isGeneratingReport}
               >
                 Good
               </button>
               <button
                 className="eq-modal-option-btn"
                 onClick={() => generateEquipmentReport('Damaged')}
+                disabled={isGeneratingReport}
               >
                 Damaged
               </button>
               <button
                 className="eq-modal-option-btn"
                 onClick={() => generateEquipmentReport('Lost')}
+                disabled={isGeneratingReport}
               >
                 Lost
               </button>
@@ -567,6 +582,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
             <button
               className="eq-modal-close-btn"
               onClick={() => setShowDownloadModal(false)}
+              disabled={isGeneratingReport}
             >
               Cancel
             </button>

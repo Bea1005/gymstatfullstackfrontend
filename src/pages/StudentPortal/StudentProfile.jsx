@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as api from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
@@ -48,6 +48,7 @@ const StudentProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const saveInProgressRef = useRef(false);
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -95,6 +96,7 @@ const StudentProfile = () => {
 
   const handleSave = async (event) => {
     event.preventDefault();
+    if (saveInProgressRef.current) return;
     const currentSports = (form.sports || [])
       .map((sport) => String(sport || "").trim());
     const selectedSports = currentSports.filter(Boolean);
@@ -108,6 +110,7 @@ const StudentProfile = () => {
       return;
     }
 
+    saveInProgressRef.current = true;
     setSaving(true);
 
     try {
@@ -150,10 +153,10 @@ const StudentProfile = () => {
       localStorage.setItem("user", JSON.stringify(updatedUser));
       sessionStorage.setItem("user", JSON.stringify(updatedUser));
       setIsEditing(false);
-      notify("success", "Profile updated", "Your profile changes were saved successfully.");
     } catch (error) {
       notify("error", "Unable to update profile", error.message || "Please try again.");
     } finally {
+      saveInProgressRef.current = false;
       setSaving(false);
     }
   };

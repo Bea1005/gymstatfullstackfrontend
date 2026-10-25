@@ -7,7 +7,7 @@ import {
 } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import Icon from "../../components/Icon";
-import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
 import {
   PREFERRED_CATEGORY_OPTIONS,
   REGISTRATION_CATEGORIES,
@@ -27,7 +27,6 @@ export default function RegisterPage() {
     email: "",
     password: "",
     department: "",
-    yearLevel: "",
     sport: "",
     id: ""  // ✅ Changed from studentId to id
   });
@@ -129,11 +128,6 @@ export default function RegisterPage() {
       return;
     }
 
-    if (registrationRole === "student" && !form.yearLevel) {
-      notify("warning", "Missing Information", "Please select your year level.");
-      return;
-    }
-    
     // ✅ ID and Email are both required for all users
     if (!form.fullname || !form.email || !form.password || !confirmPassword || !form.id) {
       notify("warning", "Missing Information", "Please fill in all required fields.");
@@ -470,24 +464,6 @@ export default function RegisterPage() {
               </select>
               {departmentError && <p className="password-match-error">{departmentError}</p>}
             </div>
-
-            {registrationRole === "student" && (
-              <div className="login-field">
-                <label htmlFor="registration-year-level">Year Level</label>
-                <select
-                  id="registration-year-level"
-                  className="login-input"
-                  value={form.yearLevel}
-                  onChange={set("yearLevel")}
-                  required
-                >
-                  <option value="">Select Year Level</option>
-                  {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
-                    <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             <div className="login-field">
               <label htmlFor="registration-main-category">Sports</label>
