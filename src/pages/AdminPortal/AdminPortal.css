@@ -115,8 +115,34 @@
   gap: 20px;
   flex-wrap: wrap;
 }
+.admin-requirements-page-header { flex-wrap: nowrap; gap: 12px; }
+.admin-requirements-page-header .header-text { min-width: 0; overflow-wrap: anywhere; }
 .header-text { flex: 1; min-width: 220px; }
 .header-actions { display: flex; align-items: center; gap: 12px; }
+.admin-requirements-header-actions { display: flex; align-items: center; margin-left: auto; }
+.admin-requirements-archive-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
+  border: 1px solid #6b0000;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b0000;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.admin-requirements-archive-btn:hover,
+.admin-requirements-archive-btn:focus-visible,
+.admin-requirements-archive-btn[aria-pressed="true"] {
+  background: #6b0000;
+  border-color: #6b0000;
+  color: #fff;
+}
+.admin-requirements-archive-btn:focus-visible { outline: 2px solid #d4a017; outline-offset: 2px; }
 .request-badge-btn {
   display: inline-flex;
   align-items: center;
@@ -1005,6 +1031,29 @@
 .requirement-box-content p  { font-size: 12px; color: #888; margin-bottom: 8px; }
 .requirement-box-meta { display: flex; gap: 12px; font-size: 11px; color: #999; flex-wrap: wrap; }
 .meta-date { display: flex; align-items: center; gap: 3px; }
+.admin-requirements-archived-panel .requirements-boxes-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(350px, 100%), 1fr));
+}
+.admin-requirements-archived-box .requirement-box-content { min-width: 0; }
+.admin-requirements-restore-btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #6b0000;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b0000;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.admin-requirements-restore-btn:hover:not(:disabled),
+.admin-requirements-restore-btn:focus-visible {
+  border-color: #d4a017;
+  background: #fff8e1;
+  color: #6b0000;
+}
+.admin-requirements-restore-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .requirement-box-arrow { color: #7b1e1e; font-size: 24px; opacity: 0.5; transition: opacity 0.3s ease; }
 .requirement-box:hover .requirement-box-arrow { opacity: 1; }
 .arrow-icon { font-size: 24px; }

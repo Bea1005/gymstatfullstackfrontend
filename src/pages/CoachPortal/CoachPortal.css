@@ -940,6 +940,17 @@
   gap: 8px;
 }
 
+.coach-category-option-group {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-category-option-heading {
+  margin: 4px 0 0;
+  color: var(--form-maroon);
+  font-size: 12px;
+}
+
 .coach-category-option {
   width: 100%;
   padding: 9px 12px;

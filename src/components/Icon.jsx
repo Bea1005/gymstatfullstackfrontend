@@ -47,12 +47,14 @@ import {
   Filter,
   ArrowLeft,
   ArrowRight,
+  Archive,
   RotateCcw,
   CircleAlert,
 } from 'lucide-react';
 
 const icons = {
   alert: AlertTriangle,
+  archive: Archive,
   arrowLeft: ArrowLeft,
   arrowRight: ArrowRight,
   barChart: BarChart3,

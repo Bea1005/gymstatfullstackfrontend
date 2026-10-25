@@ -6,6 +6,30 @@
   margin-bottom:12px;
   flex-wrap:wrap;
 }
+.docviewer-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.docviewer-navigation button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d4d4d4;
+  border-radius: 50%;
+  background: #fff;
+  color: #333;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.docviewer-navigation button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.docviewer-navigation span {
+  font-weight: 700;
+}
 .doc-zoom-btn{
   background:var(--primary-maroon, #6b0000);
   color:#ffd600;

@@ -15,7 +15,8 @@ export const REGISTRATION_CATEGORIES = [
         sports: [
           'Basketball (Men)',
           'Basketball (Women)',
-          'Basketball 3x3 (M/W)',
+          'Basketball 3x3 (Men)',
+          'Basketball 3x3 (Women)',
           'Volleyball (Men)',
           'Volleyball (Women)',
           'Beach Volleyball (Men)',
@@ -36,7 +37,8 @@ export const REGISTRATION_CATEGORIES = [
           'Lawn Tennis (Women)',
           'Table Tennis (Men)',
           'Table Tennis (Women)',
-          'Pickleball (Men/Women)',
+          'Pickleball (Men)',
+          'Pickleball (Women)',
         ],
       },
       {
@@ -112,7 +114,7 @@ export const REGISTRATION_CATEGORIES = [
       'Short and Sweet Play (Musical)',
       'Radio Drama',
       'Pandalawahang Pag-arte (Duo Acting)',
-      'Additional Role: Technical – Sound/Music (Handles sound effects and music during the play to help set the mood of the Scenes)',
+      'Additional Role: Technical – Sound/Music ',
     ],
   },
   {

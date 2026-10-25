@@ -18,6 +18,27 @@ const parseRequirementScope = (sport) => String(sport || '')
   .map((value) => value.trim())
   .filter(Boolean);
 
+const formatPublishedRequirement = (requirement) => ({
+  id: requirement._id,
+  title: requirement.title,
+  description: requirement.description,
+  fileName: requirement.fileName || 'document.pdf',
+  date: new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(new Date(requirement.publishedAt || requirement.createdAt)),
+  fileType: requirement.fileType || 'PDF',
+  fileSize: requirement.fileSize || 'N/A',
+  isRequired: requirement.isRequired || true,
+  content: requirement.content || '',
+  fileUrl: requirement.fileUrl,
+  requirementType: requirement.requirementType,
+  _id: requirement._id,
+  status: requirement.status,
+  file: requirement.file
+});
+
 const AdminRequirements = () => {
   const createEntryId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
   const [toast, setToast] = useState({ message: '', type: 'success' });
@@ -30,6 +51,7 @@ const AdminRequirements = () => {
   const [loading, setLoading] = useState(false);
   const [uploadedReqs, setUploadedReqs] = useState([]);
   const [customRequirements, setCustomRequirements] = useState([]);
+  const [archivedRequirements, setArchivedRequirements] = useState([]);
   const [customRequirementForm, setCustomRequirementForm] = useState({
     title: '',
     description: '',
@@ -42,13 +64,16 @@ const AdminRequirements = () => {
   const [publishingCustomRequirementId, setPublishingCustomRequirementId] = useState('');
   const [customRequirementToArchive, setCustomRequirementToArchive] = useState(null);
   const [archivingCustomRequirement, setArchivingCustomRequirement] = useState(false);
+  const [restoringRequirementIds, setRestoringRequirementIds] = useState([]);
   const savingCustomRequirementRef = useRef(false);
+  const restoringRequirementIdsRef = useRef(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
   const downloadInProgressRef = useRef(false);
   const uploadInProgressRef = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [activeRequirementsTab, setActiveRequirementsTab] = useState('upload');
+  const [showArchivedRequirements, setShowArchivedRequirements] = useState(false);
 
   const handleRequirementsTabKeyDown = (event) => {
     const nextTab = {
@@ -62,44 +87,25 @@ const AdminRequirements = () => {
 
     event.preventDefault();
     setActiveRequirementsTab(nextTab);
+    setShowArchivedRequirements(false);
     document.getElementById(`admin-requirements-${nextTab}-tab`)?.focus();
   };
 
   const loadRequirements = async () => {
     try {
       setLoading(true);
-      const [response, customResponse] = await Promise.all([
-        getAllRequirements({ status: 'published' }),
-        getAllRequirements({ type: 'other' })
-      ]);
+      const response = await getAllRequirements();
+      const requirements = Array.isArray(response.data) ? response.data : [];
       
       // Transform MongoDB data to match component format
-      const formattedReqs = (response.data || [])
-        .filter((req) => !(req.type === 'other' && !req.file?.filename && !req.file?.path))
-        .map(req => ({
-        id: req._id,
-        title: req.title,
-        description: req.description,
-        fileName: req.fileName || 'document.pdf',
-        date: new Intl.DateTimeFormat('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
-          year: 'numeric' 
-        }).format(new Date(req.publishedAt || req.createdAt)),
-        fileType: req.fileType || 'PDF',
-        fileSize: req.fileSize || 'N/A',
-        isRequired: req.isRequired || true,
-        content: req.content || '',
-        fileUrl: req.fileUrl,
-        requirementType: req.requirementType,
-        // Store the original MongoDB data
-        _id: req._id,
-        status: req.status,
-        file: req.file
-        }));
+      const formattedReqs = requirements
+        .filter((req) => req.status === 'published'
+          && req.isActive !== false
+          && !(req.type === 'other' && !req.file?.filename && !req.file?.path))
+        .map(formatPublishedRequirement);
       
       setUploadedReqs(formattedReqs);
-      setCustomRequirements((customResponse.data || [])
+      setCustomRequirements(requirements
         .filter((requirement) => (
           requirement.type === 'other'
           && !requirement.file?.filename
@@ -110,6 +116,11 @@ const AdminRequirements = () => {
           id: requirement._id,
           isArchived: requirement.status === 'archived' || requirement.isActive === false
         })));
+      setArchivedRequirements([...new Map(
+        requirements
+            .filter((requirement) => requirement.status === 'archived' && requirement.publishedAt)
+          .map((requirement) => [String(requirement._id || requirement.id), requirement])
+      ).values()]);
     } catch (error) {
       console.error('Error loading requirements:', error);
       showToast('Failed to load requirements from database', 'error');
@@ -379,6 +390,57 @@ const AdminRequirements = () => {
     }
   };
 
+  const restoreRequirement = async (requirement) => {
+    const requirementId = String(requirement._id || requirement.id);
+    if (!requirementId || restoringRequirementIdsRef.current.has(requirementId)) return;
+
+    restoringRequirementIdsRef.current.add(requirementId);
+    setRestoringRequirementIds((current) => [...current, requirementId]);
+
+    try {
+      const response = await updateAdminRequirement(requirementId, {
+        status: 'published',
+        isActive: true
+      });
+      if (!response?.success || !response.data) {
+        throw new Error(response?.message || 'Failed to restore requirement.');
+      }
+
+      const restoredRequirement = response.data;
+      const restoredId = String(restoredRequirement._id || restoredRequirement.id || requirementId);
+      const isCustomRequirement = restoredRequirement.type === 'other'
+        && !restoredRequirement.file?.filename
+        && !restoredRequirement.file?.path;
+
+      setArchivedRequirements((current) => current.filter(
+        (item) => String(item._id || item.id) !== restoredId
+      ));
+      if (isCustomRequirement) {
+        setCustomRequirements((current) => [
+          ...current.filter((item) => String(item._id || item.id) !== restoredId),
+          { ...restoredRequirement, id: restoredId, isArchived: false }
+        ]);
+        setActiveRequirementsTab('student');
+      } else {
+        setUploadedReqs((current) => [
+          ...current.filter((item) => String(item._id || item.id) !== restoredId),
+          formatPublishedRequirement(restoredRequirement)
+        ]);
+        setActiveRequirementsTab('upload');
+      }
+
+      setShowArchivedRequirements(false);
+      broadcastRequirementUpdate();
+      showToast(`Requirement "${restoredRequirement.title}" restored.`, 'success');
+    } catch (error) {
+      console.error('Failed to restore requirement:', error);
+      showToast(error.message || 'Unable to restore requirement.', 'error');
+    } finally {
+      restoringRequirementIdsRef.current.delete(requirementId);
+      setRestoringRequirementIds((current) => current.filter((id) => id !== requirementId));
+    }
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
     if (uploadInProgressRef.current) return;
@@ -457,10 +519,23 @@ const AdminRequirements = () => {
   return (
     <div className="admin-page-content">
       {/* HEADER SECTION */}
-      <div className="page-header-container">
+      <div className="page-header-container admin-requirements-page-header">
         <div className="header-text">
           <h1 className="main-title">Requirements Management</h1>
           <p className="sub-title-desc">Publish downloadable Parent Consent forms for athletes</p>
+        </div>
+        <div className="admin-requirements-header-actions">
+          <button
+            type="button"
+            className="admin-requirements-archive-btn"
+            onClick={() => setShowArchivedRequirements((current) => !current)}
+            aria-label={showArchivedRequirements ? 'Return to Requirements' : 'Archived Requirements'}
+            aria-expanded={showArchivedRequirements}
+            aria-controls="admin-requirements-archived-panel"
+            title="Archived Requirements"
+          >
+            <Icon name="archive" size={19} />
+          </button>
         </div>
       </div>
 
@@ -475,7 +550,10 @@ const AdminRequirements = () => {
           aria-selected={activeRequirementsTab === 'upload'}
           tabIndex={activeRequirementsTab === 'upload' ? 0 : -1}
           aria-controls="admin-requirements-upload-panel admin-requirements-list-panel"
-          onClick={() => setActiveRequirementsTab('upload')}
+          onClick={() => {
+            setActiveRequirementsTab('upload');
+            setShowArchivedRequirements(false);
+          }}
           onKeyDown={handleRequirementsTabKeyDown}
         >
           Upload Requirements
@@ -488,7 +566,10 @@ const AdminRequirements = () => {
           aria-selected={activeRequirementsTab === 'student'}
           tabIndex={activeRequirementsTab === 'student' ? 0 : -1}
           aria-controls="admin-requirements-student-panel"
-          onClick={() => setActiveRequirementsTab('student')}
+          onClick={() => {
+            setActiveRequirementsTab('student');
+            setShowArchivedRequirements(false);
+          }}
           onKeyDown={handleRequirementsTabKeyDown}
         >
           Add Student Requirements
@@ -500,7 +581,7 @@ const AdminRequirements = () => {
         className="admin-requirements-panel"
         role="tabpanel"
         aria-labelledby="admin-requirements-upload-tab"
-        hidden={activeRequirementsTab !== 'upload'}
+        hidden={showArchivedRequirements || activeRequirementsTab !== 'upload'}
       >
       {/* UPLOAD PANEL */}
       <div className="upload-section-panel">
@@ -598,7 +679,7 @@ const AdminRequirements = () => {
         className="admin-requirements-panel"
         role="tabpanel"
         aria-labelledby="admin-requirements-student-tab"
-        hidden={activeRequirementsTab !== 'student'}
+        hidden={showArchivedRequirements || activeRequirementsTab !== 'student'}
       >
       <section className="admin-requirements-list">
         <div className="admin-reqs-header">
@@ -843,7 +924,7 @@ const AdminRequirements = () => {
         className="admin-requirements-panel"
         role="tabpanel"
         aria-labelledby="admin-requirements-upload-tab"
-        hidden={activeRequirementsTab !== 'upload'}
+        hidden={showArchivedRequirements || activeRequirementsTab !== 'upload'}
       >
       {/* ACTIVE REQUIREMENTS - Same design as Student Requirements */}
       <div className="admin-requirements-list">
@@ -886,6 +967,84 @@ const AdminRequirements = () => {
           <p><Icon name="info" size={16} /> <strong>Note:</strong> These Parent Consent forms are visible to all students. They can download and submit accomplished forms.</p>
         </div>
       </div>
+      </div>
+
+      <div
+        id="admin-requirements-archived-panel"
+        className="admin-requirements-panel admin-requirements-archived-panel"
+        role="tabpanel"
+        hidden={!showArchivedRequirements}
+      >
+        <section className="admin-requirements-list">
+          <div className="admin-reqs-header">
+            <h3><Icon name="folder" size={20} /> Archived Requirements</h3>
+            <p>Archived requirements are hidden from students. Their records and submissions are preserved.</p>
+          </div>
+
+          {archivedRequirements.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
+              <p><Icon name="folder" size={18} /> No archived requirements</p>
+            </div>
+          ) : (
+            <div className="requirements-boxes-grid">
+              {archivedRequirements.map((requirement) => {
+                const isEditableCustomRequirement = requirement.type === 'other'
+                  && !requirement.file?.filename
+                  && !requirement.file?.path;
+
+                return (
+                  <div key={requirement._id || requirement.id} className="requirement-box admin-requirements-archived-box">
+                    <div className="requirement-box-icon">
+                      <Icon name="document" />
+                    </div>
+                    <div className="requirement-box-content">
+                      <h4>{requirement.title}</h4>
+                      {requirement.description && <p>{requirement.description}</p>}
+                      {requirement.instructions && <p><strong>Submission instructions:</strong> {requirement.instructions}</p>}
+                      <div className="requirement-box-meta">
+                        <span className="meta-date">
+                          Archived · {requirement.targetStudents === 'sport-specific'
+                            ? parseRequirementScope(requirement.sport).join(', ')
+                            : 'All Sports'}
+                          {requirement.file?.originalname ? ` · ${requirement.file.originalname}` : ''}
+                        </span>
+                      </div>
+                      <div className="requirement-entry-actions btn-group" style={{ marginTop: '10px' }}>
+                        {isEditableCustomRequirement && (
+                          <button
+                            type="button"
+                            className="requirement-action-btn requirement-action-btn--secondary"
+                            onClick={() => {
+                              handleEditCustomRequirement({
+                                ...requirement,
+                                _id: requirement._id || requirement.id,
+                                isArchived: true
+                              });
+                              setActiveRequirementsTab('student');
+                              setShowArchivedRequirements(false);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="requirement-action-btn requirement-action-btn--secondary admin-requirements-restore-btn"
+                      onClick={() => restoreRequirement(requirement)}
+                      disabled={restoringRequirementIds.includes(String(requirement._id || requirement.id))}
+                    >
+                      {restoringRequirementIds.includes(String(requirement._id || requirement.id))
+                        ? 'Restoring...'
+                        : 'Restore'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Updated Modal Popup with Delete Button */}

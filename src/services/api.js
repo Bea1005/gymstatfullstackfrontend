@@ -843,9 +843,9 @@ export const reviewSubmission = async (submissionId, reviewData) => {
 
 // ========== STUDENT REQUIREMENT SUBMISSION ENDPOINTS ==========
 
-// Upload a new requirement file
+// Upload one requirement submission containing one file or multiple photos.
 export const uploadRequirement = async (
-  file,
+  files,
   requirementType,
   sport = 'General',
   participationType = 'Intrams',
@@ -854,7 +854,8 @@ export const uploadRequirement = async (
   replacementSubmissionId = ''
 ) => {
   const formData = new FormData();
-  formData.append('file', file);
+  const selectedFiles = Array.isArray(files) ? files : [files];
+  selectedFiles.forEach((file) => formData.append('file', file));
   formData.append('requirementType', requirementType);
   formData.append('sport', sport);
   formData.append('participationType', participationType);

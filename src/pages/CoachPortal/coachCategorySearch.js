@@ -4,6 +4,8 @@ import { SPORT_OPTIONS } from '../../constants/studentRegistrationOptions.js';
 const normalizeSearchValue = (value) => String(value || '').toLocaleLowerCase();
 const normalizeSportKey = (value) => normalizeSearchValue(value).replace(/[^a-z0-9]/g, '');
 const sportSearchTermsByOption = new Map();
+const eventOptions = new Set(REGISTRATION_CATEGORIES.flatMap(({ events = [] }) => events));
+const categoryOptionCollator = new Intl.Collator('en', { sensitivity: 'base' });
 
 REGISTRATION_CATEGORIES.forEach(({ name, events = [], subcategories = [] }) => {
   events.forEach((event) => {
@@ -28,3 +30,12 @@ export const filterCoachCategoryOptions = (query) => {
     return searchableTerms.some((term) => normalizeSearchValue(term).includes(normalizedQuery));
   });
 };
+
+export const groupAndSortCoachCategoryOptions = (options) => ({
+  sports: options
+    .filter((option) => !eventOptions.has(option))
+    .sort(categoryOptionCollator.compare),
+  events: options
+    .filter((option) => eventOptions.has(option))
+    .sort(categoryOptionCollator.compare),
+});

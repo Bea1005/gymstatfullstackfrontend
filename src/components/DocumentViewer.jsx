@@ -2,7 +2,18 @@ import React, { useState } from 'react';
 import './DocumentViewer.css';
 import ConfirmModal from './ConfirmModal';
 
-export default function DocumentViewer({ isOpen, src, fileName, fileType, onClose }) {
+export default function DocumentViewer({
+  isOpen,
+  src,
+  fileName,
+  fileType,
+  onClose,
+  navigationVisible = false,
+  navigationLabel = '',
+  navigationLoading = false,
+  onPrevious,
+  onNext
+}) {
   const [scale, setScale] = useState(1);
 
   if (!isOpen) return null;
@@ -22,6 +33,14 @@ export default function DocumentViewer({ isOpen, src, fileName, fileType, onClos
         <div className="doc-zoom-level">{Math.round(scale * 100)}%</div>
         <button type="button" className="doc-zoom-btn" onClick={zoomIn}>+</button>
       </div>
+
+      {navigationVisible && (
+        <div className="docviewer-navigation" aria-label="Requirement photo navigation">
+          <button type="button" onClick={onPrevious} disabled={navigationLoading} aria-label="Previous photo">&lt;</button>
+          <span>{navigationLabel}</span>
+          <button type="button" onClick={onNext} disabled={navigationLoading} aria-label="Next photo">&gt;</button>
+        </div>
+      )}
 
       <div className="docviewer-body">
         {isPdf ? (

@@ -51,7 +51,7 @@ export default function StudentRequirements() {
   const [selectedSport, setSelectedSport] = useState('General');
   const participationType = 'Intrams';
   const [confirmUpload, setConfirmUpload] = useState(null);
-  const [confirmPreviewUrl, setConfirmPreviewUrl] = useState('');
+  const [confirmPhotoIndex, setConfirmPhotoIndex] = useState(0);
   const [previewModal, setPreviewModal] = useState(null);
   const [requirementsAssuranceAccepted, setRequirementsAssuranceAccepted] = useState(false);
 
@@ -184,13 +184,22 @@ export default function StudentRequirements() {
     }));
 
   const handleFileChange = (requirementId, e, extra = {}) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const previewUrl = URL.createObjectURL(file);
-      setUploadedFiles(prev => ({ ...prev, [requirementId]: file }));
-      setConfirmUpload({ requirementId, file, previewUrl, ...extra });
-      setConfirmPreviewUrl(previewUrl);
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    if (files.length > 10) {
+      notify('error', 'Too Many Photos', 'Select no more than 10 files for one requirement.');
+      return;
     }
+    if (files.length > 1 && files.some((file) => !file.type.startsWith('image/'))) {
+      notify('error', 'Photos Only', 'Select photo files only when uploading more than one file.');
+      return;
+    }
+
+    const previewUrls = files.map((file) => URL.createObjectURL(file));
+    setUploadedFiles((previous) => ({ ...previous, [requirementId]: files }));
+    setConfirmUpload({ requirementId, files, previewUrls, ...extra });
+    setConfirmPhotoIndex(0);
   };
 
   const triggerFileInput = (requirementId) => {
@@ -198,9 +207,7 @@ export default function StudentRequirements() {
   };
 
   const handleUndoUpload = () => {
-    if (confirmUpload?.previewUrl) {
-      URL.revokeObjectURL(confirmUpload.previewUrl);
-    }
+    (confirmUpload?.previewUrls || []).forEach((url) => URL.revokeObjectURL(url));
     if (confirmUpload?.requirementId) {
       setUploadedFiles(prev => {
         const next = { ...prev };
@@ -209,12 +216,12 @@ export default function StudentRequirements() {
       });
     }
     setConfirmUpload(null);
-    setConfirmPreviewUrl('');
+    setConfirmPhotoIndex(0);
   };
 
   const handleConfirmUpload = async () => {
-    if (!confirmUpload?.requirementId || !confirmUpload?.file) return;
-    await handleSubmitFile(confirmUpload.requirementId, confirmUpload.file);
+    if (!confirmUpload?.requirementId || !confirmUpload?.files?.length) return;
+    await handleSubmitFile(confirmUpload.requirementId, confirmUpload.files);
   };
 
   const notifyRequirementUpdate = () => {
@@ -228,7 +235,7 @@ export default function StudentRequirements() {
 
   const handleSubmitFile = async (requirementId, fileOverride) => {
     if (uploadInProgressRef.current) return;
-    const file = fileOverride || uploadedFiles[requirementId];
+    const files = fileOverride || uploadedFiles[requirementId];
     const uploadedRequirementType = confirmUpload?.requirementType || requirementId;
     const uploadedCustomRequirementId = confirmUpload?.customRequirementId || '';
     const uploadedCustomRequirementLabel = confirmUpload?.customRequirementLabel || '';
@@ -236,7 +243,7 @@ export default function StudentRequirements() {
       ? getSubmissionForRequirement('psa')
       : null;
 
-    if (!file) {
+    if (!files?.length) {
       notify('error', 'File Required', 'Please select a file first');
       return;
     }
@@ -252,7 +259,7 @@ export default function StudentRequirements() {
 
       // Check if this is a re-upload of a rejected requirement
       await api.uploadRequirement(
-        file,
+        files,
         uploadedRequirementType,
         selectedSport,
         participationType,
@@ -267,11 +274,9 @@ export default function StudentRequirements() {
         delete newFiles[requirementId];
         return newFiles;
       });
-      if (confirmUpload?.previewUrl) {
-        URL.revokeObjectURL(confirmUpload.previewUrl);
-      }
+      (confirmUpload?.previewUrls || []).forEach((url) => URL.revokeObjectURL(url));
       setConfirmUpload(null);
-      setConfirmPreviewUrl('');
+      setConfirmPhotoIndex(0);
       setRequirementsAssuranceAccepted(false);
 
       await fetchData();
@@ -283,8 +288,17 @@ export default function StudentRequirements() {
     }
   };
 
+  const publishedRequirementTypes = new Set(
+    publishedRequirements
+      .filter((requirement) => (
+        requirement?.status === 'published'
+        && requirement.isActive !== false
+        && typeof requirement.type === 'string'
+      ))
+      .map((requirement) => requirement.type.trim().toLowerCase())
+  );
   const visibleRequirementCards = [
-    ...requirementTypes,
+    ...requirementTypes.filter(({ id }) => publishedRequirementTypes.has(id)),
     ...adminCustomRequirementCards
   ];
 
@@ -455,13 +469,22 @@ export default function StudentRequirements() {
               <button className="modal-close-btn" onClick={handleUndoUpload}><Icon name="close" /></button>
             </div>
             <div className="detail-modal-body">
-              <p style={{ marginBottom: '1rem' }}>Please review the selected file before it is submitted for screening.</p>
-              {confirmPreviewUrl && (
+              <p style={{ marginBottom: '1rem' }}>
+                Please review {confirmUpload.files.length === 1 ? 'the selected file' : `all ${confirmUpload.files.length} selected photos`} before submitting for screening.
+              </p>
+              {confirmUpload.previewUrls[confirmPhotoIndex] && (
                 <div style={{ marginBottom: '1rem', border: '1px solid #ddd', borderRadius: '8px', padding: '0.75rem', background: '#f9f9f9' }}>
-                  {confirmUpload.file?.type?.startsWith('image/') ? (
-                    <img src={confirmPreviewUrl} alt="Uploaded preview" style={{ maxWidth: '100%', maxHeight: '220px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+                  {confirmUpload.files[confirmPhotoIndex]?.type?.startsWith('image/') ? (
+                    <img src={confirmUpload.previewUrls[confirmPhotoIndex]} alt={confirmUpload.files[confirmPhotoIndex].name} style={{ maxWidth: '100%', maxHeight: '220px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
                   ) : (
-                    <iframe title="uploaded-file-preview" src={confirmPreviewUrl} style={{ width: '100%', height: '260px', border: 'none' }} />
+                    <iframe title="uploaded-file-preview" src={confirmUpload.previewUrls[confirmPhotoIndex]} style={{ width: '100%', height: '260px', border: 'none' }} />
+                  )}
+                  {confirmUpload.files.length > 1 && (
+                    <div className="requirement-photo-navigation" aria-label="Selected photo navigation">
+                      <button type="button" onClick={() => setConfirmPhotoIndex((index) => (index - 1 + confirmUpload.files.length) % confirmUpload.files.length)} aria-label="Previous photo">&lt;</button>
+                      <span>{confirmPhotoIndex + 1} / {confirmUpload.files.length}</span>
+                      <button type="button" onClick={() => setConfirmPhotoIndex((index) => (index + 1) % confirmUpload.files.length)} aria-label="Next photo">&gt;</button>
+                    </div>
                   )}
                 </div>
               )}
@@ -799,124 +822,131 @@ export default function StudentRequirements() {
                 const isPsaApproved = req.id === 'psa' && submissionStatus === 'approved';
                 const rejectionReason = submission?.remarks || submission?.feedback || 'The screener marked this file as rejected. Please upload a corrected copy.';
                 const rejectionDate = submission?.reviewedAt ? new Date(submission.reviewedAt).toLocaleDateString() : 'Recently';
-                const savedFileName = uploadedFiles[req.id]?.name || submission?.fileName || req.savedFileName || '';
+                const selectedFiles = uploadedFiles[req.id] || [];
+                const savedFileName = selectedFiles.length > 1
+                  ? `${selectedFiles.length} photos selected`
+                  : selectedFiles[0]?.name || submission?.fileName || req.savedFileName || '';
 
                 return (
                   <div key={req.id} className={`upload-card${req.id === 'cor' ? ' upload-card--optional' : ''} ${isRejected ? 'rejected-state' : ''}`}>
                     {req.id === 'cor' && <span className="optional-requirement-label">OPTIONAL</span>}
-                    <div className="upload-icon"><Icon name={req.icon} /></div>
-                    <span className="upload-label">{req.label}</span>
-                    {isCustomCard && req.description && <p className="upload-description">{req.description}</p>}
-                    {isCustomCard && req.instructions && (
-                      <p className="upload-description"><strong>Instructions:</strong> {req.instructions}</p>
-                    )}
+                    <div className="upload-card-content">
+                      <div className="upload-icon"><Icon name={req.icon} /></div>
+                      <span className="upload-label">{req.label}</span>
+                      {isCustomCard && req.description && <p className="upload-description">{req.description}</p>}
+                      {isCustomCard && req.instructions && (
+                        <p className="upload-description"><strong>Instructions:</strong> {req.instructions}</p>
+                      )}
 
-                    <input
-                      type="file"
-                      id={`input-${req.id}`}
-                      className="hidden-file-input"
-                      onChange={(e) => handleFileChange(req.id, e, isCustomCard ? {
-                        requirementType: 'other',
-                        customRequirementId: cardCustomRequirementId,
-                        customRequirementLabel: cardCustomRequirementLabel,
-                      } : {})}
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
-                      disabled={uploading || (locked && !isPsaApproved && !isApprovedMedicalOrCor)}
-                    />
-                    {isPsaApproved ? (
-                      <button className="upload-action-btn" disabled>
-                        ✓ Approved
-                      </button>
-                    ) : isApprovedMedicalOrCor ? (
-                      <>
+                      <input
+                        type="file"
+                        id={`input-${req.id}`}
+                        className="hidden-file-input"
+                        multiple
+                        onChange={(e) => handleFileChange(req.id, e, isCustomCard ? {
+                          requirementType: 'other',
+                          customRequirementId: cardCustomRequirementId,
+                          customRequirementLabel: cardCustomRequirementLabel,
+                        } : {})}
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
+                        disabled={uploading || (locked && !isPsaApproved && !isApprovedMedicalOrCor)}
+                      />
+                      {isRejected && (
+                        <div className="rejection-note">
+                          <span className="rejection-pill"><Icon name="xCircle" size={16} /> Rejected</span>
+                          <p className="rejection-reason"><strong>Reason:</strong> {rejectionReason}</p>
+                          <p className="rejection-detail" style={{ fontSize: '0.75rem', color: '#6b1c1c', marginTop: '0.35rem' }}>
+                            Rejected on {rejectionDate}
+                          </p>
+                        </div>
+                      )}
+                      {savedFileName && (
+                        <div className="file-preview">
+                          <div className="file-name" title={savedFileName}>
+                            <Icon name="paperclip" size={16} /> {savedFileName}
+                          </div>
+                          {!uploadedFiles[req.id] && submission && (
+                            <>
+                              <button
+                                type="button"
+                                className="submit-single-btn"
+                                onClick={() => handleViewSubmission(submission)}
+                                disabled={loading || uploading}
+                                aria-label={`View ${savedFileName}`}
+                              >
+                                <Icon name="eye" size={16} /> View
+                              </button>
+                              <button
+                                type="button"
+                                className="student-requirement-download-btn"
+                                onClick={() => handleDownloadSubmission(submission)}
+                                disabled={loading || uploading}
+                                aria-label={`Download ${savedFileName}`}
+                                title="Download document"
+                              >
+                                <Icon name="download" size={18} />
+                              </button>
+                              <button
+                                type="button"
+                                className="submit-single-btn"
+                                onClick={() => triggerFileInput(req.id)}
+                                disabled={uploading}
+                              >
+                                {uploading ? 'Uploading...' : 'Replace File'}
+                              </button>
+                            </>
+                          )}
+                          {selectedFiles.length > 0 && (
+                            <button
+                              className="submit-single-btn"
+                              onClick={() => {
+                                const previewUrls = selectedFiles.map((file) => URL.createObjectURL(file));
+                                setConfirmUpload({
+                                  requirementId: req.id,
+                                  files: selectedFiles,
+                                  previewUrls,
+                                  requirementType: isCustomCard ? 'other' : req.id,
+                                  customRequirementId: isCustomCard ? cardCustomRequirementId : '',
+                                  customRequirementLabel: isCustomCard ? cardCustomRequirementLabel : '',
+                                });
+                                setConfirmPhotoIndex(0);
+                              }}
+                              disabled={uploading}
+                            >
+                              {uploading ? 'Uploading...' : 'Review & Confirm'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="upload-card-actions">
+                      {isPsaApproved ? (
                         <button className="upload-action-btn" disabled>
                           ✓ Approved
                         </button>
+                      ) : isApprovedMedicalOrCor ? (
+                        <>
+                          <button className="upload-action-btn" disabled>
+                            ✓ Approved
+                          </button>
+                          <button
+                            className="upload-action-btn"
+                            onClick={() => triggerFileInput(req.id)}
+                            disabled={uploading}
+                          >
+                            Replace / Update
+                          </button>
+                        </>
+                      ) : (
                         <button
                           className="upload-action-btn"
                           onClick={() => triggerFileInput(req.id)}
-                          disabled={uploading}
+                          disabled={uploading || (locked && !canReplaceReusable)}
                         >
-                          Replace / Update
+                          {locked && !canReplaceReusable ? '✓ Approved' : canReplaceReusable ? 'Replace / Update' : isSubmitted ? (isRejected ? 'Re-upload' : 'Submitted') : 'Upload'}
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        className="upload-action-btn"
-                        onClick={() => triggerFileInput(req.id)}
-                        disabled={uploading || (locked && !canReplaceReusable)}
-                      >
-                        {locked && !canReplaceReusable ? '✓ Approved' : canReplaceReusable ? 'Replace / Update' : isSubmitted ? (isRejected ? 'Re-upload' : 'Submitted') : 'Upload'}
-                      </button>
-                    )}
-                    {isRejected && (
-                      <div className="rejection-note">
-                        <span className="rejection-pill"><Icon name="xCircle" size={16} /> Rejected</span>
-                        <p className="rejection-reason"><strong>Reason:</strong> {rejectionReason}</p>
-                        <p className="rejection-detail" style={{ fontSize: '0.75rem', color: '#6b1c1c', marginTop: '0.35rem' }}>
-                          Rejected on {rejectionDate}
-                        </p>
-                      </div>
-                    )}
-                    {savedFileName && (
-                      <div className="file-preview">
-                        <div className="file-name" title={savedFileName}>
-                          <Icon name="paperclip" size={16} /> {savedFileName}
-                        </div>
-                        {!uploadedFiles[req.id] && submission && (
-                          <>
-                            <button
-                              type="button"
-                              className="submit-single-btn"
-                              onClick={() => handleViewSubmission(submission)}
-                              disabled={loading || uploading}
-                              aria-label={`View ${savedFileName}`}
-                            >
-                              <Icon name="eye" size={16} /> View
-                            </button>
-                            <button
-                              type="button"
-                              className="student-requirement-download-btn"
-                              onClick={() => handleDownloadSubmission(submission)}
-                              disabled={loading || uploading}
-                              aria-label={`Download ${savedFileName}`}
-                              title="Download document"
-                            >
-                              <Icon name="download" size={18} />
-                            </button>
-                            <button
-                              type="button"
-                              className="submit-single-btn"
-                              onClick={() => triggerFileInput(req.id)}
-                              disabled={uploading}
-                            >
-                              {uploading ? 'Uploading...' : 'Replace File'}
-                            </button>
-                          </>
-                        )}
-                        {uploadedFiles[req.id] && (
-                          <button
-                            className="submit-single-btn"
-                            onClick={() => {
-                              const file = uploadedFiles[req.id];
-                              const previewUrl = URL.createObjectURL(file);
-                              setConfirmUpload({
-                                requirementId: req.id,
-                                file,
-                                previewUrl,
-                                requirementType: isCustomCard ? 'other' : req.id,
-                                customRequirementId: isCustomCard ? cardCustomRequirementId : '',
-                                customRequirementLabel: isCustomCard ? cardCustomRequirementLabel : '',
-                              });
-                              setConfirmPreviewUrl(previewUrl);
-                            }}
-                            disabled={uploading}
-                          >
-                            {uploading ? 'Uploading...' : 'Review & Confirm'}
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })}

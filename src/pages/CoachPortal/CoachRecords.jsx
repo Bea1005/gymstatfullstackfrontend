@@ -16,7 +16,8 @@ import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import disqualifiedStamp from '../../assets/GymstatStamps/Disqualified.png';
 import noDocumentsStamp from '../../assets/GymstatStamps/NoDocuments.png';
 import * as api from '../../services/api';
-import { filterCoachCategoryOptions } from './coachCategorySearch';
+import { filterCoachCategoryOptions, groupAndSortCoachCategoryOptions } from './coachCategorySearch';
+import { getMissingCoachUploadLabels } from './coachStudentUploadStatus';
 import './CoachPortal.css';
 
 const CAMPUS_OPTIONS = ['', 'Boac Main', 'Santa Cruz', 'Gasan', 'Torrijos'];
@@ -163,6 +164,7 @@ export default function CoachRecord() {
   const [showSportDropdown, setShowSportDropdown] = useState(false);
   const [sportCategorySearch, setSportCategorySearch] = useState('');
   const filteredSportOptions = filterCoachCategoryOptions(sportCategorySearch);
+  const sortedSportOptionGroups = groupAndSortCoachCategoryOptions(filteredSportOptions);
 
   const closeSportCategoryModal = () => {
     setShowSportDropdown(false);
@@ -387,10 +389,14 @@ export default function CoachRecord() {
       const studentId = String(athlete.userId || athlete.id);
       try {
         const requirementState = await api.getCoachStudentRequirements(studentId);
-        if (!Array.isArray(requirementState?.missingDocuments)) {
+        if (!Array.isArray(requirementState?.publishedRequirements)
+          || !Array.isArray(requirementState?.uploads)) {
           throw new Error('Invalid student requirement response');
         }
-        const missingRequirements = requirementState.missingDocuments;
+        const missingRequirements = getMissingCoachUploadLabels(
+          requirementState.publishedRequirements,
+          requirementState.uploads
+        );
         const photo = missingRequirements.length ? '' : await loadStudentPhoto(athlete.profilePhotoUrl);
         return [studentId, { photo, missingRequirements, requirementsLoading: false, requirementsError: '' }];
       } catch (error) {
@@ -1634,11 +1640,28 @@ export default function CoachRecord() {
             </div>
             <div className="coach-category-options">
               {filteredSportOptions.length ? (
-                filteredSportOptions.map((sport) => (
-                  <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
-                    {sport}
-                  </button>
-                ))
+                <>
+                  {sortedSportOptionGroups.sports.length > 0 && (
+                    <section className="coach-category-option-group">
+                      <h4 className="coach-category-option-heading">Sports</h4>
+                      {sortedSportOptionGroups.sports.map((sport) => (
+                        <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
+                          {sport}
+                        </button>
+                      ))}
+                    </section>
+                  )}
+                  {sortedSportOptionGroups.events.length > 0 && (
+                    <section className="coach-category-option-group">
+                      <h4 className="coach-category-option-heading">Events</h4>
+                      {sortedSportOptionGroups.events.map((sport) => (
+                        <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
+                          {sport}
+                        </button>
+                      ))}
+                    </section>
+                  )}
+                </>
               ) : (
                 <p className="coach-category-search-empty">No matching categories or events found</p>
               )}

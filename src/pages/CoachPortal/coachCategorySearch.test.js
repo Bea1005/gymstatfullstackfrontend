@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { filterCoachCategoryOptions } from './coachCategorySearch.js';
+import { filterCoachCategoryOptions, groupAndSortCoachCategoryOptions } from './coachCategorySearch.js';
 import { SPORT_OPTIONS } from '../../constants/studentRegistrationOptions.js';
 
 test('category search filters specific sports and events case-insensitively', () => {
@@ -18,4 +18,13 @@ test('category search filters specific sports and events case-insensitively', ()
 test('clearing the query restores all existing options and unmatched queries are empty', () => {
   assert.deepEqual(filterCoachCategoryOptions(''), SPORT_OPTIONS);
   assert.deepEqual(filterCoachCategoryOptions('no matching event'), []);
+});
+
+test('sports and event options are sorted separately without changing the option set', () => {
+  const groups = groupAndSortCoachCategoryOptions(filterCoachCategoryOptions(''));
+  const collator = new Intl.Collator('en', { sensitivity: 'base' });
+
+  assert.deepEqual(groups.sports, [...groups.sports].sort(collator.compare));
+  assert.deepEqual(groups.events, [...groups.events].sort(collator.compare));
+  assert.deepEqual([...groups.sports, ...groups.events].sort(), [...SPORT_OPTIONS].sort());
 });
