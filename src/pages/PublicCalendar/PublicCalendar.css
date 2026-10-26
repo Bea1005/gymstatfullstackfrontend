@@ -166,17 +166,13 @@
 .pc-day--booked .pc-event-chip {
   border: 1px solid rgba(0,0,0,0.06);
 }
-.pc-day--booked .pc-event-chip--approved {
-  background: #e8f5e9;
-  border-color: #2e7d32;
+.pc-day--booked .pc-event-chip.pc-event-chip--external-client {
+  background: #fff;
+  border: 2px solid #d4a017;
 }
-.pc-day--booked .pc-event-chip--pending {
-  background: #fff3e0;
-  border-color: #ef6c00;
-}
-.pc-day--booked .pc-event-chip--rejected {
-  background: #fdecea;
-  border-color: #c62828;
+.pc-day--booked .pc-event-chip.pc-event-chip--internal-client {
+  background: #fff;
+  border: 2px solid #7b1e1e;
 }
 .pc-day--booked .pc-event-chip__name {
   color: #1f2937;
@@ -191,13 +187,11 @@
 .pc-day--booked .pc-event-chip__time {
   color: #374151;
 }
-.pc-day--booked .pc-event-chip--approved .pc-event-chip__source,
-.pc-day--booked .pc-event-chip--approved .pc-event-chip__time {
-  color: #2e7d32;
-}
-.pc-day--booked .pc-event-chip--pending .pc-event-chip__source,
-.pc-day--booked .pc-event-chip--pending .pc-event-chip__time {
-  color: #ef6c00;
+.pc-day--booked .pc-event-chip.pc-event-chip--external-client .pc-event-chip__name,
+.pc-day--booked .pc-event-chip.pc-event-chip--external-client .pc-event-chip__time,
+.pc-day--booked .pc-event-chip.pc-event-chip--internal-client .pc-event-chip__name,
+.pc-day--booked .pc-event-chip.pc-event-chip--internal-client .pc-event-chip__time {
+  color: #374151;
 }
 
 .pc-day__num {
@@ -211,7 +205,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  background: #c8e6c9;
+  background: #fff;
   border-radius: 4px;
   padding: 4px 6px;
   margin-bottom: 4px;
@@ -222,7 +216,7 @@
 .pc-event-chip__name {
   font-size: 11px;
   font-weight: 700;
-  color: #1b5e20;
+  color: #5a1010;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -230,7 +224,7 @@
 }
 .pc-event-chip__time {
   font-size: 9px;
-  color: #2e7d32;
+  color: #5a1010;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -257,6 +251,18 @@
 .pc-legend__dot--rejected { background: #c62828; }
 .pc-legend__dot--today    { background: #ffdc00; border: 1px solid #ccc; }
 .pc-legend__hint          { color: #999; font-size: 12px; margin-left: 6px; }
+
+.calendar-legend {
+  margin-top: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #666;
+}
+.legend-dot { width: 12px; height: 12px; background: #4caf50; border-radius: 50%; }
+.legend-dot--internal { background: #7b1e1e; }
+.legend-dot--public { background: #d4a017; }
 
 /* ══════════════════════════════════════
    MODAL BACKDROP
@@ -429,6 +435,11 @@
 }
 .pcm-input--err { border-color: #e53935; }
 .pcm-input--err:focus { box-shadow: 0 0 0 3px rgba(229,57,53,0.15); }
+.pcm-client-type {
+  color: var(--pcm-maroon);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 /* Keep native date controls minimal and aligned with the form palette. */
 .pcm-input[type="date"]::-webkit-calendar-picker-indicator {
@@ -517,6 +528,10 @@
 .pc-event-chip:hover {
   transform: scale(1.02);
   background: #eee7e7;
+}
+.pc-event-chip--external-client:hover,
+.pc-event-chip--internal-client:hover {
+  background: #fff;
 }
 
 .pc-event-chip__name {

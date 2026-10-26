@@ -1,4 +1,4 @@
-import { useState, useEffect, useEffectEvent } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
 import TimeInput from '../../components/TimeInput';
@@ -14,6 +14,16 @@ const parseCalendarTime = (value) => {
   const hour = Number(match[1]);
   if (hour < 1 || hour > 12) return null;
   return ((hour % 12) + (match[3].toUpperCase() === 'PM' ? 12 : 0)) * 60 + Number(match[2]);
+};
+
+const getClientTypeFromEmail = (email) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const domainSeparator = normalizedEmail.lastIndexOf('@');
+  if (domainSeparator < 0 || domainSeparator === normalizedEmail.length - 1) return '';
+
+  return normalizedEmail.slice(domainSeparator + 1) === 'marsu.edu.ph'
+    ? 'Internal Client'
+    : 'External Client';
 };
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -34,6 +44,7 @@ const normalizeCalendarSchedules = (schedules) => schedules.map((schedule) => ({
   prepDays: Number(schedule.prepDays || 0) || 0,
   status: schedule.status,
   fromRequest: schedule.fromRequest || null,
+  clientType: ['Internal Client', 'External Client'].includes(schedule.clientType) ? schedule.clientType : null,
 }));
 
 const normalizeCalendarRequests = (requests) => requests.map((request) => ({
@@ -45,6 +56,7 @@ const normalizeCalendarRequests = (requests) => requests.map((request) => ({
   endTime: request.endTime,
   prepDays: Number(request.prepDays || 0) || 0,
   status: 'pending',
+  clientType: ['Internal Client', 'External Client'].includes(request.clientType) ? request.clientType : null,
 }));
 
 const readPublicCalendarCache = (year, month) => {
@@ -98,6 +110,7 @@ export default function PublicCalendar() {
   const [scheduleRequests, setScheduleRequests] = useState(initialCalendarCache?.scheduleRequests || []);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitInProgressRef = useRef(false);
   const [fileLoadPending, setFileLoadPending] = useState(false);
 
   // Modal
@@ -121,6 +134,7 @@ export default function PublicCalendar() {
     endTime: '12:00 PM',
     prepDays: '',
   });
+  const requesterClientType = getClientTypeFromEmail(form.requesterEmail);
 
   useEffect(() => {
     let isCurrentMonth = true;
@@ -192,13 +206,6 @@ export default function PublicCalendar() {
       return 'public';
     }
     return 'internal';
-  };
-
-  const normalizePublicEventStatus = (event) => {
-    const status = String(event?.status || '').toLowerCase();
-    if (status === 'pending') return 'pending';
-    if (status === 'rejected') return 'rejected';
-    return 'approved';
   };
 
   const pendingRequestEntriesForDate = (dateStr) => {
@@ -488,7 +495,7 @@ export default function PublicCalendar() {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (form.requesterEmail && !emailRegex.test(form.requesterEmail))
+    if (form.requesterEmail && !emailRegex.test(form.requesterEmail.trim()))
       e.requesterEmail = 'Please enter a valid email address.';
 
     const cleanedPhone = form.requesterPhone.replace(/[\s()-]/g, '');
@@ -515,6 +522,8 @@ export default function PublicCalendar() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (submitInProgressRef.current) return;
+
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
@@ -523,14 +532,16 @@ export default function PublicCalendar() {
       return;
     }
 
+    submitInProgressRef.current = true;
     setIsSubmitting(true);
     try {
       const prepDaysValue = form.prepDays ? parseInt(form.prepDays) : 0;
+      const requesterEmail = form.requesterEmail.trim().toLowerCase();
       
       const requestData = {
         eventName: form.eventName,
         requesterName: form.requesterName,
-        requesterEmail: form.requesterEmail,
+        requesterEmail,
         requesterPhone: form.requesterPhone,
         purpose: form.purpose,
         details: form.details,
@@ -554,6 +565,7 @@ export default function PublicCalendar() {
         endTime: requestData.endTime,
         prepDays: prepDaysValue,
         status: 'pending',
+        clientType: response.data?.clientType || requesterClientType,
       };
       setScheduleRequests((currentRequests) => [...currentRequests, newRequest]);
 
@@ -572,6 +584,7 @@ export default function PublicCalendar() {
       const msg = error?.message || String(error) || 'Failed to submit request. Please try again.';
       setNotification({ message: msg, type: 'error' });
     } finally {
+      submitInProgressRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -597,12 +610,19 @@ export default function PublicCalendar() {
         {hasEvents && (
           <div className={`pc-event-list ${evs.length >= 3 ? 'pc-event-list--scroll' : ''}`}>
             {evs.map((ev, i) => {
-              const statusClass = `pc-event-chip--${normalizePublicEventStatus(ev)}`;
+              const clientType = ['Internal Client', 'External Client'].includes(ev.clientType)
+                ? ev.clientType
+                : normalizeScheduleSource(ev) === 'public'
+                  ? 'External Client'
+                  : 'Internal Client';
+              const clientTypeClass = clientType === 'Internal Client'
+                ? 'pc-event-chip--internal-client'
+                : 'pc-event-chip--external-client';
               const chipTitle = normalizeScheduleSource(ev) === 'rejected'
                 ? `${ev.event}\n${ev.rejectionReason || 'Rejected by admin'}\n${ev.startTime} - ${ev.endTime}`
                 : `${ev.event}\n${ev.startTime} - ${ev.endTime}`;
               return (
-                <div key={i} className={`pc-event-chip ${statusClass}`} title={chipTitle}>
+                <div key={i} className={`pc-event-chip ${clientTypeClass}`} title={chipTitle}>
                   <span className="pc-event-chip__name">{ev.event.length > 18 ? ev.event.slice(0, 16)+'…' : ev.event}</span>
                   <span className="pc-event-chip__time">{ev.startTime} – {ev.endTime}</span>
                 </div>
@@ -660,8 +680,12 @@ export default function PublicCalendar() {
           </div>
           <div className="pc-cal-grid">{cells}</div>
           <div className="pc-legend">
+            <div className="calendar-legend">
+              <span className="legend-dot legend-dot--internal"></span> Internal
+              <span className="legend-dot legend-dot--public" style={{ marginLeft: 10 }}></span> External
+            </div>
             <span className="pc-legend__hint" role={isCalendarLoading ? 'status' : undefined}>
-              {isCalendarLoading ? 'Updating schedule data...' : '· Click a day to request a schedule for an open time slot'}
+              {isCalendarLoading ? 'Updating schedule data...' : 'Click a day to request a schedule for an open time slot'}
             </span>
           </div>
         </div>
@@ -709,7 +733,7 @@ export default function PublicCalendar() {
                 <button className="pcm-btn pcm-btn--primary" onClick={() => setModal(false)}>Close</button>
               </div>
             ) : (
-              <form className="pcm-form" onSubmit={submit} noValidate>
+              <form className="pcm-form" onSubmit={submit} noValidate target="_self">
                 {/* Event Name */}
                 <div className="pcm-group pcm-group--full">
                   <label className="pcm-label">Event Name *</label>
@@ -745,6 +769,9 @@ export default function PublicCalendar() {
                       onChange={e => set('requesterEmail', e.target.value)}
                     />
                     {errors.requesterEmail && <span className="pcm-err">{errors.requesterEmail}</span>}
+                    <span className="pcm-client-type" aria-live="polite">
+                      Client Type: {requesterClientType || 'Enter an email address'}
+                    </span>
                   </div>
                 </div>
 

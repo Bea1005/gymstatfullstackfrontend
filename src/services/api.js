@@ -236,7 +236,10 @@ const isAdminRequirementMutation = (endpoint, method) => {
   if (isSafeMethod(normalizedMethod)) return false;
 
   const pathname = String(endpoint || '').split('?')[0];
-  return pathname === '/requirements'
+  return pathname === '/schedules'
+    || /^\/schedules\/[a-f\d]{24}$/i.test(pathname)
+    || /^\/schedule-requests\/[a-f\d]{24}$/i.test(pathname)
+    || pathname === '/requirements'
     || /^\/requirements\/[a-f\d]{24}(?:\/publish)?$/i.test(pathname)
     || /^\/requirements\/submissions\/[a-f\d]{24}\/review$/i.test(pathname);
 };
@@ -1226,6 +1229,7 @@ export const updateScheduleRequest = async (id, updateData) => {
   return apiRequest(`/schedule-requests/${id}`, {
     method: 'PUT',
     body: JSON.stringify(updateData),
+    timeoutMs: 45000,
   });
 };
 

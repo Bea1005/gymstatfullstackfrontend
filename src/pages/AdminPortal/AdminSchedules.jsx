@@ -63,16 +63,27 @@ const AdminSchedules = () => {
   const calendarDownloadInProgressRef = useRef(false);
   const attachmentDownloadInProgressRef = useRef(false);
   const [confirmCancelId, setConfirmCancelId] = useState(null);
-  const [scheduleRequests, setScheduleRequests] = useState([]);
+  const REQUESTS_KEY = 'gymstatScheduleRequests';
+  const [scheduleRequests, setScheduleRequests] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch (error) {
+      console.warn('Unable to load locally saved schedule requests:', error);
+      return [];
+    }
+  });
+  const scheduleRequestsLoadPromiseRef = useRef(null);
   const [requestPanelOpen, setRequestPanelOpen] = useState(false);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [previewFile, setPreviewFile] = useState({ url: '', name: '', type: '' });
   const APPROVED_KEY = 'gymstatApprovedSchedules';
-  const REQUESTS_KEY = 'gymstatScheduleRequests';
   const [confirmAction, setConfirmAction] = useState(null);
   const [selectedRejectReason, setSelectedRejectReason] = useState('');
   const [additionalRejectReason, setAdditionalRejectReason] = useState('');
   const [deletingRequestId, setDeletingRequestId] = useState(null);
+  const [processingRequestAction, setProcessingRequestAction] = useState(false);
+  const requestActionInProgressRef = useRef(false);
   const REJECTION_REASONS = [
     'Schedule conflict',
     'Gymnasium already reserved',
@@ -158,40 +169,74 @@ const AdminSchedules = () => {
   };
 
   // Load schedule requests from MongoDB
-  const loadScheduleRequests = async () => {
-    try {
-      const response = await api.getScheduleRequests();
-      
-      if (response.success && response.data) {
+  const loadScheduleRequests = async (forceRefresh = false) => {
+    if (scheduleRequestsLoadPromiseRef.current) {
+      await scheduleRequestsLoadPromiseRef.current;
+      if (!forceRefresh || scheduleRequestsLoadPromiseRef.current) return;
+    }
+
+    const loadPromise = (async () => {
+      try {
+        const response = await api.getScheduleRequests();
+
+        if (!response?.success || !Array.isArray(response.data)) {
+          const error = new Error('The server returned an invalid schedule request list.');
+          error.code = 'INVALID_RESPONSE';
+          throw error;
+        }
+
+        if (response.data.length === 0) {
+          const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
+          if (Array.isArray(stored) && stored.length > 0) {
+            const cachedRequests = stored.map(normalizeScheduleRequest).sort((a, b) =>
+              new Date(b.createdAt) - new Date(a.createdAt)
+            );
+            setScheduleRequests(cachedRequests);
+            setToast({
+              message: 'The server returned no schedule requests. Showing locally saved requests; verify the server connection before making changes.',
+              type: 'error'
+            });
+            return;
+          }
+        }
+
         const normalized = response.data.map(normalizeScheduleRequest);
-        const sortedRequests = [...normalized].sort((a, b) => 
+        const sortedRequests = [...normalized].sort((a, b) =>
           new Date(b.createdAt) - new Date(a.createdAt)
         );
         setScheduleRequests(sortedRequests);
         localStorage.setItem(REQUESTS_KEY, JSON.stringify(sortedRequests));
-      } else {
-        const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
-        if (Array.isArray(stored)) {
-          const normalizedStored = stored.map(normalizeScheduleRequest);
-          const sortedStored = [...normalizedStored].sort((a, b) => 
-            new Date(b.createdAt) - new Date(a.createdAt)
-          );
-          setScheduleRequests(sortedStored);
+      } catch (err) {
+        console.error('Error loading schedule requests:', err);
+        if (err?.code !== 'REQUEST_ABORTED') {
+          const message = err?.code === 'REQUEST_TIMEOUT'
+            ? 'Loading schedule requests timed out. Please try again.'
+            : err?.status === 401 || err?.code === 'SESSION_EXPIRED'
+              ? 'Your admin session could not be verified. Please sign in again.'
+              : 'Failed to load schedule requests. Please try again.';
+          setToast({ message, type: 'error' });
+        }
+        try {
+          const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
+          if (Array.isArray(stored)) {
+            const sortedStored = [...stored].sort((a, b) =>
+              new Date(b.createdAt) - new Date(a.createdAt)
+            );
+            setScheduleRequests(sortedStored);
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback error loading requests:', fallbackErr);
+          setScheduleRequests([]);
         }
       }
-    } catch (err) {
-      console.error('Error loading schedule requests:', err);
-      try {
-        const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
-        if (Array.isArray(stored)) {
-          const sortedStored = [...stored].sort((a, b) => 
-            new Date(b.createdAt) - new Date(a.createdAt)
-          );
-          setScheduleRequests(sortedStored);
-        }
-      } catch (fallbackErr) {
-        console.error('Fallback error loading requests:', fallbackErr);
-        setScheduleRequests([]);
+    })();
+
+    scheduleRequestsLoadPromiseRef.current = loadPromise;
+    try {
+      await loadPromise;
+    } finally {
+      if (scheduleRequestsLoadPromiseRef.current === loadPromise) {
+        scheduleRequestsLoadPromiseRef.current = null;
       }
     }
   };
@@ -200,7 +245,6 @@ const AdminSchedules = () => {
     try {
       localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
       setScheduleRequests(requests);
-      window.dispatchEvent(new CustomEvent('gymstatStorageUpdate', { detail: { key: REQUESTS_KEY } }));
     } catch (err) {
       console.error('Error saving schedule requests:', err);
       setToast({ message: 'Unable to update schedule requests. Please try again.', type: 'error' });
@@ -363,15 +407,6 @@ const AdminSchedules = () => {
     setShowModal(true);
   };
 
-  const sendMailToRequester = (email, subject, body) => {
-    try {
-      const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.open(mailto, '_blank');
-    } catch (err) {
-      console.error('Error sending email:', err);
-    }
-  };
-
   const promptApproveRequest = (id) => setConfirmAction({ type: 'approve', id });
   const promptRejectRequest = (id) => {
     setSelectedRejectReason('');
@@ -391,8 +426,7 @@ const AdminSchedules = () => {
   };
 
   const performConfirmAction = async () => {
-    if (!confirmAction) return;
-    if (deletingRequestId) return;
+    if (!confirmAction || requestActionInProgressRef.current) return;
     const { type, id } = confirmAction;
     const requests = [...scheduleRequests];
     const idx = requests.findIndex(r => r.id === id);
@@ -410,6 +444,8 @@ const AdminSchedules = () => {
       return;
     }
 
+    requestActionInProgressRef.current = true;
+    setProcessingRequestAction(true);
     try {
       if (type === 'delete') {
         setDeletingRequestId(id);
@@ -422,25 +458,24 @@ const AdminSchedules = () => {
         req.status = 'approved';
         req.reviewedAt = new Date().toISOString();
         
-        await api.updateScheduleRequest(id, { status: 'approved', reviewedAt: req.reviewedAt });
+        const response = await api.updateScheduleRequest(id, { status: 'approved', reviewedAt: req.reviewedAt });
         
         requests[idx] = req;
         await saveScheduleRequests(requests);
-        setToast({ message: 'Request approved and schedule created successfully', type: 'success' });
-        
-        sendMailToRequester(
-          req.requesterEmail, 
-          `Your schedule request for ${req.eventName} was approved`, 
-          `Hello ${req.requesterName},\n\nYour schedule request for "${req.eventName}" on ${req.startDate} (${req.startTime} - ${req.endTime}) has been approved.\n\nRegards,\nAdmin`
-        );
-        
+        setToast({
+          message: response?.requesterNotified === false
+            ? 'Request approved, but the requester notification could not be sent.'
+            : 'Request approved and schedule created successfully',
+          type: response?.requesterNotified === false ? 'error' : 'success'
+        });
+
         await loadSchedulesFromServer();
       } else if (type === 'reject') {
         req.status = 'rejected';
         req.reviewedAt = new Date().toISOString();
         req.rejectionReason = finalReason;
         
-        await api.updateScheduleRequest(id, {
+        const response = await api.updateScheduleRequest(id, {
           status: 'rejected',
           reviewedAt: req.reviewedAt,
           rejectionReason: finalReason
@@ -448,27 +483,34 @@ const AdminSchedules = () => {
         
         requests[idx] = req;
         await saveScheduleRequests(requests);
-        setToast({ message: 'Request rejected and requester notified', type: 'error' });
-        
-        sendMailToRequester(
-          req.requesterEmail, 
-          `Your schedule request for ${req.eventName} was rejected`, 
-          `Hello ${req.requesterName},\n\nYour schedule request for "${req.eventName}" on ${req.startDate} has been rejected.\n\nReason: ${finalReason}\n\nRegards,\nAdmin`
-        );
+        setToast({
+          message: response?.requesterNotified === false
+            ? 'Request rejected, but the requester notification could not be sent.'
+            : 'Schedule request rejected.',
+          type: response?.requesterNotified === false ? 'error' : 'success'
+        });
       }
     } catch (err) {
       console.error('Error performing action:', err);
       setToast({
-        message: type === 'delete' ? 'Failed to delete schedule request. Please try again.' : 'Failed to update request. Please try again.',
+        message: err?.code === 'REQUEST_TIMEOUT'
+          ? 'The action timed out. Refreshing the request status; please confirm before trying again.'
+          : err?.status === 401 || err?.code === 'SESSION_EXPIRED'
+            ? 'Your admin session could not be verified. Please sign in again.'
+            : err?.message || (type === 'delete'
+              ? 'Failed to delete schedule request. Please try again.'
+              : 'Failed to update request. Please try again.'),
         type: 'error'
       });
+      if (err?.code !== 'REQUEST_ABORTED') await loadScheduleRequests(true);
+    } finally {
+      requestActionInProgressRef.current = false;
+      setProcessingRequestAction(false);
+      setConfirmAction(null);
+      setSelectedRejectReason('');
+      setAdditionalRejectReason('');
+      setDeletingRequestId(null);
     }
-    
-    setConfirmAction(null);
-    setSelectedRejectReason('');
-    setAdditionalRejectReason('');
-    setDeletingRequestId(null);
-    await loadScheduleRequests();
   };
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1411,7 +1453,8 @@ const AdminSchedules = () => {
             setSelectedRejectReason('');
             setAdditionalRejectReason('');
           }}
-          confirmDisabled={deletingRequestId !== null || (confirmAction.type === 'reject' && !getFinalRejectionReason())}
+          confirmText={processingRequestAction ? 'Processing...' : 'Confirm'}
+          confirmDisabled={processingRequestAction || deletingRequestId !== null || (confirmAction.type === 'reject' && !getFinalRejectionReason())}
         >
           {confirmAction.type === 'reject' && (
             <div style={{ marginTop: 16 }}>
