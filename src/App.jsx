@@ -4,6 +4,7 @@ import SplashScreen from "./pages/SplashScreen/SplashScreen";
 import LandingPage from "./pages/SplashScreen/LandingPage";
 import LoginPage from "./pages/LoginSignup/LoginPage";
 import RegisterPage from "./pages/LoginSignup/RegisterPage";
+import ScreenerConfirmPage from "./pages/LoginSignup/ScreenerConfirmPage";
 import DocumentCenter from "./pages/SplashScreen/DocumentCenter";
 import PortalNavigationLoading, { PortalNavigationReady } from "./components/PortalNavigationLoading";
 
@@ -54,6 +55,7 @@ function App() {
         {/* role selection removed - onboarding now goes to login */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/screener/confirm-authorization" element={<ScreenerConfirmPage />} />
 
         {/* Public Calendar */}
         <Route path="/calendar" element={<PublicCalendar />} />

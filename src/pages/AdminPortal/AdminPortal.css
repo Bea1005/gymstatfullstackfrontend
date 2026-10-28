@@ -3282,3 +3282,27 @@ textarea:focus-visible,
     font-size: 9px;
   }
 }
+
+/* ── Screener authorization email status banner ── */
+.ur-auth-email-status {
+  margin: 8px 0 4px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ur-auth-email-status--sending {
+  background: #fff8e1;
+  color: #795548;
+  border: 1px solid #ffe082;
+}
+.ur-auth-email-status--sent {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.ur-auth-email-status--failed {
+  background: #fce4ec;
+  color: #b71c1c;
+  border: 1px solid #ef9a9a;
+}

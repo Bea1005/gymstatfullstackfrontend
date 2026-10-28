@@ -696,6 +696,14 @@ export const createUser = async (userData) => {
 };
 
 // Archive or restore a single student/screener by ID
+// Send screener authorization email (admin only)
+export const sendScreenerAuthorization = async (screenerUserId) => {
+  return apiRequest('/users/screeners/send-authorization', {
+    method: 'POST',
+    body: JSON.stringify({ screenerUserId }),
+  });
+};
+
 export const updateUserArchiveStatus = async (userId, accountStatus) => {
   return apiRequest(`/users/${userId}/${accountStatus === 'archived' ? 'archive' : 'restore'}`, {
     method: 'PATCH',
