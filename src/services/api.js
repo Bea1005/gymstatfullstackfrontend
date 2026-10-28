@@ -267,7 +267,7 @@ const isPublicEndpoint = (endpoint, method = 'GET') => {
     return true;
   }
 
-  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/register' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
+  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/register' || normalizedEndpoint === '/register/verify' || normalizedEndpoint === '/register/resend' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
     return true;
   }
 
@@ -992,22 +992,38 @@ export const getStudentStats = async () => {
   });
 };
 
-// Screener requirements endpoints - Make sure these are in your api.js
-export const getScreenerRequirements = async (participationType = 'Intrams') => {
-  return apiRequest(`/screener/requirements?participationType=${encodeURIComponent(participationType)}`, {
+// Coach document screening endpoints use the existing student requirement records.
+export const getCoachDocumentRequirements = async () => {
+  return apiRequest('/coach/requirements', {
     method: 'GET',
   });
 };
 
-export const reviewScreenerRequirement = async (submissionId, reviewData) => {
-  return apiRequest(`/screener/requirements/${submissionId}/review`, {
+export const downloadCoachRequirement = async (
+  submissionId,
+  filename = 'requirement',
+  participationType = 'Intrams',
+  fileIndex = 0
+) => {
+  const params = new URLSearchParams({
+    participationType,
+    fileIndex: String(fileIndex),
+  });
+  return downloadFileToBrowser(
+    `/coach/requirements/${encodeURIComponent(submissionId)}/download?${params}`,
+    filename
+  );
+};
+
+export const reviewCoachRequirement = async (submissionId, reviewData) => {
+  return apiRequest(`/coach/requirements/${encodeURIComponent(submissionId)}/review`, {
     method: 'PUT',
     body: JSON.stringify(reviewData),
   });
 };
 
-export const markScreenerRequirementViewed = async (submissionId, participationType = 'Intrams') => {
-  return apiRequest(`/screener/requirements/${submissionId}/viewed`, {
+export const markCoachRequirementViewed = async (submissionId, participationType = 'Intrams') => {
+  return apiRequest(`/coach/requirements/${encodeURIComponent(submissionId)}/viewed`, {
     method: 'PUT',
     body: JSON.stringify({ participationType }),
   });

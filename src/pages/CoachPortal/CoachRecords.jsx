@@ -1483,6 +1483,9 @@ export default function CoachRecord() {
           <img src={logoImage} alt="School logo" />
         </div>
         <div className="form-toolbar-right">
+          <button className="toolbar-btn ghost" type="button" onClick={() => navigate('/coach/document-screening')}>
+            Document Screening
+          </button>
           <button className="toolbar-btn ghost" type="button" onClick={handleDownloadReport} disabled={isDownloadingReport}>
             {isDownloadingReport ? 'Generating Report...' : 'Download Report'}
           </button>

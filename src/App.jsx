@@ -26,9 +26,10 @@ const AdminEquipments = lazy(() => import("./pages/AdminPortal/AdminEquipments")
 const AdminBorrowing = lazy(() => import("./pages/AdminPortal/AdminBorrowing"));
 const AdminSettings = lazy(() => import("./pages/AdminPortal/AdminSettings"));
 
-// Coach Portal Pages - Only Home Page
+// Coach Portal Pages
 const CoachLayout = lazy(() => import("./pages/CoachPortal/CoachLayout"));
 const CoachRecords = lazy(() => import("./pages/CoachPortal/CoachRecords"));
+const CoachDocumentScreening = lazy(() => import("./pages/CoachPortal/CoachDocumentScreening"));
 
 // Screener Portal Pages
 const ScreenerPage = lazy(() => import("./pages/ScreenerPortal/ScreenerPage"));
@@ -81,10 +82,11 @@ function App() {
           <Route path="settings" element={<AdminSettings />} />
         </Route>
 
-        {/* Coach Portal Routes - Only Home Page */}
+        {/* Coach Portal Routes */}
         <Route path="/coach" element={<CoachLayout />}>
           <Route index element={<Navigate to="/coach/home" />} />
           <Route path="home" element={<CoachRecords />} />
+          <Route path="document-screening" element={<CoachDocumentScreening />} />
         </Route>
 
         {/* Screener Portal Routes */}

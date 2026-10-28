@@ -1,6 +1,4 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import RejectModal from '../../components/RejectModal';
 import { useNotifications } from '../../components/useNotifications';
@@ -129,7 +127,7 @@ const getRequirementFileUrl = (entry, fileIndex = 0) => {
   if (entry?.fileUrl && fileIndex === 0) return entry.fileUrl;
   if (!entry?.submissionId) return '';
   const participation = encodeURIComponent(entry.participationType || 'Intrams');
-  return `/screener/requirements/${String(entry.submissionId)}/preview?participationType=${participation}&fileIndex=${fileIndex}`;
+  return `/coach/requirements/${String(entry.submissionId)}/preview?participationType=${participation}&fileIndex=${fileIndex}`;
 };
 
 const getRequirementPreviewKey = (entry, fileIndex = 0) => `${entry.submissionId}:${fileIndex}`;
@@ -138,10 +136,7 @@ const loadAttachmentBlobUrl = async (fileUrl) => {
   return api.getProtectedImageObjectUrl(fileUrl, { cache: 'no-store' });
 };
 
-const ScreenerPage = () => {
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const navigate = useNavigate();
-  
+export const RequirementScreeningInterface = () => {
   // Navigation State: 'list' or 'view-details'
   const [currentView, setCurrentView] = useState('list');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -151,7 +146,7 @@ const ScreenerPage = () => {
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { authReady, authError, user } = usePortalSession(['screener', 'admin'], 'Screener');
+  const { authReady, authError } = usePortalSession(['coach'], 'Coach');
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -164,10 +159,10 @@ const ScreenerPage = () => {
   const [viewerFiles, setViewerFiles] = useState([]);
   const [viewerFileIndex, setViewerFileIndex] = useState(0);
   const [viewerNavigationLoading, setViewerNavigationLoading] = useState(false);
+  const [downloadingFileKey, setDownloadingFileKey] = useState('');
 
   const { notify } = useNotifications();
   const hasNotifiedLoadErrorRef = useRef(false);
-  const hasLoadedSuccessfullyRef = useRef(false);
   const requirementsRequestInProgressRef = useRef(false);
   const selectedStudentRef = useRef(selectedStudent);
   selectedStudentRef.current = selectedStudent;
@@ -177,12 +172,9 @@ const ScreenerPage = () => {
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
-  const participationType = 'Intrams';
   const departmentFilterOptions = Array.from(new Map(
     [...DEPARTMENT_OPTIONS, ...students.map((student) => student.department)]
       .filter((department) => typeof department === 'string' && department.trim())
-      .filter((department) => user?.role !== 'screener'
-        || normalizeDepartment(department) !== normalizeDepartment(user.department))
       .map((department) => [normalizeDepartment(department), department.trim()])
   ).values());
   const loadRequirements = async (silent = false) => {
@@ -191,7 +183,7 @@ const ScreenerPage = () => {
 
     try {
       if (!silent) setLoading(true);
-      const response = await api.getScreenerRequirements(participationType);
+      const response = await api.getCoachDocumentRequirements();
       const data = response?.data || [];
       // Ensure data is always an array to avoid rendering crashes
       const safeData = Array.isArray(data) ? data : [];
@@ -210,17 +202,16 @@ const ScreenerPage = () => {
         return acc + statuses.filter((item) => item && item.status === 'approved').length;
       }, 0);
       setStats({ totalStudents, pendingRequirements, verifiedRequirements });
-      hasLoadedSuccessfullyRef.current = true;
       hasNotifiedLoadErrorRef.current = false;
     } catch (error) {
-      console.error('Failed to load screener requirements', error);
+      console.error('Failed to load coach requirements', error);
       // Friendly handling for authorization errors so UI doesn't crash
       const msg = error?.message || '';
       if (!silent && !hasNotifiedLoadErrorRef.current) {
         if (msg.toLowerCase().includes('not authorized') || msg.toLowerCase().includes('is not authorized')) {
-          notify('screener-error', 'Unable to load requirements', 'You are not authorized to view this resource. Please login with a Screener account.');
+          notify('coach-error', 'Unable to load requirements', 'You are not authorized to view these requirements.');
         } else {
-          notify('screener-error', 'Unable to load requirements', msg || 'Please try again.');
+          notify('coach-error', 'Unable to load requirements', msg || 'Please try again.');
         }
         hasNotifiedLoadErrorRef.current = true;
       }
@@ -232,11 +223,11 @@ const ScreenerPage = () => {
 
   const loadRequirementsEvent = useEffectEvent(loadRequirements);
 
-  const markResubmissionViewed = async (submissionId) => {
+  const markResubmissionViewed = async (submissionId, submissionParticipationType = 'Intrams') => {
     if (!submissionId) return;
 
     try {
-      await api.markScreenerRequirementViewed(submissionId, participationType);
+      await api.markCoachRequirementViewed(submissionId, submissionParticipationType);
       setStudents((current) => current.map((student) => {
         const updatedRequirements = { ...student.requirements };
         Object.keys(updatedRequirements).forEach((key) => {
@@ -341,7 +332,7 @@ const ScreenerPage = () => {
         createdUrls.push(blobUrl);
         return [key, blobUrl];
       } catch {
-        notify('screener-error', 'Preview Unavailable', `${entry.fileName || 'Document'} could not be previewed.`);
+        notify('coach-error', 'Preview Unavailable', `${entry.fileName || 'Document'} could not be previewed.`);
         return [key, ''];
       }
     })).then((results) => {
@@ -387,20 +378,6 @@ const ScreenerPage = () => {
   const handleBackToList = () => {
     setCurrentView('list');
     setSelectedStudent(null);
-  };
-
-  const handleLogout = () => {
-    setShowLogoutModal(true);
-  };
-
-  const confirmLogout = async () => {
-    setShowLogoutModal(false);
-    await api.logout();
-    navigate('/login');
-  };
-
-  const cancelLogout = () => {
-    setShowLogoutModal(false);
   };
 
   // Filter students based on search query and filters
@@ -465,7 +442,7 @@ const ScreenerPage = () => {
 
   const handleOpenRequirementViewer = async (entry, fallbackSrc = '', fallbackName = 'Requirement Document') => {
     if (entry?.resubmitted && entry.submissionId) {
-      await markResubmissionViewed(entry.submissionId);
+      await markResubmissionViewed(entry.submissionId, entry.participationType || 'Intrams');
     }
     try {
       const files = entry?.files?.length
@@ -482,7 +459,7 @@ const ScreenerPage = () => {
       setViewerType(files[0]?.fileType || entry?.fileType || '');
       setViewerOpen(true);
     } catch (error) {
-      notify('screener-error', 'Unable to open file', error.message);
+      notify('coach-error', 'Unable to open file', error.message);
       return;
     }
   };
@@ -500,9 +477,27 @@ const ScreenerPage = () => {
       setViewerType(selectedFile.fileType || '');
       setViewerFileIndex(nextIndex);
     } catch (error) {
-      notify('screener-error', 'Unable to open file', error.message);
+      notify('coach-error', 'Unable to open file', error.message);
     } finally {
       setViewerNavigationLoading(false);
+    }
+  };
+
+  const handleDownloadRequirement = async (entry, fileIndex, file) => {
+    const key = `${entry.submissionId}:${fileIndex}`;
+    setDownloadingFileKey(key);
+    try {
+      await api.downloadCoachRequirement(
+        entry.submissionId,
+        file?.fileName || entry.fileName || 'requirement',
+        entry.participationType || 'Intrams',
+        fileIndex
+      );
+      notify('coach-success', 'Download Started', `${getDisplayFileName(file?.fileName || entry.fileName)} is ready.`);
+    } catch (error) {
+      notify('coach-error', 'Download Failed', error.message || 'Unable to download this document.');
+    } finally {
+      setDownloadingFileKey('');
     }
   };
 
@@ -515,21 +510,13 @@ const ScreenerPage = () => {
         <header className="screener-header">
           <div className="header-left">
             <div className="header-title-row">
-              <h1>Requirements Screening Portal</h1>
+              <h1>Document Screening</h1>
               {resubmissionCount > 0 && (
                 <span className="header-badge" title="Resubmitted requirement(s) awaiting review">{resubmissionCount}</span>
               )}
             </div>
-            <p>Validate and verify submitted documents from student-athletes.</p>
+            <p>Review submitted student-athlete requirements assigned to your sports.</p>
           </div>
-          <button className="logout-btn" onClick={handleLogout}>
-            Log Out 
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="logout-icon">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-          </button>
         </header>
 
         <div className="metrics-row">
@@ -607,6 +594,8 @@ const ScreenerPage = () => {
 
         {loading ? (
           <div className="loading-state">Loading submitted requirements…</div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="loading-state">No student requirements match your assigned sports.</div>
         ) : (
           <div className="table-container">
             <table className="screener-table">
@@ -647,11 +636,6 @@ const ScreenerPage = () => {
             </table>
           </div>
         )}
-        <LogoutConfirmModal
-          isOpen={showLogoutModal}
-          onClose={cancelLogout}
-          onConfirm={confirmLogout}
-        />
       </div>
     );
   }
@@ -779,22 +763,40 @@ const ScreenerPage = () => {
                 )}
 
                 {req.entry?.submissionId && (
-                  <div className="document-action-row">
-                    <button
-                      className="action-btn approve-btn"
-                      onClick={() => setApproveTarget(req.entry.submissionId)}
-                      aria-label={`Approve ${req.title}`}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="action-btn reject-btn"
-                      onClick={() => setRejectTarget(req.entry.submissionId)}
-                      aria-label={`Reject ${req.title}`}
-                    >
-                      Reject
-                    </button>
-                  </div>
+                  <>
+                    <div className="document-download-list" aria-label={`Download files for ${req.title}`}>
+                      {(req.entry.files?.length ? req.entry.files : [{ fileName: req.entry.fileName }]).map((file, fileIndex) => {
+                        const downloadKey = `${req.entry.submissionId}:${fileIndex}`;
+                        return (
+                          <button
+                            key={downloadKey}
+                            type="button"
+                            className="document-download-btn"
+                            onClick={() => handleDownloadRequirement(req.entry, fileIndex, file)}
+                            disabled={downloadingFileKey === downloadKey}
+                          >
+                            {downloadingFileKey === downloadKey ? 'Downloading…' : `Download ${getDisplayFileName(file.fileName, `File ${fileIndex + 1}`)}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="document-action-row">
+                      <button
+                        className="action-btn approve-btn"
+                        onClick={() => setApproveTarget(req.entry.submissionId)}
+                        aria-label={`Approve ${req.title}`}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="action-btn reject-btn"
+                        onClick={() => setRejectTarget(req.entry.submissionId)}
+                        aria-label={`Reject ${req.title}`}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             ))}
@@ -811,28 +813,30 @@ const ScreenerPage = () => {
           onConfirm={async () => {
             try {
               const submissionId = approveTarget;
-              await api.reviewScreenerRequirement(submissionId, {
+              const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
+              const reviewParticipationType = submission?.participationType || 'Intrams';
+              await api.reviewCoachRequirement(submissionId, {
                 status: 'approved',
-                feedback: 'Approved by screener',
-                participationType,
+                feedback: 'Approved by coach',
+                participationType: reviewParticipationType,
                 studentId: selectedStudent?.id
               });
-              await markResubmissionViewed(submissionId);
+              await markResubmissionViewed(submissionId, reviewParticipationType);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'approved' }));
-              notify('screener-success', 'Requirement Approved', 'Requirement is complete.');
+              notify('coach-success', 'Requirement Approved', 'Requirement is complete.');
               setApproveTarget(null);
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getScreenerRequirements(participationType);
+              const response = await api.getCoachDocumentRequirements();
               const data = response?.data || [];
               setStudents(data);
               const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
               setSelectedStudent(refreshedSelectedStudent);
             } catch (err) {
-              notify('screener-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
+              notify('coach-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
             }
           }}
         />
@@ -843,29 +847,31 @@ const ScreenerPage = () => {
           onConfirm={async (payload) => {
             try {
               const submissionId = rejectTarget;
-              await api.reviewScreenerRequirement(submissionId, {
+              const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
+              const reviewParticipationType = submission?.participationType || 'Intrams';
+              await api.reviewCoachRequirement(submissionId, {
                 status: 'rejected',
                 feedback: payload.reason,
                 remarks: payload.remarks,
                 studentId: selectedStudent?.id,
-                participationType
+                participationType: reviewParticipationType
               });
               setRejectTarget(null);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
-              const message = `Requirement deleted and student can re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
-              notify('screener-error', 'Requirement Rejected', message);
+              const message = `Requirement rejected and retained for re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
+              notify('coach-error', 'Requirement Rejected', message);
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getScreenerRequirements(participationType);
+              const response = await api.getCoachDocumentRequirements();
               const data = response?.data || [];
               setStudents(data);
               const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
               setSelectedStudent(refreshedSelectedStudent);
             } catch (err) {
-              notify('screener-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
+              notify('coach-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
             }
           }}
         />
@@ -893,6 +899,22 @@ const ScreenerPage = () => {
       </div>
     );
   }
+};
+
+const ScreenerPage = () => {
+  const { authReady, authError } = usePortalSession(['screener', 'admin'], 'Screener');
+  if (!authReady) return authError ? <PortalSessionError /> : null;
+
+  return (
+    <div className="screener-container">
+      <header className="screener-header">
+        <div className="header-left">
+          <h1>Student Document Screening</h1>
+          <p>Student-athlete document screening is now handled in the Coach Portal.</p>
+        </div>
+      </header>
+    </div>
+  );
 };
 
 export default ScreenerPage;
