@@ -9,7 +9,7 @@ import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSessi
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
-import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
+import { SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import {
   areRequirementsComplete,
   buildRequirementColumns,
@@ -96,22 +96,18 @@ const ScreenerPage = () => {
     if (role === 'screener') {
       const department = String(user?.department || user?.dept || '').trim();
       setAssignedDepartment(department);
-      setDepartmentFilter(department || 'All');
     }
   }, [user]);
   
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [departmentFilter, setDepartmentFilter] = useState('All');
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
-  const departmentFilterOptions = isScreener
-    ? (assignedDepartment ? [assignedDepartment] : [])
-    : DEPARTMENT_OPTIONS;
-  const sportFilterOptions = [...new Set(
-    students.flatMap((student) => Array.isArray(student.sports) ? student.sports : [])
+  const sportFilterOptions = Array.from(new Map(
+    [...SPORT_OPTIONS, ...students.flatMap((student) => Array.isArray(student.sports) ? student.sports : [])]
       .filter((sport) => typeof sport === 'string' && sport.trim())
-  )];
+      .map((sport) => [String(sport).trim(), String(sport).trim()])
+  ).values());
   const requirementColumns = buildRequirementColumns(publishedRequirements, sportFilter);
 
   const loadRequirements = async (silent = false) => {
@@ -134,9 +130,9 @@ const ScreenerPage = () => {
         const nextAssignedDepartment = String(response?.assignedDepartment || '').trim();
         setAssignedDepartment((currentDepartment) => {
           if (normalizeDepartmentValue(currentDepartment) !== normalizeDepartmentValue(nextAssignedDepartment)) {
-            setDepartmentFilter(nextAssignedDepartment || 'All');
+            return nextAssignedDepartment;
           }
-          return nextAssignedDepartment;
+          return currentDepartment;
         });
         setDepartmentUnassigned(false);
       }
@@ -365,8 +361,6 @@ const ScreenerPage = () => {
   // Filter students based on search query and filters
   const filteredStudents = students.filter((student) => {
     const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept = departmentFilter === 'All'
-      || normalizeDepartmentValue(student.department) === normalizeDepartmentValue(departmentFilter);
     const matchesAssignedDepartment = !isScreener
       || (Boolean(assignedDepartment)
         && normalizeDepartmentValue(student.department) === normalizeDepartmentValue(assignedDepartment));
@@ -375,7 +369,7 @@ const ScreenerPage = () => {
       || student.sports?.includes(sportFilter);
     const matchesYear = yearLevelFilter === 'All' || student.yearLevel === yearLevelFilter;
     
-    return matchesAssignedDepartment && matchesSearch && matchesDept && matchesSport && matchesYear;
+    return matchesAssignedDepartment && matchesSearch && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
     const getSurname = (student) => {
       const name = String(student.lastName || student.surname || student.name || '').trim();
@@ -498,19 +492,6 @@ const ScreenerPage = () => {
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
             </span>
-          </div>
-
-          <div className="filter-group">
-            <label>Department:</label>
-            <select 
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-            >
-              <option value="All">All</option>
-              {departmentFilterOptions.map((department) => (
-                <option key={department} value={department}>{department}</option>
-              ))}
-            </select>
           </div>
 
           <div className="filter-group">

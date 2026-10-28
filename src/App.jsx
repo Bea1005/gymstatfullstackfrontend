@@ -5,6 +5,7 @@ import LandingPage from "./pages/SplashScreen/LandingPage";
 import LoginPage from "./pages/LoginSignup/LoginPage";
 import RegisterPage from "./pages/LoginSignup/RegisterPage";
 import ScreenerConfirmPage from "./pages/LoginSignup/ScreenerConfirmPage";
+import ScreenerVerificationPage from "./pages/LoginSignup/ScreenerVerificationPage";
 import DocumentCenter from "./pages/SplashScreen/DocumentCenter";
 import PortalNavigationLoading, { PortalNavigationReady } from "./components/PortalNavigationLoading";
 
@@ -56,6 +57,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/screener/confirm-authorization" element={<ScreenerConfirmPage />} />
+        <Route path="/screener/verify-code" element={<ScreenerVerificationPage />} />
 
         {/* Public Calendar */}
         <Route path="/calendar" element={<PublicCalendar />} />

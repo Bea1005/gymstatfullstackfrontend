@@ -275,11 +275,38 @@
 .badge-incomplete { background-color: #e47d13; width: 95px; }
 
 .text-muted-italic {
+  display: inline-block;
   font-size: clamp(9px, 1vw, 11px);
   color: #777777;
   font-style: italic;
   line-height: 1.4;
   overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.status-cell {
+  min-width: 120px;
+  vertical-align: top;
+}
+
+.status-cell .requirement-status-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  text-align: center;
+}
+
+.status-cell .resubmitted-status-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 /* ==========================================================================
@@ -335,6 +362,10 @@
 }
 
 .view-req-card-wrapper {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
   background: linear-gradient(to bottom, #ffd600 0%, #ffd600 42%, #510000 100%);
   border-radius: 16px;
   padding: clamp(20px, 3vw, 35px) clamp(16px, 3vw, 30px);
@@ -360,6 +391,8 @@
 }
 
 .req-documents-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: clamp(16px, 2vw, 30px);

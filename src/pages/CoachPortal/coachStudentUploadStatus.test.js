@@ -19,24 +19,35 @@ test('shows every available upload-card label when a student has no uploads', ()
   );
 });
 
-test('treats submitted files as uploaded regardless of review status', () => {
+test('requires uploaded files to be approved before they count as complete', () => {
   const uploads = [
     { requirementType: 'medical', fileName: 'medical.pdf', status: 'rejected' },
-    { requirementType: 'other', customRequirementId: 'custom-1', fileName: 'residency.pdf', status: 'pending' },
+    { requirementType: 'other', customRequirementId: 'custom-1', fileName: 'residency.pdf', coachStatus: 'pending' },
   ];
 
   assert.deepEqual(
     getMissingCoachUploadLabels(publishedRequirements, uploads),
-    ['PSA', 'Insurance']
+    ['Medical Certificate', 'PSA', 'Insurance', 'Proof of Residency']
   );
 });
 
-test('returns no missing labels when all required upload cards have files', () => {
+test('returns no missing labels when all required upload cards have approved files', () => {
   const uploads = [
-    { requirementType: 'medical', fileName: 'medical.pdf' },
-    { requirementType: 'psa', fileName: 'psa.pdf' },
-    { requirementType: 'insurance', fileName: 'insurance.pdf' },
-    { requirementType: 'other', customRequirementId: 'custom-1', fileName: 'residency.pdf' },
+    { requirementType: 'medical', fileName: 'medical.pdf', status: 'approved' },
+    { requirementType: 'psa', fileName: 'psa.pdf', status: 'approved' },
+    { requirementType: 'insurance', fileName: 'insurance.pdf', status: 'approved' },
+    { requirementType: 'other', customRequirementId: 'custom-1', fileName: 'residency.pdf', coachStatus: 'approved' },
+  ];
+
+  assert.deepEqual(getMissingCoachUploadLabels(publishedRequirements, uploads), []);
+});
+
+test('treats coach-approved uploads as complete even when the top-level status is still pending', () => {
+  const uploads = [
+    { requirementType: 'medical', fileName: 'medical.pdf', status: 'pending', coachStatus: 'approved' },
+    { requirementType: 'psa', fileName: 'psa.pdf', status: 'approved', coachStatus: 'pending' },
+    { requirementType: 'insurance', fileName: 'insurance.pdf', status: 'pending', coachStatus: 'approved' },
+    { requirementType: 'other', customRequirementId: 'custom-1', fileName: 'residency.pdf', status: 'pending', coachStatus: 'approved' },
   ];
 
   assert.deepEqual(getMissingCoachUploadLabels(publishedRequirements, uploads), []);

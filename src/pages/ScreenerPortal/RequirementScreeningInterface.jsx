@@ -8,7 +8,6 @@ import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
 import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import {
-  DEPARTMENT_OPTIONS,
   SPORT_OPTIONS,
   YEAR_LEVEL_OPTIONS
 } from '../../constants/studentRegistrationOptions';
@@ -86,6 +85,11 @@ const normalizeDepartment = (value) => String(value ?? '')
   .trim()
   .replace(/\s+/g, ' ')
   .toLocaleLowerCase();
+
+const normalizeRequirementType = (value) => {
+  const normalizedValue = String(value ?? '').trim().toLocaleLowerCase();
+  return normalizedValue === 'medical' ? 'med' : normalizedValue;
+};
 
 const normalizeSportValue = (value) => {
   const rawValue = String(value ?? '').trim();
@@ -177,14 +181,8 @@ export const RequirementScreeningInterface = ({ hideFilters = [] }) => {
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [departmentFilter, setDepartmentFilter] = useState('All');
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
-  const departmentFilterOptions = Array.from(new Map(
-    [...DEPARTMENT_OPTIONS, ...students.map((student) => student.department)]
-      .filter((department) => typeof department === 'string' && department.trim())
-      .map((department) => [normalizeDepartment(department), department.trim()])
-  ).values());
   const sportFilterOptions = Array.from(new Map(
     [...SPORT_OPTIONS, ...students.flatMap((student) => getStudentSportValues(student))]
       .filter((sport) => typeof sport === 'string' && sport.trim())
@@ -388,15 +386,74 @@ export const RequirementScreeningInterface = ({ hideFilters = [] }) => {
     };
   }, [notify, previewEntriesKey]);
 
-  // Requirement labels are display metadata only; previews come from MongoDB file records.
-  const requirementsTemplates = [
-    { id: "cor", title: "CERTIFICATE OF REGISTRATION" },
-    { id: "med", title: "MEDICAL CERTIFICATE" },
-    { id: "psa", title: "PSA" },
-    { id: "insurance", title: "INSURANCE" },
-    { id: "profile", title: "STUDENT PROFILE" },
-    { id: "consent", title: "PARENT CONSENT" }
-  ];
+  const getPublishedRequirementCardKey = (requirement) => {
+    const type = String(requirement?.type || '').trim().toLowerCase();
+    const requirementId = String(requirement?._id || requirement?.id || '').trim();
+    if (type === 'other') return `custom:${requirementId || 'published-other'}`;
+    return `type:${normalizeRequirementType(type) || 'requirement'}`;
+  };
+
+  const getPublishedRequirementCards = (selectedRequirements, publishedDefinitions = []) => {
+    const publishableRequirements = Array.isArray(publishedDefinitions)
+      ? publishedDefinitions.filter((requirement) => (
+        requirement?.status === 'published'
+        && requirement?.isActive !== false
+        && typeof requirement?.type === 'string'
+      ))
+      : [];
+
+    const documents = Array.isArray(selectedRequirements?.documents) ? selectedRequirements.documents : [];
+    const latestDocumentsByKey = new Map();
+
+    documents.forEach((document) => {
+      const documentType = String(document?.requirementType || '').trim().toLowerCase();
+      const normalizedType = documentType === 'medical' ? 'med' : documentType;
+      const requirementKey = document?.customRequirementId
+        ? `custom:${String(document.customRequirementId).trim() || 'published-other'}`
+        : `type:${normalizedType || 'requirement'}`;
+      const currentDocument = latestDocumentsByKey.get(requirementKey);
+
+      if (!currentDocument || new Date(document.uploadedAt || 0) > new Date(currentDocument.uploadedAt || 0)) {
+        latestDocumentsByKey.set(requirementKey, document);
+      }
+    });
+
+    const seenRequirementKeys = new Set();
+
+    return publishableRequirements.reduce((cards, requirement, index) => {
+      const requirementType = String(requirement?.type || '').trim().toLowerCase();
+      const requirementId = String(requirement?._id || requirement?.id || '').trim();
+      const requirementKey = requirementType === 'other'
+        ? `custom:${requirementId || 'published-other'}`
+        : `type:${normalizeRequirementType(requirementType) || 'requirement'}`;
+
+      if (seenRequirementKeys.has(requirementKey)) {
+        return cards;
+      }
+
+      seenRequirementKeys.add(requirementKey);
+
+      const entry = latestDocumentsByKey.get(requirementKey) || null;
+      const title = String(requirement?.title || requirement?.type || 'Requirement').trim() || 'Requirement';
+      const cardKey = [
+        requirementKey,
+        requirementId || String(requirement?.title || 'requirement'),
+        entry?.submissionId || String(index),
+      ].join(':');
+
+      cards.push({
+        id: requirementType === 'other' ? requirementId || requirementKey : normalizeRequirementType(requirementType),
+        title,
+        requirementKey,
+        entry,
+        cardKey,
+        viewerName: entry?.fileName || title,
+        previewUrl: entry ? previewUrls[getRequirementPreviewKey(entry)] || '' : '',
+      });
+
+      return cards;
+    }, []);
+  };
 
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
@@ -422,15 +479,13 @@ export const RequirementScreeningInterface = ({ hideFilters = [] }) => {
   const filteredStudents = students.filter((student) => {
     const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
     const matchesSearch = String(student.name || '').toLocaleLowerCase().includes(normalizedSearchQuery);
-    const matchesDept = departmentFilter === 'All'
-      || normalizeDepartment(student.department) === normalizeDepartment(departmentFilter);
     const matchesSport = sportFilter === 'All'
       || getStudentSportValues(student)
         .some((sport) => normalizeSportValue(sport) === normalizeSportValue(sportFilter));
     const matchesYear = yearLevelFilter === 'All'
       || normalizeYearLevel(student.yearLevel) === normalizeYearLevel(yearLevelFilter);
     
-    return matchesSearch && matchesDept && matchesSport && matchesYear;
+    return matchesSearch && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
     const getSurname = (student) => {
       const name = String(student.lastName || student.surname || student.name || '').trim();
@@ -447,7 +502,7 @@ export const RequirementScreeningInterface = ({ hideFilters = [] }) => {
     if (status === 'pending' || status === 'Pending') return <span className="badge badge-pending">Pending</span>;
     if (status === 'rejected' || status === 'Declined') return <span className="badge badge-declined">Declined</span>;
     if (status === 'Incomplete') return <span className="badge badge-incomplete">Incomplete</span>;
-    return <span className="text-muted-italic">No Documents Attached</span>;
+    return <span className="text-muted-italic">NO DOCUMENTS</span>;
   };
 
   const renderOverallStatusBadge = (status) => {
@@ -597,21 +652,6 @@ export const RequirementScreeningInterface = ({ hideFilters = [] }) => {
             </span>
           </div>
 
-          {!hideFilters.includes('program') && (
-          <div className="filter-group">
-            <label>Program:</label>
-            <select 
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-            >
-              <option value="All">All</option>
-              {departmentFilterOptions.map((department) => (
-                <option key={department} value={department}>{department}</option>
-              ))}
-            </select>
-          </div>
-          )}
-
           {!hideFilters.includes('sport') && (
           <div className="filter-group">
             <label>Sport :</label>
@@ -709,34 +749,7 @@ export const RequirementScreeningInterface = ({ hideFilters = [] }) => {
   if (currentView === 'view-details' && selectedStudent) {
     const selectedSport = sportFilter === 'All' ? selectedStudent.sport : sportFilter;
     const selectedRequirements = getSportScopedRequirements(selectedStudent.requirements, selectedSport);
-    const requirementDocuments = (selectedRequirements.documents || [])
-      .filter((entry) => entry?.submissionId && entry.hasUpload === true);
-    const standardRequirementKeys = new Set(requirementsTemplates.map((req) => req.id === 'med' ? 'med' : req.id));
-    const requirementCards = requirementsTemplates.flatMap((req) => {
-      const requirementKey = req.id === 'med' ? 'med' : req.id;
-      const entries = requirementDocuments
-        .filter((entry) => (entry.requirementType === 'medical' ? 'med' : entry.requirementType) === requirementKey);
-
-      return entries.map((entry) => ({
-        ...req,
-        entry,
-        cardKey: entry.submissionId,
-        viewerName: entry?.fileName || req.title,
-        previewUrl: previewUrls[getRequirementPreviewKey(entry)] || ''
-      }));
-    }).concat(requirementDocuments
-      .filter((entry) => {
-        const requirementKey = entry.requirementType === 'medical' ? 'med' : entry.requirementType;
-        return !standardRequirementKeys.has(requirementKey);
-      })
-      .map((entry) => ({
-        id: entry.requirementType,
-        title: entry.label || entry.requirementType || 'REQUIREMENT',
-        entry,
-        cardKey: entry.submissionId,
-        viewerName: entry.fileName || entry.label || 'Requirement Document',
-        previewUrl: previewUrls[getRequirementPreviewKey(entry)] || ''
-      })));
+    const requirementCards = getPublishedRequirementCards(selectedRequirements, publishedRequirements);
 
     return (
       <div className="view-req-container">

@@ -268,7 +268,7 @@ const isPublicEndpoint = (endpoint, method = 'GET') => {
     return true;
   }
 
-  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/register' || normalizedEndpoint === '/register/verify' || normalizedEndpoint === '/register/resend' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
+  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/login/verify' || normalizedEndpoint === '/login/resend' || normalizedEndpoint === '/register' || normalizedEndpoint === '/register/verify' || normalizedEndpoint === '/register/resend' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
     return true;
   }
 
@@ -469,6 +469,20 @@ export const resendRegistrationOtp = async (email) => {
   return apiRequest('/register/resend', {
     method: 'POST',
     body: JSON.stringify({ email }),
+  });
+};
+
+export const verifyLoginOtp = async (id, otp) => {
+  return apiRequest('/login/verify', {
+    method: 'POST',
+    body: JSON.stringify({ id, otp }),
+  });
+};
+
+export const resendLoginOtp = async (id) => {
+  return apiRequest('/login/resend', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
   });
 };
 

@@ -290,7 +290,9 @@ export default function AdminUserRecords() {
     screenerCreationInProgressRef.current = true;
     setCreatingScreener(true);
     try {
+      const assignedScreenerId = nextScreenerId || await getNextAdminScreenerId();
       const screenerData = {
+        id: assignedScreenerId,
         email,
         password: scrForm.password,
         department: scrForm.dept,

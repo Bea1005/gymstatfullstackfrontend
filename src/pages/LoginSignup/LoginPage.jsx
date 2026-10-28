@@ -61,8 +61,20 @@ export default function LoginPage() {
     let loginSucceeded = false;
 
     try {
-      // Login using ID
       const data = await login(id, password);
+
+      if (data.success && data.verificationRequired && String(data.user?.role || "").trim().toLowerCase() === "screener") {
+        const screenerLoginSession = {
+          id: data.user?.id || id,
+          email: data.user?.email || '',
+          role: 'screener'
+        };
+        sessionStorage.setItem('pendingScreenerLogin', JSON.stringify(screenerLoginSession));
+        notify("success", "Email verification required", "A 6-digit verification code was sent to your institutional email.");
+        loginSucceeded = true;
+        setTimeout(() => navigate('/screener/verify-code'), 400);
+        return;
+      }
 
       if (data.success) {
         const resolvedRole = String(data.user?.role || "").trim().toLowerCase();

@@ -149,6 +149,8 @@ export default function CoachRecord() {
   const studentSearchRequestRef = useRef(0);
   const athleteCacheRef = useRef(new Map());
   const athleteRequestRef = useRef(new Map());
+  const athleteRequirementCacheRef = useRef(new Map());
+  const athleteRequirementRequestRef = useRef(new Map());
   const studentPhotoCacheRef = useRef(new Map());
   const activeSportRef = useRef('');
   const [announcements, setAnnouncements] = useState([]);
@@ -351,23 +353,23 @@ export default function CoachRecord() {
 
   const loadStudentSearchDirectory = (sport) => {
     const selectedSport = String(sport || '').trim();
-    if (!selectedSport) return Promise.resolve([]);
+    const cacheKey = selectedSport || 'all';
 
-    const cachedResults = studentSearchCacheRef.current.get(selectedSport);
+    const cachedResults = studentSearchCacheRef.current.get(cacheKey);
     if (cachedResults) return Promise.resolve(cachedResults);
 
-    const existingRequest = studentSearchInFlightRef.current.get(selectedSport);
+    const existingRequest = studentSearchInFlightRef.current.get(cacheKey);
     if (existingRequest) return existingRequest;
 
     const request = api.searchCoachStudents('', selectedSport)
       .then((results) => (Array.isArray(results) ? results : []))
       .then((results) => {
-        studentSearchCacheRef.current.set(selectedSport, results);
+        studentSearchCacheRef.current.set(cacheKey, results);
         return results;
       })
-      .finally(() => studentSearchInFlightRef.current.delete(selectedSport));
+      .finally(() => studentSearchInFlightRef.current.delete(cacheKey));
 
-    studentSearchInFlightRef.current.set(selectedSport, request);
+    studentSearchInFlightRef.current.set(cacheKey, request);
     return request;
   };
 
@@ -385,31 +387,82 @@ export default function CoachRecord() {
   };
 
   const hydrateAthletePhotos = async (sport, athleteList) => {
-    const hydratedEntries = await Promise.all(athleteList.map(async (athlete) => {
-      const studentId = String(athlete.userId || athlete.id);
-      try {
-        const requirementState = await api.getCoachStudentRequirements(studentId);
-        if (!Array.isArray(requirementState?.publishedRequirements)
-          || !Array.isArray(requirementState?.uploads)) {
-          throw new Error('Invalid student requirement response');
-        }
-        const missingRequirements = getMissingCoachUploadLabels(
-          requirementState.publishedRequirements,
-          requirementState.uploads
-        );
-        const photo = missingRequirements.length ? '' : await loadStudentPhoto(athlete.profilePhotoUrl);
-        return [studentId, { photo, missingRequirements, requirementsLoading: false, requirementsError: '' }];
-      } catch (error) {
-        const errorMessages = {
-          401: 'Session expired',
-          403: 'Not authorized',
-          404: 'Requirements route unavailable',
-          500: 'Requirement check failed',
-        };
-        const errorLabel = errorMessages[error?.status] || 'Requirements unavailable';
-        return [studentId, { photo: '', missingRequirements: [], requirementsLoading: false, requirementsError: errorLabel }];
+    const athletesToHydrate = Array.isArray(athleteList) ? athleteList : [];
+    const hydratedEntries = [];
+
+    for (const athlete of athletesToHydrate) {
+      const studentId = String(athlete.userId || athlete.id || '').trim();
+      if (!studentId) continue;
+
+      const cachedRequirementState = athleteRequirementCacheRef.current.get(studentId);
+      if (cachedRequirementState && Date.now() - cachedRequirementState.fetchedAt < 30000) {
+        hydratedEntries.push([studentId, cachedRequirementState.state]);
+        continue;
       }
-    }));
+
+      if (athleteRequirementRequestRef.current.has(studentId)) {
+        try {
+          const pendingState = await athleteRequirementRequestRef.current.get(studentId);
+          hydratedEntries.push([studentId, pendingState]);
+        } catch {
+          hydratedEntries.push([studentId, {
+            photo: '',
+            missingRequirements: [],
+            requirementsLoading: false,
+            requirementsError: 'Requirements unavailable',
+          }]);
+        }
+        continue;
+      }
+
+      const request = (async () => {
+        try {
+          const requirementState = await api.getCoachStudentRequirements(studentId);
+          if (!Array.isArray(requirementState?.publishedRequirements)
+            || !Array.isArray(requirementState?.uploads)) {
+            throw new Error('Invalid student requirement response');
+          }
+          const missingRequirements = getMissingCoachUploadLabels(
+            requirementState.publishedRequirements,
+            requirementState.uploads
+          );
+          const photo = missingRequirements.length ? '' : await loadStudentPhoto(athlete.profilePhotoUrl);
+          const state = {
+            photo,
+            missingRequirements,
+            requirementsLoading: false,
+            requirementsError: '',
+          };
+          athleteRequirementCacheRef.current.set(studentId, { state, fetchedAt: Date.now() });
+          return state;
+        } catch (error) {
+          const errorMessages = {
+            401: 'Session expired',
+            403: 'Not authorized',
+            404: 'Requirements route unavailable',
+            500: 'Requirement check failed',
+          };
+          const errorLabel = errorMessages[error?.status] || 'Requirements unavailable';
+          const fallbackState = {
+            photo: '',
+            missingRequirements: [],
+            requirementsLoading: false,
+            requirementsError: errorLabel,
+          };
+          athleteRequirementCacheRef.current.set(studentId, { state: fallbackState, fetchedAt: Date.now() });
+          return fallbackState;
+        }
+      })();
+
+      athleteRequirementRequestRef.current.set(studentId, request);
+      try {
+        const state = await request;
+        hydratedEntries.push([studentId, state]);
+      } finally {
+        athleteRequirementRequestRef.current.delete(studentId);
+      }
+    }
+
     const hydratedByStudentId = new Map(hydratedEntries);
     const withRequirements = (athletesToUpdate) => athletesToUpdate.map((athlete) => ({
       ...athlete,
