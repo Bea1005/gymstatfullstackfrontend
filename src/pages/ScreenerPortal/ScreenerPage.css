@@ -10,8 +10,6 @@
   padding: clamp(20px, 3vw, 40px);
   background-color: #fafafa;
   min-height: 100vh;
-  width: 100%;
-  max-width: 100%;
   box-sizing: border-box;
 }
 
@@ -63,11 +61,6 @@
   gap: 8px;
   flex-shrink: 0;
   white-space: nowrap;
-}
-
-.logout-btn:hover,
-.logout-btn:focus-visible {
-  color: #ffffff;
 }
 
 /* Metrics Cards Section */
@@ -187,16 +180,11 @@
 
 /* Tabular Presentation */
 .table-container {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
   border: 1.5px solid #a0a0a0;
   border-radius: 16px;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
   background: #ffffff;
 }
 
@@ -529,6 +517,21 @@
   min-width: 120px;
 }
 
+.requirement-status-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.document-review-status {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
 .resubmitted-status-wrapper {
   display: flex;
   align-items: center;
@@ -618,10 +621,6 @@
     gap: 12px;
   }
 
-  .screener-header {
-    flex-wrap: wrap;
-  }
-
   .logout-btn,
   .back-portal-btn {
     padding: 8px 14px;
@@ -641,7 +640,7 @@
   }
 
   .screener-table {
-    min-width: 840px;
+    min-width: 900px;
   }
 
   .screener-table th,
@@ -697,11 +696,7 @@
   }
 
   .status-cell {
-    min-width: 80px;
-  }
-
-  .athlete-name {
-    padding-left: 12px !important;
+    min-width: 110px;
   }
 
   .screener-table th,

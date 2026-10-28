@@ -1,106 +1,22 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import RejectModal from '../../components/RejectModal';
 import { useNotifications } from '../../components/useNotifications';
 import DocumentViewer from '../../components/DocumentViewer';
+import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
-import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
+import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import {
-  DEPARTMENT_OPTIONS,
-  SPORT_OPTIONS,
-  YEAR_LEVEL_OPTIONS
-} from '../../constants/studentRegistrationOptions';
+  areRequirementsComplete,
+  buildRequirementColumns,
+  getRequirementColumnEntry,
+  getSportScopedRequirements
+} from '../requirementScreeningUtils';
 import './ScreenerPage.css';
-
-const normalizeYearLevel = (value) => {
-  const compactValue = String(value || '')
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-  if (!compactValue) return '';
-
-  const aliases = {
-    i: 'I',
-    '1': 'I',
-    '1st': 'I',
-    first: 'I',
-    firstyear: 'I',
-    firstyearlevel: 'I',
-    '1styear': 'I',
-    '1styearlevel': 'I',
-    year1: 'I',
-    yeari: 'I',
-    yearleveli: 'I',
-    yearlevel1: 'I',
-    ii: 'II',
-    '2': 'II',
-    '2nd': 'II',
-    second: 'II',
-    secondyear: 'II',
-    secondyearlevel: 'II',
-    '2ndyear': 'II',
-    '2ndyearlevel': 'II',
-    year2: 'II',
-    yearii: 'II',
-    yearlevelii: 'II',
-    yearlevel2: 'II',
-    iii: 'III',
-    '3': 'III',
-    '3rd': 'III',
-    third: 'III',
-    thirdyear: 'III',
-    thirdyearlevel: 'III',
-    '3rdyear': 'III',
-    '3rdyearlevel': 'III',
-    year3: 'III',
-    yeariii: 'III',
-    yearleveliii: 'III',
-    yearlevel3: 'III',
-    iv: 'IV',
-    '4': 'IV',
-    '4th': 'IV',
-    fourth: 'IV',
-    fourthyear: 'IV',
-    fourthyearlevel: 'IV',
-    '4thyear': 'IV',
-    '4thyearlevel': 'IV',
-    year4: 'IV',
-    yeariv: 'IV',
-    yearleveliv: 'IV',
-    yearlevel4: 'IV'
-  };
-
-  return aliases[compactValue] || '';
-};
-
-const normalizeDepartment = (value) => String(value ?? '')
-  .normalize('NFKC')
-  .trim()
-  .replace(/\s+/g, ' ')
-  .toLocaleLowerCase();
-
-const normalizeSportValue = (value) => {
-  const rawValue = String(value ?? '').trim();
-  if (!rawValue) return '';
-
-  return rawValue
-    .normalize('NFKC')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLocaleLowerCase();
-};
-
-const getStudentSportValues = (student = {}) => {
-  const sports = Array.isArray(student.sports) ? student.sports : [];
-  return Array.from(new Map(
-    sports
-      .filter((sport) => typeof sport === 'string')
-      .map((sport) => [normalizeSportValue(sport), sport.trim()])
-      .filter(([normalizedSport, sport]) => Boolean(normalizedSport && sport))
-  ).values());
-};
 
 const getFileExtension = (fileName = '') => {
   const normalizedName = String(fileName).toLowerCase();
@@ -122,21 +38,29 @@ const isPdfFile = (entry) => (
   || getFileExtension(entry?.fileName) === '.pdf'
 );
 
-const getRequirementFileUrl = (entry, fileIndex = 0) => {
-  if (entry?.files?.[fileIndex]?.fileUrl) return entry.files[fileIndex].fileUrl;
-  if (entry?.fileUrl && fileIndex === 0) return entry.fileUrl;
+const getRequirementFileUrl = (entry) => {
+  if (entry?.fileUrl) return entry.fileUrl;
   if (!entry?.submissionId) return '';
   const participation = encodeURIComponent(entry.participationType || 'Intrams');
-  return `/coach/requirements/${String(entry.submissionId)}/preview?participationType=${participation}&fileIndex=${fileIndex}`;
+  return `/screener/requirements/${String(entry.submissionId)}/preview?participationType=${participation}`;
 };
-
-const getRequirementPreviewKey = (entry, fileIndex = 0) => `${entry.submissionId}:${fileIndex}`;
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
   return api.getProtectedImageObjectUrl(fileUrl, { cache: 'no-store' });
 };
 
-export const RequirementScreeningInterface = () => {
+const normalizeDepartmentValue = (value) => String(value ?? '')
+  .normalize('NFKC')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLocaleLowerCase();
+
+const ScreenerPage = () => {
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const navigate = useNavigate();
+  const { authReady, authError, user } = usePortalSession(['screener', 'admin'], 'Screener');
+  const isScreener = String(user?.role || '').toLowerCase() === 'screener';
+  
   // Navigation State: 'list' or 'view-details'
   const [currentView, setCurrentView] = useState('list');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -145,8 +69,10 @@ export const RequirementScreeningInterface = () => {
   const [previewErrors, setPreviewErrors] = useState({});
   const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const { authReady, authError } = usePortalSession(['coach'], 'Coach');
+  const [publishedRequirements, setPublishedRequirements] = useState([]);
+  const [assignedDepartment, setAssignedDepartment] = useState('');
+  const [departmentUnassigned, setDepartmentUnassigned] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -156,41 +82,70 @@ export const RequirementScreeningInterface = () => {
   const [viewerSrc, setViewerSrc] = useState(null);
   const [viewerName, setViewerName] = useState(null);
   const [viewerType, setViewerType] = useState('');
-  const [viewerFiles, setViewerFiles] = useState([]);
-  const [viewerFileIndex, setViewerFileIndex] = useState(0);
-  const [viewerNavigationLoading, setViewerNavigationLoading] = useState(false);
-  const [downloadingFileKey, setDownloadingFileKey] = useState('');
 
   const { notify } = useNotifications();
   const hasNotifiedLoadErrorRef = useRef(false);
   const requirementsRequestInProgressRef = useRef(false);
-  const selectedStudentRef = useRef(selectedStudent);
-  selectedStudentRef.current = selectedStudent;
+  const requirementsPollingStoppedRef = useRef(false);
 
+  useEffect(() => {
+    const role = String(user?.role || '').trim().toLowerCase();
+    if (role === 'screener' || role === 'admin') {
+      sessionStorage.setItem('role', role);
+    }
+    if (role === 'screener') {
+      const department = String(user?.department || user?.dept || '').trim();
+      setAssignedDepartment(department);
+      setDepartmentFilter(department || 'All');
+    }
+  }, [user]);
+  
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
-  const departmentFilterOptions = Array.from(new Map(
-    [...DEPARTMENT_OPTIONS, ...students.map((student) => student.department)]
-      .filter((department) => typeof department === 'string' && department.trim())
-      .map((department) => [normalizeDepartment(department), department.trim()])
-  ).values());
+  const departmentFilterOptions = isScreener
+    ? (assignedDepartment ? [assignedDepartment] : [])
+    : DEPARTMENT_OPTIONS;
+  const sportFilterOptions = [...new Set(
+    students.flatMap((student) => Array.isArray(student.sports) ? student.sports : [])
+      .filter((sport) => typeof sport === 'string' && sport.trim())
+  )];
+  const requirementColumns = buildRequirementColumns(publishedRequirements, sportFilter);
+
   const loadRequirements = async (silent = false) => {
-    if (requirementsRequestInProgressRef.current) return;
+    if (requirementsRequestInProgressRef.current || requirementsPollingStoppedRef.current) return;
     requirementsRequestInProgressRef.current = true;
 
     try {
-      if (!silent) setLoading(true);
-      const response = await api.getCoachDocumentRequirements();
+      if (!silent && !students.length) setLoading(true);
+      const [response, publishedRequirementsResponse] = await Promise.all([
+        api.getScreenerRequirements(),
+        api.getPublishedRequirements()
+      ]);
       const data = response?.data || [];
       // Ensure data is always an array to avoid rendering crashes
       const safeData = Array.isArray(data) ? data : [];
+      setPublishedRequirements(Array.isArray(publishedRequirementsResponse?.data)
+        ? publishedRequirementsResponse.data
+        : []);
+      if (isScreener) {
+        const nextAssignedDepartment = String(response?.assignedDepartment || '').trim();
+        setAssignedDepartment((currentDepartment) => {
+          if (normalizeDepartmentValue(currentDepartment) !== normalizeDepartmentValue(nextAssignedDepartment)) {
+            setDepartmentFilter(nextAssignedDepartment || 'All');
+          }
+          return nextAssignedDepartment;
+        });
+        setDepartmentUnassigned(false);
+      }
       setStudents(safeData);
       setSelectedStudent((current) => {
         if (!current) return current;
-        return safeData.find((student) => student.id === current.id) || current;
+        const refreshedStudent = safeData.find((student) => student.id === current.id);
+        if (!refreshedStudent) setCurrentView('list');
+        return refreshedStudent || null;
       });
       const totalStudents = safeData.length;
       const pendingRequirements = safeData.reduce((acc, student) => {
@@ -202,16 +157,37 @@ export const RequirementScreeningInterface = () => {
         return acc + statuses.filter((item) => item && item.status === 'approved').length;
       }, 0);
       setStats({ totalStudents, pendingRequirements, verifiedRequirements });
+      setDepartmentUnassigned(false);
       hasNotifiedLoadErrorRef.current = false;
     } catch (error) {
-      console.error('Failed to load coach requirements', error);
+      console.error('Failed to load screener requirements', error);
+      if (isScreener && error?.status === 403
+        && /department is not configured/i.test(error?.message || '')) {
+        setAssignedDepartment('');
+        setDepartmentUnassigned(true);
+        setStudents([]);
+        setSelectedStudent(null);
+        setCurrentView('list');
+        setStats({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
+        requirementsPollingStoppedRef.current = false;
+        if (!silent && !hasNotifiedLoadErrorRef.current) {
+          notify(
+            'screener-error',
+            'Department Assignment Required',
+            'Your account has no assigned department. Contact an Admin to receive access to student-athlete records.'
+          );
+          hasNotifiedLoadErrorRef.current = true;
+        }
+        return;
+      }
+      requirementsPollingStoppedRef.current = true;
       // Friendly handling for authorization errors so UI doesn't crash
       const msg = error?.message || '';
       if (!silent && !hasNotifiedLoadErrorRef.current) {
         if (msg.toLowerCase().includes('not authorized') || msg.toLowerCase().includes('is not authorized')) {
-          notify('coach-error', 'Unable to load requirements', 'You are not authorized to view these requirements.');
+          notify('screener-error', 'Unable to load requirements', 'You are not authorized to view this resource. Please login with a Screener account.');
         } else {
-          notify('coach-error', 'Unable to load requirements', msg || 'Please try again.');
+          notify('screener-error', 'Unable to load requirements', msg || 'Please try again.');
         }
         hasNotifiedLoadErrorRef.current = true;
       }
@@ -220,14 +196,13 @@ export const RequirementScreeningInterface = () => {
       if (!silent) setLoading(false);
     }
   };
-
   const loadRequirementsEvent = useEffectEvent(loadRequirements);
 
-  const markResubmissionViewed = async (submissionId, submissionParticipationType = 'Intrams') => {
+  const markResubmissionViewed = async (submissionId, participationType = 'Intrams') => {
     if (!submissionId) return;
 
     try {
-      await api.markCoachRequirementViewed(submissionId, submissionParticipationType);
+      await api.markScreenerRequirementViewed(submissionId, participationType);
       setStudents((current) => current.map((student) => {
         const updatedRequirements = { ...student.requirements };
         Object.keys(updatedRequirements).forEach((key) => {
@@ -268,15 +243,23 @@ export const RequirementScreeningInterface = () => {
   };
 
   useEffect(() => {
-    if (!authReady) return undefined;
-
+    if (!authReady) return;
     loadRequirementsEvent();
+  }, [authReady]);
+
+  useEffect(() => {
+    if (!authReady) return undefined;
     const refreshInterval = window.setInterval(() => {
-      loadRequirementsEvent(true);
+      if (!requirementsPollingStoppedRef.current) loadRequirementsEvent(true);
     }, 10000);
 
+    return () => window.clearInterval(refreshInterval);
+  }, [authReady]);
+
+  useEffect(() => {
+    if (!authReady) return undefined;
     const handleRequirementUpdate = () => {
-      loadRequirementsEvent(true);
+      if (!requirementsPollingStoppedRef.current) loadRequirementsEvent(true);
     };
 
     const handleStorageUpdate = (event) => {
@@ -287,36 +270,19 @@ export const RequirementScreeningInterface = () => {
 
     window.addEventListener('gymstat-requirement-updated', handleRequirementUpdate);
     window.addEventListener('storage', handleStorageUpdate);
+
     return () => {
-      window.clearInterval(refreshInterval);
       window.removeEventListener('gymstat-requirement-updated', handleRequirementUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
     };
   }, [authReady]);
 
-  const previewEntriesKey = JSON.stringify([
-    selectedStudent?.id || '',
-    (selectedStudent?.requirements?.documents || []).map((entry) => [
-      entry.submissionId,
-      (entry.files || [{ fileUrl: getRequirementFileUrl(entry), fileName: entry.fileName, fileType: entry.fileType }])
-        .map((file) => [file.fileUrl, file.fileName, file.fileType])
-    ])
-  ]);
-
   useEffect(() => {
     let cancelled = false;
     const createdUrls = [];
-    const previewStudent = selectedStudentRef.current;
-    const entries = (previewStudent?.requirements?.documents || [])
-      .flatMap((entry) => (entry.files?.length ? entry.files : [entry])
-        .map((file, index) => [
-          getRequirementPreviewKey(entry, index),
-          { ...entry, ...file },
-          getRequirementFileUrl(entry, index)
-        ]))
-      .filter(([submissionId, entry, fileUrl]) => (
-        submissionId && entry?.hasUpload === true && Boolean(fileUrl)
-      ));
+    const entries = (selectedStudent?.requirements?.documents || [])
+      .map((entry) => [entry.submissionId, entry, getRequirementFileUrl(entry)])
+      .filter(([, , fileUrl]) => Boolean(fileUrl));
 
     setPreviewUrls({});
     setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, true])));
@@ -332,7 +298,7 @@ export const RequirementScreeningInterface = () => {
         createdUrls.push(blobUrl);
         return [key, blobUrl];
       } catch {
-        notify('coach-error', 'Preview Unavailable', `${entry.fileName || 'Document'} could not be previewed.`);
+        notify('screener-error', 'Preview Unavailable', `${entry.fileName || 'Document'} could not be previewed.`);
         return [key, ''];
       }
     })).then((results) => {
@@ -348,7 +314,7 @@ export const RequirementScreeningInterface = () => {
       cancelled = true;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [notify, previewEntriesKey]);
+  }, [notify, selectedStudent]);
 
   // Requirement labels are display metadata only; previews come from MongoDB file records.
   const requirementsTemplates = [
@@ -380,19 +346,36 @@ export const RequirementScreeningInterface = () => {
     setSelectedStudent(null);
   };
 
+  const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false);
+  };
+
   // Filter students based on search query and filters
   const filteredStudents = students.filter((student) => {
-    const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
-    const matchesSearch = String(student.name || '').toLocaleLowerCase().includes(normalizedSearchQuery);
+    const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = departmentFilter === 'All'
-      || normalizeDepartment(student.department) === normalizeDepartment(departmentFilter);
+      || normalizeDepartmentValue(student.department) === normalizeDepartmentValue(departmentFilter);
+    const matchesAssignedDepartment = !isScreener
+      || (Boolean(assignedDepartment)
+        && normalizeDepartmentValue(student.department) === normalizeDepartmentValue(assignedDepartment));
     const matchesSport = sportFilter === 'All'
-      || getStudentSportValues(student)
-        .some((sport) => normalizeSportValue(sport) === normalizeSportValue(sportFilter));
-    const matchesYear = yearLevelFilter === 'All'
-      || normalizeYearLevel(student.yearLevel) === normalizeYearLevel(yearLevelFilter);
+      || student.sport === sportFilter
+      || student.sports?.includes(sportFilter);
+    const matchesYear = yearLevelFilter === 'All' || student.yearLevel === yearLevelFilter;
     
-    return matchesSearch && matchesDept && matchesSport && matchesYear;
+    return matchesAssignedDepartment && matchesSearch && matchesDept && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
     const getSurname = (student) => {
       const name = String(student.lastName || student.surname || student.name || '').trim();
@@ -411,11 +394,6 @@ export const RequirementScreeningInterface = () => {
     return <span className="text-muted-italic">No Documents Attached</span>;
   };
 
-  const renderOverallStatusBadge = (status) => {
-    if (status === 'Approved') return <span className="badge badge-completed">Approved</span>;
-    return renderStatusBadge(status);
-  };
-
   const resubmissionCount = students.reduce((acc, student) => {
     return acc + Object.values(student.requirements || {})
       .filter((item) => !Array.isArray(item))
@@ -424,13 +402,18 @@ export const RequirementScreeningInterface = () => {
 
   const renderStatusCell = (entry) => (
     <td className="status-cell">
-      {entry?.resubmitted && (
-        <div className="resubmitted-status-wrapper">
-          <span className="resubmitted-table-indicator" title="Resubmitted requirement awaiting review">!</span>
-          <span className="resubmitted-table-label">Resubmitted</span>
-        </div>
-      )}
-      {renderStatusBadge(entry?.status)}
+      <div className="requirement-status-list">
+        {entry?.resubmitted && (
+          <div className="resubmitted-status-wrapper">
+            <span className="resubmitted-table-indicator" title="Resubmitted requirement awaiting review">!</span>
+            <span className="resubmitted-table-label">Resubmitted</span>
+          </div>
+        )}
+        {entry?.coachStatus === 'approved' && (
+          <span className="badge badge-completed">Coach-Approved</span>
+        )}
+        {renderStatusBadge(entry?.status)}
+      </div>
     </td>
   );
 
@@ -442,63 +425,21 @@ export const RequirementScreeningInterface = () => {
 
   const handleOpenRequirementViewer = async (entry, fallbackSrc = '', fallbackName = 'Requirement Document') => {
     if (entry?.resubmitted && entry.submissionId) {
-      await markResubmissionViewed(entry.submissionId, entry.participationType || 'Intrams');
+      await markResubmissionViewed(entry.submissionId, entry.participationType);
     }
     try {
-      const files = entry?.files?.length
-        ? entry.files
-        : [{ fileName: entry?.fileName || fallbackName, fileType: entry?.fileType || '', fileUrl: getRequirementFileUrl(entry) }];
-      const fileUrl = getRequirementFileUrl(entry, 0);
+      const fileUrl = getRequirementFileUrl(entry);
       const attachmentUrl = fileUrl
         ? await loadAttachmentBlobUrl(fileUrl)
         : fallbackSrc;
       setViewerSrc(attachmentUrl);
-      setViewerFiles(files);
-      setViewerFileIndex(0);
-      setViewerName(files[0]?.fileName || fallbackName);
-      setViewerType(files[0]?.fileType || entry?.fileType || '');
-      setViewerOpen(true);
     } catch (error) {
-      notify('coach-error', 'Unable to open file', error.message);
+      notify('screener-error', 'Unable to open file', error.message);
       return;
     }
-  };
-
-  const handleViewerNavigation = async (direction) => {
-    if (viewerNavigationLoading || viewerFiles.length < 2) return;
-    const nextIndex = (viewerFileIndex + direction + viewerFiles.length) % viewerFiles.length;
-    const selectedFile = viewerFiles[nextIndex];
-    setViewerNavigationLoading(true);
-    try {
-      const source = await loadAttachmentBlobUrl(selectedFile.fileUrl);
-      if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
-      setViewerSrc(source);
-      setViewerName(selectedFile.fileName || 'Requirement Document');
-      setViewerType(selectedFile.fileType || '');
-      setViewerFileIndex(nextIndex);
-    } catch (error) {
-      notify('coach-error', 'Unable to open file', error.message);
-    } finally {
-      setViewerNavigationLoading(false);
-    }
-  };
-
-  const handleDownloadRequirement = async (entry, fileIndex, file) => {
-    const key = `${entry.submissionId}:${fileIndex}`;
-    setDownloadingFileKey(key);
-    try {
-      await api.downloadCoachRequirement(
-        entry.submissionId,
-        file?.fileName || entry.fileName || 'requirement',
-        entry.participationType || 'Intrams',
-        fileIndex
-      );
-      notify('coach-success', 'Download Started', `${getDisplayFileName(file?.fileName || entry.fileName)} is ready.`);
-    } catch (error) {
-      notify('coach-error', 'Download Failed', error.message || 'Unable to download this document.');
-    } finally {
-      setDownloadingFileKey('');
-    }
+    setViewerName(entry?.fileName || fallbackName);
+    setViewerType(entry?.fileType || '');
+    setViewerOpen(true);
   };
 
   // --- VIEW 1: REQUIREMENTS SCREENING PORTAL DASHBOARD LIST ---
@@ -510,13 +451,21 @@ export const RequirementScreeningInterface = () => {
         <header className="screener-header">
           <div className="header-left">
             <div className="header-title-row">
-              <h1>Document Screening</h1>
+              <h1>Requirements Screening Portal</h1>
               {resubmissionCount > 0 && (
                 <span className="header-badge" title="Resubmitted requirement(s) awaiting review">{resubmissionCount}</span>
               )}
             </div>
-            <p>Review submitted student-athlete requirements assigned to your sports.</p>
+            <p>Review coach-approved requirements from complete sport groups and finalize each student-athlete's documents.</p>
           </div>
+          <button className="logout-btn" onClick={handleLogout}>
+            Log Out 
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="logout-icon">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
         </header>
 
         <div className="metrics-row">
@@ -552,7 +501,7 @@ export const RequirementScreeningInterface = () => {
           </div>
 
           <div className="filter-group">
-            <label>Program:</label>
+            <label>Department:</label>
             <select 
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
@@ -571,7 +520,7 @@ export const RequirementScreeningInterface = () => {
               onChange={(e) => setSportFilter(e.target.value)}
             >
               <option value="All">All</option>
-              {SPORT_OPTIONS.map((sport) => (
+              {sportFilterOptions.map((sport) => (
                 <option key={sport} value={sport}>{sport}</option>
               ))}
             </select>
@@ -594,68 +543,82 @@ export const RequirementScreeningInterface = () => {
 
         {loading ? (
           <div className="loading-state">Loading submitted requirements…</div>
-        ) : filteredStudents.length === 0 ? (
-          <div className="loading-state">No student requirements match your assigned sports.</div>
+        ) : departmentUnassigned ? (
+          <div className="loading-state">No department is assigned to your screener account. Contact an Admin to receive access.</div>
         ) : (
           <div className="table-container">
             <table className="screener-table">
               <thead>
                 <tr>
                   <th>Athlete Name</th>
-                  <th>Program</th>
-                  <th>COR</th>
-                  <th>MED</th>
-                  <th>PSA</th>
-                  <th>INSURANCE</th>
-                  <th className="two-line-header">STUDENT<br/>PROFILE</th>
-                  <th className="two-line-header">PARENTS<br/>CONSENT</th>
+                  <th>Department</th>
+                  {requirementColumns.map((column) => (
+                    <th key={column.id}>{column.label}</th>
+                  ))}
                   <th>STATUS</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((student) => (
-                  <tr key={student.id}>
-                    <td 
-                      className="athlete-name click-nav-target" 
-                      onClick={() => handleSelectStudent(student)}
-                      title="Click to view requirements"
-                    >
-                      {student.name}
-                    </td>
-                    <td className="dept-code">{student.department}</td>
-                    {renderStatusCell(student.requirements?.cor)}
-                    {renderStatusCell(student.requirements?.med)}
-                    {renderStatusCell(student.requirements?.psa)}
-                    {renderStatusCell(student.requirements?.insurance)}
-                    {renderStatusCell(student.requirements?.profile)}
-                    {renderStatusCell(student.requirements?.consent)}
-                    <td>{renderOverallStatusBadge(student.overallStatus)}</td>
-                  </tr>
-                ))}
+                {filteredStudents.map((student) => {
+                  const displayedRequirements = getSportScopedRequirements(
+                    student.requirements,
+                    sportFilter === 'All' ? '' : sportFilter
+                  );
+
+                  return (
+                    <tr key={student.id}>
+                      <td
+                        className="athlete-name click-nav-target"
+                        onClick={() => handleSelectStudent(student)}
+                        title="Click to view requirements"
+                      >
+                        {student.name}
+                      </td>
+                      <td className="dept-code">{student.department}</td>
+                      {requirementColumns.map((column) => (
+                        <React.Fragment key={column.id}>
+                          {renderStatusCell(getRequirementColumnEntry(displayedRequirements, column))}
+                        </React.Fragment>
+                      ))}
+                      <td>
+                        {renderStatusBadge(
+                          areRequirementsComplete(displayedRequirements) ? 'Completed' : 'Incomplete'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
+        <LogoutConfirmModal
+          isOpen={showLogoutModal}
+          onClose={cancelLogout}
+          onConfirm={confirmLogout}
+        />
       </div>
     );
   }
 
   // --- VIEW 2: VIEW STUDENT ATHLETE REQUIREMENTS MAIN GRID ---
   if (currentView === 'view-details' && selectedStudent) {
-    const requirementDocuments = (selectedStudent.requirements?.documents || [])
-      .filter((entry) => entry?.submissionId && entry.hasUpload === true);
+    const selectedSport = sportFilter === 'All' ? selectedStudent.sport : sportFilter;
+    const selectedRequirements = getSportScopedRequirements(selectedStudent.requirements, selectedSport);
+    const requirementDocuments = selectedRequirements.documents || [];
     const standardRequirementKeys = new Set(requirementsTemplates.map((req) => req.id === 'med' ? 'med' : req.id));
     const requirementCards = requirementsTemplates.flatMap((req) => {
       const requirementKey = req.id === 'med' ? 'med' : req.id;
       const entries = requirementDocuments
         .filter((entry) => (entry.requirementType === 'medical' ? 'med' : entry.requirementType) === requirementKey);
+      const cards = entries.length > 0 ? entries : [null];
 
-      return entries.map((entry) => ({
+      return cards.map((entry, index) => ({
         ...req,
         entry,
-        cardKey: entry.submissionId,
+        cardKey: entry?.submissionId || `${req.id}-empty-${index}`,
         viewerName: entry?.fileName || req.title,
-        previewUrl: previewUrls[getRequirementPreviewKey(entry)] || ''
+        previewUrl: entry?.submissionId ? previewUrls[entry.submissionId] || '' : ''
       }));
     }).concat(requirementDocuments
       .filter((entry) => {
@@ -668,7 +631,7 @@ export const RequirementScreeningInterface = () => {
         entry,
         cardKey: entry.submissionId,
         viewerName: entry.fileName || entry.label || 'Requirement Document',
-        previewUrl: previewUrls[getRequirementPreviewKey(entry)] || ''
+        previewUrl: previewUrls[entry.submissionId] || ''
       })));
 
     return (
@@ -688,26 +651,32 @@ export const RequirementScreeningInterface = () => {
           <div className="student-info-banner">
             <h2>{selectedStudent.name}</h2>
             <p><strong>Department :</strong> {selectedStudent.department || selectedStudent.dept || 'Not specified'}</p>
-            <p><strong>Sport :</strong> {selectedStudent.sport || 'Not specified'}</p>
+            <p><strong>Sport :</strong> {selectedSport || 'Not specified'}</p>
           </div>
 
           <div className="req-documents-grid">
             {requirementCards.map((req) => (
               <div className={`document-card ${req.entry?.resubmitted ? 'document-card--resubmitted' : ''} ${req.entry?.status === 'rejected' ? 'document-card--rejected' : ''}`} key={req.cardKey}>
                 <h3>{req.title}</h3>
+                {req.entry && (
+                  <div className="document-review-status">
+                    <span className="badge badge-completed">Coach-Approved</span>
+                    {renderStatusBadge(req.entry.status)}
+                  </div>
+                )}
                 {req.entry?.resubmitted && <span className="document-card-resubmitted-label">Resubmitted</span>}
                 <div className={`document-preview-box${getRequirementFileUrl(req.entry) ? '' : ' document-preview-box--empty'}`}>
                   {getRequirementFileUrl(req.entry) ? (
                     <>
                       {req.previewUrl && isImageFile(req.entry) && (
-                        !previewErrors[getRequirementPreviewKey(req.entry)] && (
+                        !previewErrors[req.entry.submissionId] && (
                           <img
                             src={req.previewUrl}
                             alt={req.entry.fileName || req.title}
                             className="document-img"
                             onError={() => setPreviewErrors((current) => ({
                               ...current,
-                              [getRequirementPreviewKey(req.entry)]: true
+                              [req.entry.submissionId]: true
                             }))}
                           />
                         )
@@ -719,14 +688,14 @@ export const RequirementScreeningInterface = () => {
                           className="document-frame"
                         />
                       )}
-                      {!req.previewUrl && previewLoading[getRequirementPreviewKey(req.entry)] && (
+                      {!req.previewUrl && previewLoading[req.entry.submissionId] && (
                         <span className="document-loading-label">Loading document...</span>
                       )}
-                      {req.previewUrl && isImageFile(req.entry) && !previewErrors[getRequirementPreviewKey(req.entry)] && (
+                      {req.previewUrl && isImageFile(req.entry) && !previewErrors[req.entry.submissionId] && (
                         <div className="document-file-label">{getDisplayFileName(req.entry.fileName)}</div>
                       )}
-                      {(!req.previewUrl || previewErrors[getRequirementPreviewKey(req.entry)] || (!isImageFile(req.entry) && !isPdfFile(req.entry)))
-                        && !previewLoading[getRequirementPreviewKey(req.entry)] && (
+                      {(!req.previewUrl || previewErrors[req.entry.submissionId] || (!isImageFile(req.entry) && !isPdfFile(req.entry)))
+                        && !previewLoading[req.entry.submissionId] && (
                         <div className="document-file-label">
                           <div>Document preview unavailable</div>
                           <div>{getDisplayFileName(req.entry.fileName)}</div>
@@ -763,40 +732,22 @@ export const RequirementScreeningInterface = () => {
                 )}
 
                 {req.entry?.submissionId && (
-                  <>
-                    <div className="document-download-list" aria-label={`Download files for ${req.title}`}>
-                      {(req.entry.files?.length ? req.entry.files : [{ fileName: req.entry.fileName }]).map((file, fileIndex) => {
-                        const downloadKey = `${req.entry.submissionId}:${fileIndex}`;
-                        return (
-                          <button
-                            key={downloadKey}
-                            type="button"
-                            className="document-download-btn"
-                            onClick={() => handleDownloadRequirement(req.entry, fileIndex, file)}
-                            disabled={downloadingFileKey === downloadKey}
-                          >
-                            {downloadingFileKey === downloadKey ? 'Downloading…' : `Download ${getDisplayFileName(file.fileName, `File ${fileIndex + 1}`)}`}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="document-action-row">
-                      <button
-                        className="action-btn approve-btn"
-                        onClick={() => setApproveTarget(req.entry.submissionId)}
-                        aria-label={`Approve ${req.title}`}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        className="action-btn reject-btn"
-                        onClick={() => setRejectTarget(req.entry.submissionId)}
-                        aria-label={`Reject ${req.title}`}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </>
+                  <div className="document-action-row">
+                    <button
+                      className="action-btn approve-btn"
+                      onClick={() => setApproveTarget(req.entry.submissionId)}
+                      aria-label={`Approve ${req.title}`}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="action-btn reject-btn"
+                      onClick={() => setRejectTarget(req.entry.submissionId)}
+                      aria-label={`Reject ${req.title}`}
+                    >
+                      Reject
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -815,28 +766,29 @@ export const RequirementScreeningInterface = () => {
               const submissionId = approveTarget;
               const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
               const reviewParticipationType = submission?.participationType || 'Intrams';
-              await api.reviewCoachRequirement(submissionId, {
+              await api.reviewScreenerRequirement(submissionId, {
                 status: 'approved',
-                feedback: 'Approved by coach',
+                feedback: 'Approved by screener',
                 participationType: reviewParticipationType,
                 studentId: selectedStudent?.id
               });
               await markResubmissionViewed(submissionId, reviewParticipationType);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'approved' }));
-              notify('coach-success', 'Requirement Approved', 'Requirement is complete.');
+              notify('screener-success', 'Requirement Approved', 'Requirement is complete.');
               setApproveTarget(null);
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
+                window.dispatchEvent(new Event('gymstat-requirement-updated'));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getCoachDocumentRequirements();
+              const response = await api.getScreenerRequirements();
               const data = response?.data || [];
               setStudents(data);
               const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
               setSelectedStudent(refreshedSelectedStudent);
             } catch (err) {
-              notify('coach-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
+              notify('screener-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
             }
           }}
         />
@@ -848,73 +800,46 @@ export const RequirementScreeningInterface = () => {
             try {
               const submissionId = rejectTarget;
               const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
-              const reviewParticipationType = submission?.participationType || 'Intrams';
-              await api.reviewCoachRequirement(submissionId, {
+              await api.reviewScreenerRequirement(submissionId, {
                 status: 'rejected',
                 feedback: payload.reason,
                 remarks: payload.remarks,
                 studentId: selectedStudent?.id,
-                participationType: reviewParticipationType
+                participationType: submission?.participationType || 'Intrams'
               });
               setRejectTarget(null);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
-              const message = `Requirement rejected and retained for re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
-              notify('coach-error', 'Requirement Rejected', message);
+              const message = `Requirement deleted and student can re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
+              notify('screener-error', 'Requirement Rejected', message);
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
+                window.dispatchEvent(new Event('gymstat-requirement-updated'));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getCoachDocumentRequirements();
+              const response = await api.getScreenerRequirements();
               const data = response?.data || [];
               setStudents(data);
               const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
               setSelectedStudent(refreshedSelectedStudent);
             } catch (err) {
-              notify('coach-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
+              notify('screener-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
             }
           }}
         />
         <DocumentViewer
-          key={viewerOpen ? 'screener-viewer' : 'closed'}
+          key={viewerOpen ? viewerSrc : 'closed'}
           isOpen={viewerOpen}
           src={viewerSrc}
           fileName={viewerName}
           fileType={viewerType}
-          onClose={() => {
-            if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
-            setViewerOpen(false);
-            setViewerSrc(null);
-            setViewerName(null);
-            setViewerType('');
-            setViewerFiles([]);
-            setViewerFileIndex(0);
-          }}
-          navigationVisible={viewerFiles.length > 1}
-          navigationLabel={`${viewerFileIndex + 1} / ${viewerFiles.length}`}
-          navigationLoading={viewerNavigationLoading}
-          onPrevious={() => handleViewerNavigation(-1)}
-          onNext={() => handleViewerNavigation(1)}
+          onClose={() => { setViewerOpen(false); setViewerSrc(null); setViewerName(null); setViewerType(''); }}
         />
       </div>
     );
   }
 };
 
-const ScreenerPage = () => {
-  const { authReady, authError } = usePortalSession(['screener', 'admin'], 'Screener');
-  if (!authReady) return authError ? <PortalSessionError /> : null;
-
-  return (
-    <div className="screener-container">
-      <header className="screener-header">
-        <div className="header-left">
-          <h1>Student Document Screening</h1>
-          <p>Student-athlete document screening is now handled in the Coach Portal.</p>
-        </div>
-      </header>
-    </div>
-  );
-};
-
 export default ScreenerPage;
+
+export { RequirementScreeningInterface } from './RequirementScreeningInterface';

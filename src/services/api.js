@@ -236,7 +236,8 @@ const isAdminRequirementMutation = (endpoint, method) => {
   if (isSafeMethod(normalizedMethod)) return false;
 
   const pathname = String(endpoint || '').split('?')[0];
-  return pathname === '/schedules'
+  return (pathname === '/users' && normalizedMethod === 'POST')
+    || pathname === '/schedules'
     || /^\/schedules\/[a-f\d]{24}$/i.test(pathname)
     || /^\/schedule-requests\/[a-f\d]{24}$/i.test(pathname)
     || pathname === '/requirements'
@@ -680,6 +681,12 @@ export const getAdminScreeners = async (accountStatus = 'active') => {
   });
 };
 
+export const getNextAdminScreenerId = async () => {
+  return apiRequest('/users/screeners/next-id', {
+    method: 'GET',
+  });
+};
+
 // Create new user (admin only - for students/screeners)
 export const createUser = async (userData) => {
   return apiRequest('/users', {
@@ -1024,6 +1031,27 @@ export const reviewCoachRequirement = async (submissionId, reviewData) => {
 
 export const markCoachRequirementViewed = async (submissionId, participationType = 'Intrams') => {
   return apiRequest(`/coach/requirements/${encodeURIComponent(submissionId)}/viewed`, {
+    method: 'PUT',
+    body: JSON.stringify({ participationType }),
+  });
+};
+
+export const getScreenerRequirements = async (participationType) => {
+  const query = participationType
+    ? `?participationType=${encodeURIComponent(participationType)}`
+    : '';
+  return apiRequest(`/screener/requirements${query}`, { method: 'GET' });
+};
+
+export const reviewScreenerRequirement = async (submissionId, reviewData) => {
+  return apiRequest(`/screener/requirements/${encodeURIComponent(submissionId)}/review`, {
+    method: 'PUT',
+    body: JSON.stringify(reviewData),
+  });
+};
+
+export const markScreenerRequirementViewed = async (submissionId, participationType = 'Intrams') => {
+  return apiRequest(`/screener/requirements/${encodeURIComponent(submissionId)}/viewed`, {
     method: 'PUT',
     body: JSON.stringify({ participationType }),
   });

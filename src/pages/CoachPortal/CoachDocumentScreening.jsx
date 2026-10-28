@@ -92,7 +92,7 @@ const CoachDocumentScreening = () => {
       </section>
 
       <div className="coach-screening-workspace">
-        <RequirementScreeningInterface />
+        <RequirementScreeningInterface hideFilters={['program']} />
       </div>
     </div>
   );

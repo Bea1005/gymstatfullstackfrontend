@@ -1,7 +1,7 @@
 import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { getAdminStudents, getAdminScreeners, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
+import { getAdminStudents, getAdminScreeners, getNextAdminScreenerId, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { isPasswordValid, PASSWORD_POLICY_MESSAGE } from '../../constants/passwordPolicy';
 import Icon from '../../components/Icon';
@@ -146,11 +146,12 @@ export default function AdminUserRecords() {
 
   /* ── Screener state ── */
   const [screeners,      setScreeners]      = useState([]);
+  const [nextScreenerId, setNextScreenerId] = useState('');
   const [screenerSearch, setScreenerSearch] = useState('');
   const [screenerDept,   setScreenerDept]   = useState('All');
   const [screenerAccountStatus, setScreenerAccountStatus] = useState('active');
   const [selScreeners,   setSelScreeners]   = useState([]);
-  const [scrForm,        setScrForm]        = useState({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
+  const [scrForm,        setScrForm]        = useState({ email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
   const [scrPwShow,      setScrPwShow]      = useState(false);
   const [scrError,       setScrError]       = useState('');
   const [creatingScreener, setCreatingScreener] = useState(false);
@@ -186,11 +187,14 @@ export default function AdminUserRecords() {
   /* ── Fetch screeners from MongoDB ── */
   const fetchScreeners = async () => {
     try {
-      const data = await getAdminScreeners(screenerAccountStatus);
-      const screenersData = parseUserListResponse(data)
+      const [activeData, archivedData] = await Promise.all([
+        getAdminScreeners('active'),
+        getAdminScreeners('archived')
+      ]);
+      const allScreenersData = [...parseUserListResponse(activeData), ...parseUserListResponse(archivedData)]
         .filter((user) => (user?.role || 'screener').toLowerCase() === 'screener')
         .map(normalizeUserRow);
-      setScreeners(screenersData);
+      setScreeners(allScreenersData.filter((user) => user.accountStatus === screenerAccountStatus));
     } catch (error) {
       console.error('Error fetching screeners:', error);
       showToast('Failed to load screeners', 'error');
@@ -198,12 +202,28 @@ export default function AdminUserRecords() {
     }
   };
 
+  const fetchNextScreenerId = async () => {
+    try {
+      const response = await getNextAdminScreenerId();
+      if (typeof response?.id !== 'string' || !/^S\d{6,}$/.test(response.id)) {
+        throw new Error('The server returned an invalid Screener ID.');
+      }
+      setNextScreenerId(response.id);
+    } catch (error) {
+      console.error('Error fetching next Screener ID:', error);
+      setNextScreenerId('');
+      showToast(error.message || 'Failed to load the next Screener ID', 'error');
+    }
+  };
+
   const fetchStudentsEvent = useEffectEvent(fetchStudents);
   const fetchScreenersEvent = useEffectEvent(fetchScreeners);
+  const fetchNextScreenerIdEvent = useEffectEvent(fetchNextScreenerId);
 
   useEffect(() => {
     fetchStudentsEvent();
     fetchScreenersEvent();
+    fetchNextScreenerIdEvent();
   }, [studentAccountStatus, screenerAccountStatus]);
 
   /* ── Generic checkbox helpers ── */
@@ -230,23 +250,16 @@ export default function AdminUserRecords() {
     return (screenerDept === 'All' || s.dept === screenerDept)
       && (name.includes(screenerSearchText) || email.includes(screenerSearchText));
   }));
-
   /* ── Register screener ── */
   const registerScreener = async (e) => {
     e.preventDefault();
     if (screenerCreationInProgressRef.current) return;
 
-    const id = scrForm.id.trim();
     const email = scrForm.email.trim();
     const showRegisterError = (message) => {
       setScrError(message);
       showToast(message, 'error');
     };
-
-    if (!id) {
-      showRegisterError('ID is required.');
-      return;
-    }
 
     if (!email) {
       showRegisterError('Email is required.');
@@ -277,7 +290,6 @@ export default function AdminUserRecords() {
     setCreatingScreener(true);
     try {
       const screenerData = {
-        id,
         email,
         password: scrForm.password,
         department: scrForm.dept,
@@ -286,9 +298,13 @@ export default function AdminUserRecords() {
 
       const result = await createUser(screenerData);
       const newScreener = normalizeUserRow(result?.user || result);
-      setScreeners(p => [newScreener, ...p]);
-      setScrForm({ id: '', email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
+      if (screenerAccountStatus === 'active') {
+        setScreeners((previous) => [newScreener, ...previous]);
+      }
+      void fetchNextScreenerId();
+      setScrForm({ email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
       setScrError('');
+      showToast(`Screener account ${newScreener.id} created. A verification email has been sent.`, 'success');
     } catch (error) {
       console.error('Error creating screener:', error);
       setScrError(error.message);
@@ -690,14 +706,14 @@ export default function AdminUserRecords() {
             <form className="ur-reg-form" onSubmit={registerScreener} noValidate>
               <div className="ur-reg-row">
                 <div className="ur-reg-group">
-                  <label className="ur-reg-label">ID *</label>
-                  <input 
-                    type="text" 
-                    className="ur-reg-input" 
-                    placeholder="Enter ID"
-                    value={scrForm.id} 
-                    onChange={e => setScrForm(f => ({ ...f, id: e.target.value }))} 
-                    required
+                  <label className="ur-reg-label">Screener ID</label>
+                  <input
+                    type="text"
+                    className="ur-reg-input"
+                    value={nextScreenerId}
+                    placeholder="Loading next ID..."
+                    readOnly
+                    aria-label="Screener ID will be generated automatically"
                   />
                 </div>
                 <div className="ur-reg-group">
@@ -714,7 +730,7 @@ export default function AdminUserRecords() {
               </div>
               <div className="ur-reg-row">
                 <div className="ur-reg-group">
-                  <label className="ur-reg-label">Program *</label>
+                  <label className="ur-reg-label">Department *</label>
                   <select className="ur-reg-input ur-reg-select" value={scrForm.dept}
                     onChange={e => setScrForm(f => ({ ...f, dept: e.target.value }))}>
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
