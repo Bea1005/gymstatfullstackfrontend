@@ -1,4 +1,10 @@
-
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
+import { createRequirement, publishRequirement, getAllRequirements, updateAdminRequirement, deleteAdminRequirement, downloadPublishedRequirement } from '../../services/api';
+import NotificationToast from '../../components/NotificationToast';
+import ConfirmModal from '../../components/ConfirmModal';
+import Icon from '../../components/Icon';
+import { REGISTRATION_CATEGORIES } from '../../constants/registrationCategories';
+import './AdminPortal.css';
 
 const REGISTRATION_SCOPE_GROUPS = REGISTRATION_CATEGORIES.map(({ name, events = [], subcategories = [] }) => ({
   name,
