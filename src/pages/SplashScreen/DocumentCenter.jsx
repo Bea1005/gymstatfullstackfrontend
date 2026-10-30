@@ -10,11 +10,6 @@ const documents = [
     fileName: 'borrowers-template.doc',
     fileUrl: borrowersTemplateDoc,
   },
-  {
-    id: 'gymnasium-schedule-request',
-    fileName: 'gymnasium_schedule_request.docx',
-    fileUrl: '/documents/gymnasium_schedule_request.docx',
-  },
 ];
 
 const DocumentCenter = () => {
@@ -30,7 +25,7 @@ const DocumentCenter = () => {
   return (
     <div className="document-center-container">
       <button className="back-btn" onClick={() => navigate('/landingpage')}>
-        ← Back to Onboarding
+        ← Back to Landing Page
       </button>
 
       <div className="downloads-section">
@@ -70,20 +65,6 @@ const DocumentCenter = () => {
               </a>
 
               <div className="card-actions">
-                <a
-                  href={doc.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="action-btn"
-                  title="Preview document"
-                  aria-label={`Open ${doc.fileName}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  </svg>
-                </a>
-
                 <a 
                   href={doc.fileUrl}
                   download={doc.fileName}

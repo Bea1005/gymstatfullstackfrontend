@@ -252,15 +252,6 @@ const LandingPage = () => {
           </div>
 
           <div className="landing-footer-section">
-            <h5>Site Links</h5>
-            <ul>
-              <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>Home</button></li>
-              <li><button onClick={() => navigate('/calendar')}>Public Calendar</button></li>
-              <li><button onClick={() => navigate('/document-center')}>Document Center</button></li>
-            </ul>
-          </div>
-
-          <div className="landing-footer-section">
             <h5>System</h5>
             <ul>
               <li><span>Schedule Management</span></li>

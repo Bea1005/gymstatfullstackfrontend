@@ -17,6 +17,113 @@ import "./RegisterPage.css";
 
 import gymBackground from "../../assets/GYMSTAT BG.jpg";
 
+const FULL_NAME_PATTERN = /^[\p{L}\p{M}]+(?:[\s'’.-][\p{L}\p{M}]+)*$/u;
+const DUMMY_FULL_NAME_VALUES = new Set([
+  "test", "user", "admin", "guest", "student", "coach", "example", "sample",
+  "placeholder", "dummy", "demo", "fake", "null", "undefined", "n/a", "na",
+  "asdf", "qwerty", "lorem", "ipsum", "foo", "bar"
+]);
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "mailinator.com", "guerrillamail.com", "dispostable.com", "temp-mail.org",
+  "10minutemail.com", "throwawaymail.com", "yopmail.com", "yomail.info",
+  "trashmail.com", "maildrop.cc"
+]);
+const DUMMY_EMAIL_PREFIXES = new Set([
+  "test", "dummy", "demo", "sample", "placeholder", "guest", "fake", "invalid",
+  "noreply", "no-reply", "asdf", "qwerty", "lorem", "ipsum"
+]);
+
+const validateFullName = (value) => {
+  const trimmedValue = String(value || "").trim();
+  if (!trimmedValue || trimmedValue.length < 2) {
+    return "Please enter your full name.";
+  }
+
+  if (!/[\p{L}]/u.test(trimmedValue)) {
+    return "Full name must include letters.";
+  }
+
+  const sanitizedLetters = trimmedValue.replace(/[\s'’.-]/g, "");
+  if (sanitizedLetters.length < 2) {
+    return "Please enter a valid full name.";
+  }
+
+  if (/(.)\1{4,}/u.test(sanitizedLetters)) {
+    return "Full name contains too many repeated characters.";
+  }
+
+  const normalizedValue = trimmedValue.toLowerCase().replace(/[\s'’.-]+/g, " ").trim();
+  if (DUMMY_FULL_NAME_VALUES.has(normalizedValue)) {
+    return "Please enter a realistic full name instead of a placeholder or dummy value.";
+  }
+
+  const lettersOnly = sanitizedLetters.replace(/[^\p{L}]/gu, "");
+  const vowelCount = (lettersOnly.match(/[AEIOUaeiou]/g) || []).length;
+  const consonantRatio = lettersOnly.length ? (lettersOnly.length - vowelCount) / lettersOnly.length : 0;
+  if (lettersOnly.length >= 10 && consonantRatio >= 0.7 && !/\s/.test(trimmedValue)) {
+    return "Please enter a realistic full name. Random character sequences are not allowed.";
+  }
+
+  if (!FULL_NAME_PATTERN.test(trimmedValue)) {
+    return "Please enter a valid full name using letters and common name punctuation.";
+  }
+
+  return null;
+};
+
+const validateEmailAddress = (value) => {
+  const email = String(value || "").trim();
+  if (!email) {
+    return "Please enter your email address.";
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "Please enter a valid email address. Use a real email address you regularly access.";
+  }
+
+  const [localPart, domain] = email.toLowerCase().split("@");
+  if (!localPart || !domain) {
+    return "Please enter a valid email address. Use a real email address you regularly access.";
+  }
+
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    return "Please use a real email address that you regularly access.";
+  }
+
+  const normalizedLocalPart = localPart.replace(/[._+-]+/g, "").toLowerCase();
+  if (normalizedLocalPart && [...DUMMY_EMAIL_PREFIXES].some((prefix) => normalizedLocalPart === prefix || normalizedLocalPart.startsWith(prefix))) {
+    return "Please use a real email address that you regularly access.";
+  }
+
+  return null;
+};
+
+const validateRegistrationId = (value) => {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return "Please enter your ID number.";
+  }
+
+  if (/\s/.test(trimmedValue)) {
+    return "ID number cannot contain spaces.";
+  }
+
+  if (/^\d{4}-\d{4}$/.test(trimmedValue)) {
+    return null;
+  }
+
+  if (trimmedValue.length < 7) {
+    return "Student ID numbers must be at least 7 characters long.";
+  }
+
+  if (!/^[A-Za-z0-9!@#$%^&*(),.?":{}|<>_-]+$/.test(trimmedValue)) {
+    return "The ID number format is invalid. Use letters, numbers, or common special characters only.";
+  }
+
+  return null;
+};
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { notify } = useNotifications();
@@ -75,28 +182,6 @@ export default function RegisterPage() {
     setForm((prev) => ({ ...prev, password: e.target.value }));
   };
 
-  const validateRegistrationId = (value) => {
-    const trimmedValue = value.trim();
-
-    if (!trimmedValue) {
-      return "Please enter your ID.";
-    }
-
-    if (trimmedValue.length < 7) {
-      return "ID must be at least 7 characters long.";
-    }
-
-    if (/\s/.test(trimmedValue)) {
-      return "ID cannot contain spaces.";
-    }
-
-    if (!/^[A-Za-z0-9!@#$%^&*(),.?":{}|<>_-]+$/.test(trimmedValue)) {
-      return "ID can only include letters, numbers, or common special characters.";
-    }
-
-    return null;
-  };
-
   const showVerificationStep = (email, resendDelay = 60, emailSent = true, notice = "") => {
     setVerificationEmail(email);
     setVerificationEmailSent(emailSent);
@@ -128,9 +213,24 @@ export default function RegisterPage() {
       return;
     }
 
-    // ✅ ID and Email are both required for all users
-    if (!form.fullname || !form.email || !form.password || !confirmPassword || !form.id) {
+    const trimmedFullName = form.fullname.trim();
+    const trimmedEmail = form.email.trim();
+    const trimmedId = form.id.trim();
+
+    if (!trimmedFullName || !trimmedEmail || !form.password || !confirmPassword || !trimmedId) {
       notify("warning", "Missing Information", "Please fill in all required fields.");
+      return;
+    }
+
+    const fullNameValidationError = validateFullName(trimmedFullName);
+    if (fullNameValidationError) {
+      notify("warning", "Invalid Full Name", fullNameValidationError);
+      return;
+    }
+
+    const emailValidationError = validateEmailAddress(trimmedEmail);
+    if (emailValidationError) {
+      notify("warning", "Invalid Email", emailValidationError);
       return;
     }
 
@@ -139,9 +239,9 @@ export default function RegisterPage() {
       return;
     }
 
-    const idValidationError = validateRegistrationId(form.id);
+    const idValidationError = validateRegistrationId(trimmedId);
     if (idValidationError) {
-      notify("warning", "Invalid ID", idValidationError);
+      notify("warning", "Invalid ID Number", idValidationError);
       return;
     }
 
@@ -155,7 +255,13 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const data = await registerUser({ ...form, id: form.id.trim(), role: registrationRole });
+      const data = await registerUser({
+        ...form,
+        fullname: trimmedFullName,
+        email: trimmedEmail.toLowerCase(),
+        id: trimmedId,
+        role: registrationRole
+      });
 
       if (data.success && data.verificationRequired) {
         const retryAfter = Number.isInteger(data.retryAfterSeconds) ? data.retryAfterSeconds : 60;
