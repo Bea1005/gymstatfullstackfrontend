@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './DocumentCenter.css';
-import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
+import borrowersTemplateDoc from '../../assets/borrowers-template-CsFLzc68.pdf';
 
 const documents = [
   {
     id: 'equipment-borrowing-request',
     title: 'Equipment Borrowing Request',
-    fileName: 'borrowers-template.doc',
+    fileName: 'borrowers-template.pdf',
     fileUrl: borrowersTemplateDoc,
   },
 ];
