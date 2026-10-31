@@ -509,6 +509,20 @@ export const resetPassword = async (email, resetToken, newPassword) => {
   });
 };
 
+export const requestPasswordResetBySms = async (phoneNumber) => {
+  return apiRequest('/forgot-password/request-sms', {
+    method: 'POST',
+    body: JSON.stringify({ phoneNumber }),
+  });
+};
+
+export const verifyPasswordResetSmsOtp = async (phoneNumber, otp) => {
+  return apiRequest('/forgot-password/verify-sms', {
+    method: 'POST',
+    body: JSON.stringify({ phoneNumber, otp }),
+  });
+};
+
 // ========== EQUIPMENT ENDPOINTS ==========
 
 // Get all equipment (masterlist)

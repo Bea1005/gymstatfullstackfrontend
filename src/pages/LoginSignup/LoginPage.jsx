@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword, storeClientSessionMetadata } from "../../services/api";
+import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword, requestPasswordResetBySms, verifyPasswordResetSmsOtp, storeClientSessionMetadata } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
 import AuthSuccessPopup from "../../components/AuthSuccessPopup";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
@@ -25,6 +25,9 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotOtp, setForgotOtp] = useState("");
   const [forgotResetToken, setForgotResetToken] = useState("");
+  const [forgotRecoveryMethod, setForgotRecoveryMethod] = useState("email");
+  const [forgotPhone, setForgotPhone] = useState("");
+  const [forgotMaskedPhone, setForgotMaskedPhone] = useState("");
   const [forgotPasswordValue, setForgotPasswordValue] = useState("");
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState("");
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
@@ -34,7 +37,7 @@ export default function LoginPage() {
   const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
 
   useEffect(() => {
-    if (!showForgotModal || forgotStep !== "otp") return undefined;
+    if (!showForgotModal || (forgotStep !== "otp" && forgotStep !== "sms-otp")) return undefined;
 
     const timer = window.setInterval(() => {
       setOtpSecondsLeft((seconds) => Math.max(0, seconds - 1));
@@ -150,6 +153,9 @@ export default function LoginPage() {
     setForgotEmail("");
     setForgotOtp("");
     setForgotResetToken("");
+    setForgotRecoveryMethod("email");
+    setForgotPhone("");
+    setForgotMaskedPhone("");
     setForgotPasswordValue("");
     setForgotConfirmPassword("");
     setForgotValidationError("");
@@ -349,7 +355,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="login-forgot-btn"
-                onClick={() => setShowForgotModal(true)}
+                onClick={() => { setForgotStep("method"); setShowForgotModal(true); }}
               >
                 Forgot Password?
               </button>
@@ -383,11 +389,26 @@ export default function LoginPage() {
         <div className="forgot-modal-backdrop" onClick={handleForgotClose}>
           <div className="forgot-modal" onClick={(e) => e.stopPropagation()}>
             <div className="forgot-modal-header">
-              <h3>{forgotStep === "success" ? "Password Updated" : "Reset Password"}</h3>
+              <h3>{forgotStep === "success" ? "Password Updated" : forgotStep === "method" ? "Forgot Password?" : "Reset Password"}</h3>
               <button type="button" className="forgot-modal-close" onClick={handleForgotClose} aria-label="Close password reset">
                 <Icon name="close" />
               </button>
             </div>
+
+            {forgotStep === "method" && (
+              <div className="forgot-modal-form">
+                <p className="forgot-modal-description">Choose how you want to reset your password.</p>
+                <button type="button" className="forgot-submit-btn" style={{width:"100%",marginBottom:10}} onClick={() => { setForgotRecoveryMethod("email"); setForgotStep("email"); }}>
+                  ✉ Reset via Registered Email
+                </button>
+                <button type="button" className="forgot-submit-btn" style={{width:"100%",background:"#444",marginBottom:4}} onClick={() => { setForgotRecoveryMethod("sms"); setForgotStep("phone"); }}>
+                  📱 Reset via Phone Number (SMS)
+                </button>
+                <div className="forgot-modal-actions" style={{marginTop:8}}>
+                  <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
+                </div>
+              </div>
+            )}
 
             {forgotStep === "email" && (
               <form onSubmit={handleForgotEmailSubmit} className="forgot-modal-form">
@@ -400,6 +421,40 @@ export default function LoginPage() {
                 <div className="forgot-modal-actions">
                   <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
                   <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Continue"}</button>
+                </div>
+              </form>
+            )}
+
+            {forgotStep === "phone" && (
+              <form onSubmit={handleForgotPhoneSubmit} className="forgot-modal-form">
+                <p className="forgot-modal-description">Enter your registered mobile number. An OTP will be sent via SMS to your phone's Messages app.</p>
+                <label className="forgot-modal-field">
+                  <span>Registered Mobile Number</span>
+                  <input type="tel" value={forgotPhone} onChange={(e) => setForgotPhone(e.target.value)} placeholder="09XXXXXXXXX or +639XXXXXXXXX" autoComplete="tel" />
+                </label>
+                {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
+                <div className="forgot-modal-actions">
+                  <button type="button" className="forgot-cancel-btn" onClick={() => setForgotStep("method")}>Back</button>
+                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send OTP"}</button>
+                </div>
+              </form>
+            )}
+
+            {forgotStep === "sms-otp" && (
+              <form onSubmit={handleSmsOtpSubmit} className="forgot-modal-form">
+                <p className="forgot-modal-description">Enter the 6-digit OTP sent to <strong>{forgotMaskedPhone}</strong> via SMS.</p>
+                <label className="forgot-modal-field">
+                  <span>SMS Verification Code</span>
+                  <input className="forgot-otp-input" inputMode="numeric" maxLength={6} value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} onPaste={(e) => { e.preventDefault(); setForgotOtp(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); }} placeholder="6-digit OTP" autoComplete="one-time-code" />
+                </label>
+                <p className="forgot-countdown">OTP expires in {Math.floor(otpSecondsLeft / 60)}:{String(otpSecondsLeft % 60).padStart(2, "0")}</p>
+                {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
+                <button type="button" className="forgot-resend-btn" onClick={handleResendSmsOtp} disabled={resendSecondsLeft > 0 || forgotLoading}>
+                  {resendSecondsLeft > 0 ? `Resend OTP in ${resendSecondsLeft}s` : "Resend OTP"}
+                </button>
+                <div className="forgot-modal-actions">
+                  <button type="button" className="forgot-cancel-btn" onClick={() => setForgotStep("phone")}>Back</button>
+                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Verifying..." : "Verify OTP"}</button>
                 </div>
               </form>
             )}

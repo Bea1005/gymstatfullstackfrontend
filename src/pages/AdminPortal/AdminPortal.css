@@ -2541,7 +2541,7 @@
 }
 
 /* View Attachments style wrapper */
-.attachment-section {
+.attached-section {
   margin-bottom: 16px;
 }
 
@@ -2564,24 +2564,9 @@
   background-color: #e9ecef;
 }
 
-.btn-download-attachment {
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  margin-left: 6px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: background-color 0.2s;
-}
-
-.btn-download-attachment:hover {
-  background-color: #43a047;
+.btn-view-attachment:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 /* Approval & Reject actionable grouping spacing */
@@ -3352,4 +3337,54 @@ textarea:focus-visible,
   background: #fce4ec;
   color: #b71c1c;
   border: 1px solid #ef9a9a;
+}
+
+.schedule-image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: flex;
+  align-items: safe center;
+  justify-content: safe center;
+  overflow: auto;
+  padding: 4vh 3vw;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.94);
+  cursor: zoom-out;
+}
+
+.schedule-image-preview {
+  display: block;
+  flex: 0 0 auto;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.schedule-image-preview-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.schedule-image-preview-close:hover,
+.schedule-image-preview-close:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.schedule-image-preview-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
 }

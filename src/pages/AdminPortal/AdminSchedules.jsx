@@ -58,10 +58,9 @@ const AdminSchedules = () => {
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [downloadingCalendar, setDownloadingCalendar] = useState(false);
-  const [downloadingAttachment, setDownloadingAttachment] = useState(false);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState(null);
   const saveScheduleInProgressRef = useRef(false);
   const calendarDownloadInProgressRef = useRef(false);
-  const attachmentDownloadInProgressRef = useRef(false);
   const [confirmCancelId, setConfirmCancelId] = useState(null);
   const REQUESTS_KEY = 'gymstatScheduleRequests';
   const [scheduleRequests, setScheduleRequests] = useState(() => {
@@ -77,6 +76,7 @@ const AdminSchedules = () => {
   const [requestPanelOpen, setRequestPanelOpen] = useState(false);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [previewFile, setPreviewFile] = useState({ url: '', name: '', type: '' });
+  const [imagePreviewScale, setImagePreviewScale] = useState(1);
   const APPROVED_KEY = 'gymstatApprovedSchedules';
   const [confirmAction, setConfirmAction] = useState(null);
   const [selectedRejectReason, setSelectedRejectReason] = useState('');
@@ -259,6 +259,7 @@ const AdminSchedules = () => {
   const closeRequestPanel = () => {
     setRequestPanelOpen(false);
     setExpandedRequestId(null);
+    setImagePreviewScale(1);
     if (previewFile.url) {
       URL.revokeObjectURL(previewFile.url);
       setPreviewFile({ url: '', name: '', type: '' });
@@ -294,14 +295,15 @@ const AdminSchedules = () => {
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key !== 'Escape' || confirmAction) return;
-      if (showModal) setShowModal(false);
+      if (previewFile.url) closeAttachmentEvent();
+      else if (showModal) setShowModal(false);
       else if (showNotAvailableModal) setShowNotAvailableModal(false);
       else if (requestPanelOpen) closeRequestPanelEvent();
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [confirmAction, requestPanelOpen, showModal, showNotAvailableModal]);
+  }, [confirmAction, previewFile, requestPanelOpen, showModal, showNotAvailableModal]);
 
   const toggleRequestExpand = (id) => {
     setExpandedRequestId(expandedRequestId === id ? null : id);
@@ -311,13 +313,16 @@ const AdminSchedules = () => {
     if (error?.status === 401 || error?.code === 'SESSION_EXPIRED') {
       return 'Your admin session could not be verified. Please sign in again.';
     }
-    if (error?.status === 403) return 'You do not have permission to download this attachment.';
+    if (error?.status === 403) return 'You do not have permission to view this attachment.';
     if (error?.status === 404) return 'This attachment could not be found.';
-    if (error?.status >= 500) return 'The server could not download this attachment. Please try again.';
-    if (error?.code === 'NETWORK_ERROR' || error?.code === 'REQUEST_TIMEOUT') {
-      return 'Network problem while downloading the attachment. Please try again.';
+    if (error?.code === 'UNSUPPORTED_ATTACHMENT') {
+      return 'This attachment cannot be previewed. Only PDF, PNG, and JPEG files are supported.';
     }
-    return 'Unable to download this attachment.';
+    if (error?.status >= 500) return 'The server could not load this attachment. Please try again.';
+    if (error?.code === 'NETWORK_ERROR' || error?.code === 'REQUEST_TIMEOUT') {
+      return 'Network problem while loading the attachment. Please try again.';
+    }
+    return 'Unable to view this attachment.';
   };
 
   const getFileUrl = async (file) => {
@@ -327,11 +332,17 @@ const AdminSchedules = () => {
     let responseContentType = '';
 
     if (file.data) {
-      const byteString = atob(file.data);
+      const base64Data = String(file.data).replace(/^data:[^,]*,/, '');
+      const byteString = atob(base64Data);
       const buffer = new Uint8Array(byteString.length);
       for (let i = 0; i < byteString.length; i += 1) buffer[i] = byteString.charCodeAt(i);
       blob = new Blob([buffer], { type: file.type || file.mimetype || 'application/octet-stream' });
     } else {
+      if (!file.requestId) {
+        const error = new Error('Missing attachment request ID');
+        error.status = 404;
+        throw error;
+      }
       const response = await api.getScheduleRequestFile(file.requestId);
       if (!response || typeof response.blob !== 'function') {
         const error = new Error('Invalid attachment response');
@@ -361,19 +372,51 @@ const AdminSchedules = () => {
       blob = await response.blob();
     }
 
+    const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+    const actualType = header.length >= 5
+      && String.fromCharCode(...header.slice(0, 5)) === '%PDF-'
+      ? 'application/pdf'
+      : header.length >= 8
+        && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => header[index] === byte)
+        ? 'image/png'
+        : header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff
+          ? 'image/jpeg'
+          : '';
+    const declaredType = String(responseContentType || file.type || file.mimetype || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    const filename = responseFilename || file.originalname || file.name || file.filename || 'attachment';
+    const extension = filename.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+    const expectedType = new Map([
+      ['.pdf', 'application/pdf'],
+      ['.png', 'image/png'],
+      ['.jpg', 'image/jpeg'],
+      ['.jpeg', 'image/jpeg'],
+    ]).get(extension);
+    if (!actualType
+      || (declaredType && declaredType !== 'application/octet-stream' && declaredType !== actualType)
+      || (expectedType && expectedType !== actualType)) {
+      const error = new Error('Unsupported or invalid attachment type');
+      error.code = 'UNSUPPORTED_ATTACHMENT';
+      throw error;
+    }
+
     return {
       url: URL.createObjectURL(blob),
-      name: responseFilename || file.originalname || file.name || file.filename || 'attachment',
-      type: responseContentType || blob.type || file.type || file.mimetype || 'application/octet-stream',
+      name: filename,
+      type: actualType,
     };
   };
 
   const openRequestAttachment = async (file) => {
     if (!file) return;
     if (previewFile.url) URL.revokeObjectURL(previewFile.url);
+    setOpeningAttachmentId(file.requestId || file.originalname || file.filename || 'attachment');
     try {
       const attachment = await getFileUrl(file);
       if (!attachment) return;
+      setImagePreviewScale(1);
       setPreviewFile({
         url: attachment.url,
         name: attachment.name,
@@ -381,12 +424,24 @@ const AdminSchedules = () => {
       });
     } catch (error) {
       setToast({ message: getAttachmentErrorMessage(error), type: 'error' });
+    } finally {
+      setOpeningAttachmentId(null);
     }
   };
 
   const closeAttachment = () => {
     if (previewFile.url) URL.revokeObjectURL(previewFile.url);
     setPreviewFile({ url: '', name: '', type: '' });
+    setImagePreviewScale(1);
+  };
+  const closeAttachmentEvent = useEffectEvent(closeAttachment);
+
+  const zoomImagePreview = (direction) => {
+    setImagePreviewScale((scale) => Math.min(3, Math.max(0.5, +(scale + direction * 0.25).toFixed(2))));
+  };
+
+  const toggleImagePreviewZoom = () => {
+    setImagePreviewScale((scale) => scale <= 1 ? 2 : 1);
   };
 
   const normalizeScheduleRequest = (request) => {
@@ -1361,7 +1416,8 @@ const AdminSchedules = () => {
                         <div className="request-card-details-expanded">
                           <hr className="inner-divider" />
                           <div className="details-grid">
-                            <p><strong>Email:</strong> {req.requesterEmail}</p>
+                            <p><strong>Email:</strong> {req.requesterEmail || 'Not provided.'}</p>
+                            <p><strong>Contact Number:</strong> {req.requesterPhone || 'Not provided.'}</p>
                             <p><strong>Start Time:</strong> {req.startTime}</p>
                             <p><strong>End Time:</strong> {req.endTime}</p>
                             <p><strong>Prep Days:</strong> {req.prepDays || 0} Day(s)</p>
@@ -1369,45 +1425,16 @@ const AdminSchedules = () => {
                           </div>
                           
                           {req.file && (
-                            <div className="attachment-section">
-                              <button 
-                                type="button" 
-                                className="btn-view-attachment" 
-                                onClick={() => openRequestAttachment(req.file)}
-                              >
-                                View Attachment ({req.file.originalname || req.file.name || req.file.filename || 'attachment'})
-                              </button>
+                            <div className="attached-section">
                               <button
                                 type="button"
-                                className="btn-download-attachment"
-                                onClick={async () => {
-                                  if (attachmentDownloadInProgressRef.current) return;
-                                  attachmentDownloadInProgressRef.current = true;
-                                  setDownloadingAttachment(true);
-                                  let attachment;
-                                  try {
-                                    attachment = await getFileUrl(req.file);
-                                    if (!attachment) return;
-                                    const link = document.createElement('a');
-                                    link.href = attachment.url;
-                                    link.download = attachment.name;
-                                    try {
-                                      document.body.appendChild(link);
-                                      link.click();
-                                    } finally {
-                                      link.remove();
-                                      window.setTimeout(() => URL.revokeObjectURL(attachment.url), 1000);
-                                    }
-                                  } catch (error) {
-                                    setToast({ message: getAttachmentErrorMessage(error), type: 'error' });
-                                  } finally {
-                                    attachmentDownloadInProgressRef.current = false;
-                                    setDownloadingAttachment(false);
-                                  }
-                                }}
-                                disabled={downloadingAttachment}
+                                className="btn-view-attachment"
+                                onClick={() => openRequestAttachment(req.file)}
+                                disabled={openingAttachmentId === (req.file.requestId || req.file.originalname || req.file.filename || 'attachment')}
                               >
-                                {downloadingAttachment ? 'Downloading...' : 'Download'}
+                                {openingAttachmentId === (req.file.requestId || req.file.originalname || req.file.filename || 'attachment')
+                                  ? 'Loading Attachment...'
+                                  : `View Attachment (${req.file.originalname || req.file.name || req.file.filename || 'attachment'})`}
                               </button>
                             </div>
                           )}
@@ -1512,10 +1539,58 @@ const AdminSchedules = () => {
         />
       )}
 
-      {/* Document Viewer Attachment Modal */}
-      {previewFile.url && (
+      {/* Keep image previews limited to schedule-request attachments. */}
+      {previewFile.url && previewFile.type.startsWith('image/') && (
+        <div
+          className="schedule-image-preview-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Image preview: ${previewFile.name}`}
+          onClick={closeAttachment}
+          onWheel={(event) => {
+            if (!event.ctrlKey || event.deltaY === 0) return;
+            event.preventDefault();
+            zoomImagePreview(event.deltaY < 0 ? 1 : -1);
+          }}
+        >
+          <button
+            type="button"
+            className="schedule-image-preview-close"
+            onClick={closeAttachment}
+            aria-label="Close image preview"
+          >
+            ×
+          </button>
+          <img
+            className="schedule-image-preview"
+            src={previewFile.url}
+            alt={previewFile.name || 'Schedule request attachment'}
+            style={{
+              width: `${94 * imagePreviewScale}vw`,
+              height: `${92 * imagePreviewScale}vh`,
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Zoom image"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleImagePreviewZoom();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleImagePreviewZoom();
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* PDF attachments remain in the embedded document viewer. */}
+      {previewFile.url && previewFile.type === 'application/pdf' && (
         <DocumentViewer
-          url={previewFile.url}
+          isOpen
+          src={previewFile.url}
           fileName={previewFile.name}
           fileType={previewFile.type}
           onClose={closeAttachment}

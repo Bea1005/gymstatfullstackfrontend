@@ -417,53 +417,74 @@ export default function PublicCalendar() {
     synchronizeAvailableTimes();
   }, [approvedSchedules, form.startDate, form.endDate, form.startTime, form.endTime]);
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) {
       setRequestFile({ name: '', type: '', data: '' });
       setFileError('');
       return;
     }
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-
-    const allowedExt = ['.pdf', '.doc', '.docx'];
-
-    const nameLower = (file.name || '').toLowerCase();
-    const extOk = allowedExt.some(e => nameLower.endsWith(e));
-
-    if (!allowedTypes.includes(file.type) && !extOk) {
+    const extension = (file.name || '').toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+    const allowedTypes = new Map([
+      ['.pdf', 'application/pdf'],
+      ['.png', 'image/png'],
+      ['.jpg', 'image/jpeg'],
+      ['.jpeg', 'image/jpeg'],
+    ]);
+    const expectedType = allowedTypes.get(extension);
+    if (!expectedType || file.type !== expectedType) {
       setRequestFile({ name: '', type: '', data: '' });
-      setFileError('Request letter must be a PDF, DOC, or DOCX file.');
+      setFileError('Attachment must be a PDF, PNG, JPG, or JPEG file with a matching file type.');
+      event.target.value = '';
       return;
     }
 
-    const reader = new FileReader();
     setFileLoadPending(true);
-    reader.onload = () => {
-      try {
-        const result = reader.result || '';
-        const base64 = typeof result === 'string' && result.includes(',') ? result.split(',')[1] : btoa(result);
-        setRequestFile({ name: file.name, type: file.type || '', data: base64 });
-        setFileError('');
-      } catch (err) {
-        console.error('File read error:', err);
+    try {
+      const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+      const isValidSignature = extension === '.pdf'
+        ? signature.length >= 5 && String.fromCharCode(...signature.slice(0, 5)) === '%PDF-'
+        : extension === '.png'
+          ? signature.length >= 8
+            && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => signature[index] === byte)
+          : signature.length >= 3 && signature[0] === 0xff && signature[1] === 0xd8 && signature[2] === 0xff;
+      if (!isValidSignature) {
+        setRequestFile({ name: '', type: '', data: '' });
+        setFileError('The attachment content does not match a valid PDF, PNG, or JPEG file.');
+        setFileLoadPending(false);
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const result = reader.result || '';
+          const base64 = typeof result === 'string' && result.includes(',') ? result.split(',')[1] : btoa(result);
+          setRequestFile({ name: file.name, type: expectedType, data: base64 });
+          setFileError('');
+        } catch (err) {
+          console.error('File read error:', err);
+          setRequestFile({ name: '', type: '', data: '' });
+          setFileError('Unable to read the attached file. Please try a different file.');
+        } finally {
+          setFileLoadPending(false);
+        }
+      };
+      reader.onerror = (err) => {
+        console.error('FileReader error:', err);
         setRequestFile({ name: '', type: '', data: '' });
         setFileError('Unable to read the attached file. Please try a different file.');
-      } finally {
         setFileLoadPending(false);
-      }
-    };
-    reader.onerror = (err) => {
-      console.error('FileReader error:', err);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('File validation error:', err);
       setRequestFile({ name: '', type: '', data: '' });
-      setFileError('Unable to read the attached file. Please try a different file.');
+      setFileError('Unable to validate the attachment. Please choose a valid PDF, PNG, or JPEG file.');
       setFileLoadPending(false);
-    };
-    reader.readAsDataURL(file);
+      event.target.value = '';
+    }
   };
 
   const validate = () => {
@@ -902,7 +923,7 @@ export default function PublicCalendar() {
                   <label className="pcm-label">Request Letter *</label>
                   <input
                     type="file"
-                    accept=".pdf,.doc,.docx"
+                    accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
                     className={`pcm-input pcm-file-input${fileError || errors.requestLetter ? ' pcm-input--err' : ''}`}
                     onChange={handleFileChange}
                   />
