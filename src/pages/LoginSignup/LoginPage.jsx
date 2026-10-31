@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { login, requestPasswordReset, verifyPasswordResetOtp, resetPassword, storeClientSessionMetadata } from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
+import AuthSuccessPopup from "../../components/AuthSuccessPopup";
 import { PASSWORD_POLICY_MESSAGE, isPasswordValid } from "../../constants/passwordPolicy";
 import "./LoginPage.css";
 import gymBackground from "../../assets/GYMSTAT BG.jpg";
@@ -17,6 +18,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [loginSuccessPopup, setLoginSuccessPopup] = useState(false);
+  const [loginSuccessMessage, setLoginSuccessMessage] = useState("Login Successful!");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotStep, setForgotStep] = useState("email");
   const [forgotEmail, setForgotEmail] = useState("");
@@ -40,6 +43,21 @@ export default function LoginPage() {
 
     return () => window.clearInterval(timer);
   }, [showForgotModal, forgotStep]);
+
+  useEffect(() => {
+    if (!loginSuccessPopup) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setLoginSuccessPopup(false);
+    }, 1600);
+
+    return () => window.clearTimeout(timer);
+  }, [loginSuccessPopup]);
+
+  const showLoginSuccessPopup = (message) => {
+    setLoginSuccessMessage(message);
+    setLoginSuccessPopup(true);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -70,7 +88,7 @@ export default function LoginPage() {
           role: 'screener'
         };
         sessionStorage.setItem('pendingScreenerLogin', JSON.stringify(screenerLoginSession));
-        notify("success", "Email verification required", "A 6-digit verification code was sent to your institutional email.");
+        showLoginSuccessPopup("Verification code sent!");
         loginSucceeded = true;
         setTimeout(() => navigate('/screener/verify-code'), 400);
         return;
@@ -93,7 +111,7 @@ export default function LoginPage() {
         storeClientSessionMetadata(normalizedUser);
         console.info('[AUTH] User role saved', { role: resolvedRole });
 
-        notify("success", "Login Successful", "Welcome back! Redirecting to your portal...");
+        showLoginSuccessPopup("Login Successful!");
         loginSucceeded = true;
 
         const pathname =
@@ -107,7 +125,7 @@ export default function LoginPage() {
             ? "/screener/dashboard"
             : "/";
 
-        setTimeout(() => navigate(pathname), 1500);
+        setTimeout(() => navigate(pathname), 1600);
       } else {
         notify("error", "Login Failed", data.message || "Please check your credentials and try again.");
       }
@@ -226,7 +244,7 @@ export default function LoginPage() {
     try {
       await resetPassword(forgotEmail, forgotResetToken, forgotPasswordValue);
       setForgotStep("success");
-      notify("success", "Password reset successfully", "You can now log in with your new password.");
+      showLoginSuccessPopup("Password reset successful!");
       window.setTimeout(resetForgotFlow, 1800);
     } catch (error) {
       notify("error", "Reset failed", error.message || "Unable to reset your password right now.");
@@ -249,9 +267,9 @@ export default function LoginPage() {
         <div className="login-left-overlay"></div>
 
         <div className="login-left-content">
-          <div className="login-university-badge">
+          {/*<div className="login-university-badge">
             <span>MARINDUQUE STATE UNIVERSITY</span>
-          </div>
+          </div>*/}
 
           <h1 className="login-system-name" style={{ color: "white" }}>
             GYMSTAT
@@ -358,6 +376,8 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
+
+      <AuthSuccessPopup isOpen={loginSuccessPopup} message={loginSuccessMessage} />
 
       {showForgotModal && (
         <div className="forgot-modal-backdrop" onClick={handleForgotClose}>

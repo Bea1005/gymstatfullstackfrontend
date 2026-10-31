@@ -2,6 +2,7 @@ import React, { useState, useEffect, useEffectEvent, useLayoutEffect, useRef } f
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import NotificationToast from '../../components/NotificationToast';
+import ConfirmModal from '../../components/ConfirmModal';
 import Icon from '../../components/Icon';
 import TimeInput from '../../components/TimeInput';
 import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
@@ -39,15 +40,10 @@ const CONDITION_OPTIONS = [
   { value: 'Good', label: 'Good', color: '#4caf50' },
   { value: 'Damaged', label: 'Damaged', color: '#ff9800' },
   { value: 'Lost', label: 'Lost', color: '#f44336' },
-  { value: 'Under Repair', label: 'Under Repair', color: '#2196f3' },
+  { value: 'Repair', label: 'Repair', color: '#2196f3' },
 ];
 
-// Editable condition options for the dropdown (only Good, Damaged, Lost)
-const EDITABLE_CONDITION_OPTIONS = [
-  { value: 'Good', label: 'Good', color: '#4caf50' },
-  { value: 'Damaged', label: 'Damaged', color: '#ff9800' },
-  { value: 'Lost', label: 'Lost', color: '#f44336' },
-];
+const EDITABLE_CONDITION_OPTIONS = CONDITION_OPTIONS;
 
 const todayStr = () => {
   const d = new Date();
@@ -85,6 +81,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   const borrowingCreateInProgressRef = useRef(false);
   const borrowerSaveInProgressRef = useRef(false);
   const conditionUpdatesInProgressRef = useRef(new Set());
+  const conditionChangeConfirmationInProgressRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [records, setRecords] = useState([]);
   const [equipmentWithRefs, setEquipmentWithRefs] = useState({});
@@ -94,6 +91,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   const [error, setError] = useState('');
   const [timeErrors, setTimeErrors] = useState({ startTime: '', endTime: '' });
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [pendingConditionChange, setPendingConditionChange] = useState(null);
+  const [isConditionChangeSaving, setIsConditionChangeSaving] = useState(false);
   const [isEquipmentDropdownOpen, setIsEquipmentDropdownOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
   const [selectedBorrowerDetails, setSelectedBorrowerDetails] = useState(null);
@@ -244,36 +243,78 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Update condition for a specific reference ID - now persists to MongoDB
+  const requestReferenceConditionChange = (recordId, refIndex, newCondition) => {
+    const record = records.find((item) => item.id === recordId || item._id === recordId);
+    if (!record) return;
+
+    const savedCondition = record.referenceConditions?.[refIndex] || 'Good';
+    const currentCondition = savedCondition === 'Under Repair' ? 'Repair' : savedCondition;
+    if (currentCondition === newCondition) return;
+
+    const equipmentAtIndex = getRecordEquipmentItems(record)
+      .flatMap((item) => item.referenceIds.map((referenceId) => ({
+        equipment: item.equipment,
+        referenceId,
+      })))[refIndex];
+
+    setPendingConditionChange({
+      recordId,
+      refIndex,
+      equipmentName: equipmentAtIndex?.equipment || record.equipment || 'Equipment',
+      referenceId: equipmentAtIndex?.referenceId || '',
+      previousCondition: currentCondition,
+      newCondition,
+    });
+  };
+
+  // Update condition for a specific reference ID - called only after confirmation.
   const updateReferenceCondition = async (recordId, refIndex, newCondition) => {
     const updateKey = `${recordId}:${refIndex}`;
-    if (conditionUpdatesInProgressRef.current.has(updateKey)) return;
+    if (conditionUpdatesInProgressRef.current.has(updateKey)) return false;
     conditionUpdatesInProgressRef.current.add(updateKey);
     try {
-      const record = records.find(r => r.id === recordId);
-      if (!record) return;
+      const record = records.find((item) => item.id === recordId || item._id === recordId);
+      if (!record) throw new Error('Transaction record not found.');
       
       const updatedConditions = [...(record.referenceConditions || [])];
       updatedConditions[refIndex] = newCondition;
-      
-      setRecords(prev => prev.map(record => {
-        if (record.id === recordId) {
-          return {
-            ...record,
-            referenceConditions: updatedConditions
-          };
-        }
-        return record;
-      }));
       await updateBorrowingRecord(recordId, { referenceConditions: updatedConditions });
+      setRecords((previousRecords) => previousRecords.map((item) => (
+        item.id === recordId || item._id === recordId
+          ? { ...item, referenceConditions: updatedConditions }
+          : item
+      )));
+      return true;
     } catch (error) {
       console.error('Error updating condition:', error);
-      setToast({ message: 'Failed to update condition', type: 'error' });
-      // Revert local state by refetching
-      fetchData();
+      setToast({ message: error.message || 'Failed to update condition', type: 'error' });
+      return false;
     } finally {
       conditionUpdatesInProgressRef.current.delete(updateKey);
     }
+  };
+
+  const confirmReferenceConditionChange = async () => {
+    if (!pendingConditionChange || conditionChangeConfirmationInProgressRef.current) return;
+
+    conditionChangeConfirmationInProgressRef.current = true;
+    setIsConditionChangeSaving(true);
+    try {
+      const saved = await updateReferenceCondition(
+        pendingConditionChange.recordId,
+        pendingConditionChange.refIndex,
+        pendingConditionChange.newCondition
+      );
+      if (saved) setPendingConditionChange(null);
+    } finally {
+      conditionChangeConfirmationInProgressRef.current = false;
+      setIsConditionChangeSaving(false);
+    }
+  };
+
+  const cancelReferenceConditionChange = () => {
+    if (conditionChangeConfirmationInProgressRef.current) return;
+    setPendingConditionChange(null);
   };
 
   const getConditionValues = (record) => {
@@ -480,7 +521,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     try {
       const record = records.find(r => r.id === recordId) || records.find(r => r._id === recordId);
       const returnedTimestamp = getCurrentTimestamp();
-      const validConditions = ['Good', 'Damaged', 'Lost'];
+      const validConditions = ['Good', 'Damaged', 'Lost', 'Repair', 'Under Repair'];
       const referenceConditions = Array.isArray(record?.referenceIds)
         ? record.referenceIds.map((_, index) => {
             const nextCondition = record.referenceConditions?.[index];
@@ -579,7 +620,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       case 'Good': return { class: 'bw-condition-good', label: 'Good' };
       case 'Damaged': return { class: 'bw-condition-damaged', label: 'Damaged' };
       case 'Lost': return { class: 'bw-condition-lost', label: 'Lost' };
-      case 'Under Repair': return { class: 'bw-condition-repair', label: 'Under Repair' };
+      case 'Repair':
+      case 'Under Repair': return { class: 'bw-condition-repair', label: 'Repair' };
       default: return { class: '', label: '' };
     }
   };
@@ -589,6 +631,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       case 'Good': return { backgroundColor: '#d1fae5', color: '#065f46' };
       case 'Damaged': return { backgroundColor: '#fee2e2', color: '#991b1b' };
       case 'Lost': return { backgroundColor: '#fef3c7', color: '#92400e' };
+      case 'Repair':
+      case 'Under Repair': return { backgroundColor: '#e3f2fd', color: '#1565c0' };
       default: return { backgroundColor: '#f3f4f6', color: '#374151' };
     }
   };
@@ -1073,7 +1117,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                         <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}>
                           <div style={{ padding: '8px 0' }}>
                             {record.referenceIds.map((refId, idx) => {
-                              const currentCondition = record.referenceConditions?.[idx] || 'Good';
+                              const savedCondition = record.referenceConditions?.[idx] || 'Good';
+                              const currentCondition = savedCondition === 'Under Repair' ? 'Repair' : savedCondition;
                               const conditionStyle = getConditionStyle(currentCondition);
                               return (
                                 <div key={`cond-${idx}`} style={{ 
@@ -1091,8 +1136,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                                   ) : (
                                     <select
                                       value={currentCondition}
-                                      onChange={(e) => updateReferenceCondition(record.id, idx, e.target.value)}
-                                      disabled={record.status === 'Returned' || Boolean(record.returnedTimestamp)}
+                                      onChange={(e) => requestReferenceConditionChange(record.id || record._id, idx, e.target.value)}
+                                      disabled={Boolean(pendingConditionChange) || record.status === 'Returned' || Boolean(record.returnedTimestamp)}
                                       style={{
                                         padding: '4px 8px',
                                         borderRadius: '4px',
@@ -1107,9 +1152,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                                       }}
                                     >
                                       {EDITABLE_CONDITION_OPTIONS.map(opt => (
-                                        <option key={opt.value} value={opt.value} style={{ 
-                                          backgroundColor: 'white', 
-                                          color: '#333' 
+                                        <option key={opt.value} value={opt.value} style={{
+                                          backgroundColor: 'white',
+                                          color: '#333'
                                         }}>
                                           {opt.label}
                                         </option>
@@ -1142,6 +1187,18 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       </div>
 
       <NotificationToast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
+      <ConfirmModal
+        isOpen={Boolean(pendingConditionChange)}
+        title="Change Equipment Condition"
+        message={pendingConditionChange
+          ? `Change ${pendingConditionChange.equipmentName}${pendingConditionChange.referenceId ? ` (${pendingConditionChange.referenceId})` : ''} to ${pendingConditionChange.newCondition}?`
+          : ''}
+        confirmText={isConditionChangeSaving ? 'Saving...' : 'Confirm'}
+        cancelText="Cancel"
+        onConfirm={confirmReferenceConditionChange}
+        onCancel={cancelReferenceConditionChange}
+        confirmDisabled={isConditionChangeSaving}
+      />
       
       {/* Borrower Details Modal */}
       {selectedBorrowerDetails && createPortal(

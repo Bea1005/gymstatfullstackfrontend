@@ -453,22 +453,24 @@ export const register = async (userData) => {
       sport: userData.sport || "",
       sports: userData.sports || [userData.sport].filter(Boolean),
       id: userData.id,
+      contactNumber: userData.contactNumber || "",
+      verificationMethod: userData.verificationMethod || "email",
       role: userData.role || "student"
     }),
   });
 };
 
-export const verifyRegistrationOtp = async (email, otp) => {
+export const verifyRegistrationOtp = async (email, otp, verificationMethod = "email") => {
   return apiRequest('/register/verify', {
     method: 'POST',
-    body: JSON.stringify({ email, otp }),
+    body: JSON.stringify({ email, otp, verificationMethod }),
   });
 };
 
-export const resendRegistrationOtp = async (email) => {
+export const resendRegistrationOtp = async (email, verificationMethod = "email") => {
   return apiRequest('/register/resend', {
     method: 'POST',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, verificationMethod }),
   });
 };
 

@@ -1,0 +1,69 @@
+.auth-success-popup {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: min(90vw, 260px);
+  max-width: min(92vw, 360px);
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(20, 25, 24, 0.94);
+  color: #fff;
+  box-shadow: 0 18px 48px rgba(19, 15, 15, 0.22);
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  backdrop-filter: blur(6px);
+  z-index: 2000;
+  animation: auth-success-popup-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.auth-success-popup__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.18);
+  border: 1px solid rgba(255, 215, 0, 0.8);
+  color: #ffd960;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.auth-success-popup__message {
+  font-size: 0.96rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+@keyframes auth-success-popup-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-16px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-success-popup {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-success-popup {
+    top: 16px;
+    padding: 12px 14px;
+  }
+
+  .auth-success-popup__message {
+    font-size: 0.9rem;
+  }
+}

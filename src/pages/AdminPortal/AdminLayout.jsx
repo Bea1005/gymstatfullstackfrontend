@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import logoImage from '../../assets/logo.png';
 import Icon from '../../components/Icon';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
@@ -7,14 +7,125 @@ import * as api from '../../services/api';
 import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import './AdminPortal.css';
 
+const getNotificationReadStamp = (key) => {
+  if (typeof window === 'undefined') return 0;
+  const value = Number(window.localStorage.getItem(`gymstat-admin-notification-read-${key}`) || '0');
+  return Number.isFinite(value) ? value : 0;
+};
+
+const setNotificationReadStamp = (key, value) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(`gymstat-admin-notification-read-${key}`, String(value));
+};
+
+const getScheduleRequestPendingCount = () => {
+  if (typeof window === 'undefined') return 0;
+
+  try {
+    const storedRequests = JSON.parse(window.localStorage.getItem('gymstatScheduleRequests') || '[]');
+    const pendingRequestList = Array.isArray(storedRequests)
+      ? storedRequests.filter((request) => String(request?.status || '').toLowerCase() === 'pending')
+      : [];
+    return pendingRequestList.length;
+  } catch (error) {
+    console.warn('Unable to read pending schedule requests for admin sidebar notifications', error);
+    return 0;
+  }
+};
+
+const hasUnreadAdminNotification = (key) => {
+  if (typeof window === 'undefined') return false;
+
+  if (key === 'dashboard') {
+    return hasUnreadAdminNotification('schedules') || hasUnreadAdminNotification('requirements');
+  }
+
+  if (key === 'schedules') {
+    const pendingRequestCount = getScheduleRequestPendingCount();
+    const scheduleUpdatedAt = Number(window.localStorage.getItem('gymstat-schedule-updated') || '0');
+    const readStamp = getNotificationReadStamp('schedules');
+    if (pendingRequestCount <= 0) return false;
+    return scheduleUpdatedAt === 0 ? readStamp === 0 : scheduleUpdatedAt > readStamp;
+  }
+
+  if (key === 'requirements') {
+    const requirementUpdatedAt = Number(window.localStorage.getItem('gymstat-requirement-updated') || '0');
+    const readStamp = getNotificationReadStamp('requirements');
+    return requirementUpdatedAt > 0 && requirementUpdatedAt > readStamp;
+  }
+
+  return false;
+};
+
 const AdminLayout = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notificationState, setNotificationState] = useState({
+    dashboard: false,
+    schedules: false,
+    requirements: false,
+  });
+  const [animatingNotification, setAnimatingNotification] = useState(null);
   const { authReady, authError } = usePortalSession(['admin'], 'Admin');
 
+  const refreshNotificationState = () => {
+    setNotificationState({
+      dashboard: hasUnreadAdminNotification('dashboard'),
+      schedules: hasUnreadAdminNotification('schedules'),
+      requirements: hasUnreadAdminNotification('requirements'),
+    });
+  };
+
+  const markNotificationRead = (key) => {
+    if (!key || !hasUnreadAdminNotification(key)) return;
+
+    const readAt = key === 'schedules'
+      ? Number(window.localStorage.getItem('gymstat-schedule-updated') || String(Date.now()))
+      : key === 'requirements'
+        ? Number(window.localStorage.getItem('gymstat-requirement-updated') || String(Date.now()))
+        : Date.now();
+
+    setNotificationReadStamp(key, readAt);
+    refreshNotificationState();
+  };
+
+  useEffect(() => {
+    refreshNotificationState();
+
+    const syncNotificationState = () => refreshNotificationState();
+    const handleNotificationStorage = (event) => {
+      if (event.key === 'gymstatScheduleRequests'
+        || event.key === 'gymstat-schedule-updated'
+        || event.key === 'gymstat-requirement-updated'
+        || event.key === 'gymstat-admin-notification-read-schedules'
+        || event.key === 'gymstat-admin-notification-read-requirements'
+        || event.key === 'gymstat-admin-notification-read-dashboard') {
+        syncNotificationState();
+      }
+    };
+
+    window.addEventListener('storage', handleNotificationStorage);
+    window.addEventListener('gymstat-schedule-updated', syncNotificationState);
+    window.addEventListener('gymstat-requirement-updated', syncNotificationState);
+
+    return () => {
+      window.removeEventListener('storage', handleNotificationStorage);
+      window.removeEventListener('gymstat-schedule-updated', syncNotificationState);
+      window.removeEventListener('gymstat-requirement-updated', syncNotificationState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentItem = navItems.find((item) => item.path === location.pathname);
+    if (currentItem?.notificationKey) {
+      markNotificationRead(currentItem.notificationKey);
+    }
+  }, [location.pathname]);
+
   const navItems = [
-    { name: 'Dashboard', path: '/admin/dashboard', icon: (
+    { name: 'Dashboard', path: '/admin/dashboard', notificationKey: 'dashboard', icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
         <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -31,7 +142,7 @@ const AdminLayout = () => {
       </svg>
     ) },
 
-    { name: 'Requirements', path: '/admin/requirements', icon: (
+    { name: 'Requirements', path: '/admin/requirements', notificationKey: 'requirements', icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
@@ -41,7 +152,7 @@ const AdminLayout = () => {
       </svg>
     ) },
 
-    { name: 'Schedules', path: '/admin/schedules', icon: (
+    { name: 'Schedules', path: '/admin/schedules', notificationKey: 'schedules', icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
         <line x1="16" y1="2" x2="16" y2="6" />
@@ -70,6 +181,16 @@ const AdminLayout = () => {
       <Icon name="settings" />
     ) },
   ];
+
+  const handleNavigationClick = (item) => {
+    closeMobileMenu();
+
+    if (item.notificationKey && notificationState[item.notificationKey]) {
+      setAnimatingNotification(item.notificationKey);
+      window.setTimeout(() => setAnimatingNotification((previous) => previous === item.notificationKey ? null : previous), 420);
+      markNotificationRead(item.notificationKey);
+    }
+  };
 
   const handleLogout = () => {
     setShowLogoutModal(true);
@@ -121,11 +242,19 @@ const AdminLayout = () => {
             <NavLink
               key={item.name}
               to={item.path}
-              className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-              onClick={closeMobileMenu}
+              className={({ isActive }) => [
+                'nav-link',
+                isActive ? 'active' : '',
+                item.notificationKey && notificationState[item.notificationKey] ? 'has-notification' : '',
+                animatingNotification === item.notificationKey ? 'notification-animate' : '',
+              ].filter(Boolean).join(' ')}
+              onClick={() => handleNavigationClick(item)}
             >
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.name}</span>
+              {item.notificationKey && notificationState[item.notificationKey] && (
+                <span className="nav-notification-dot" aria-label="New notification" />
+              )}
             </NavLink>
           ))}
         </nav>

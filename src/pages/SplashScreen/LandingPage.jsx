@@ -46,13 +46,6 @@ const LandingPage = () => {
           {/* Navigation */}
 
           <nav id="landing-navigation" className={`landing-nav ${isMenuOpen ? 'is-open' : ''}`}>
-                        <button 
-              className="landing-nav-link"
-              onClick={() => scrollToSection('landing-hero')}
-              title="Return to the landing hero"
-            >
-              Home
-            </button>
             <button 
               className="landing-nav-link"
               onClick={() => navigateFromMenu('/document-center')}
@@ -67,22 +60,13 @@ const LandingPage = () => {
             >
               Calendar
             </button>
-                        <button 
-              className="landing-nav-link"
-              onClick={() => scrollToSection('landing-about')}
-              title="Go to About"
-            >
-              About
-            </button>
           </nav>
 
           {/* CTA Button */}
           <button className="landing-header-cta2" onClick={() => navigateFromMenu('/login')}>
             Sign In
           </button>
-          <button className="landing-header-cta" onClick={() => navigateFromMenu('/register')}>
-            Get Started
-          </button>
+
 
           <button
             type="button"
@@ -234,7 +218,7 @@ const LandingPage = () => {
       <section className="landing-cta-section">
         <div className="landing-section-container">
           <div className="landing-cta-content">
-            <h2>Manage GYMSTAT Smarter</h2>
+            <h2>Manage GYMSTAT </h2>
             <p>Keep schedules, equipment, and student-athlete records organized in one centralized system.</p>
             <button className="landing-cta-primary-btn" onClick={handleStart}>
               Explore GYMSTAT

@@ -50,10 +50,13 @@ export default function AdminEquipments({ onUpdateInventory }) {
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [pendingConditionChange, setPendingConditionChange] = useState(null);
+  const [isConditionChangeSaving, setIsConditionChangeSaving] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const equipmentConditionUpdatesRef = useRef(new Set());
+  const conditionChangeConfirmationInProgressRef = useRef(false);
   const reportInProgressRef = useRef(false);
 
   const formatReferenceIdDisplay = (referenceIds = []) => {
@@ -74,7 +77,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
     const total = Number(equipment.total ?? equipment.totalStock ?? 1);
     const onLoan = Number(equipment.onLoan ?? 0);
     const available = Number(equipment.available ?? Math.max(0, total - onLoan));
-    const condition = equipment.condition || 'Good';
+    const condition = equipment.condition === 'Under Repair' ? 'Repair' : (equipment.condition || 'Good');
     const referenceIds = Array.isArray(equipment.referenceIds)
       ? equipment.referenceIds.filter(Boolean)
       : normalizedReferenceId
@@ -384,9 +387,23 @@ export default function AdminEquipments({ onUpdateInventory }) {
     setConfirmDeleteId(null);
   };
 
+  const requestItemConditionChange = (equipmentId, referenceId, newCondition) => {
+    const equipment = items.find((item) => item.id === equipmentId);
+    const equipmentItem = equipment?.items.find((item) => item.referenceId === referenceId);
+    if (!equipment || !equipmentItem || equipmentItem.condition === newCondition) return;
+
+    setPendingConditionChange({
+      equipmentId,
+      referenceId,
+      equipmentName: equipment.name,
+      previousCondition: equipmentItem.condition,
+      newCondition
+    });
+  };
+
   const updateItemCondition = async (equipmentId, referenceId, newCondition) => {
     const updateKey = `${equipmentId}:${referenceId}`;
-    if (equipmentConditionUpdatesRef.current.has(updateKey)) return;
+    if (equipmentConditionUpdatesRef.current.has(updateKey)) return false;
     equipmentConditionUpdatesRef.current.add(updateKey);
     try {
       const equipmentToUpdate = items.find((item) => item.id === equipmentId);
@@ -410,6 +427,29 @@ export default function AdminEquipments({ onUpdateInventory }) {
     } finally {
       equipmentConditionUpdatesRef.current.delete(updateKey);
     }
+  };
+
+  const confirmItemConditionChange = async () => {
+    if (!pendingConditionChange || conditionChangeConfirmationInProgressRef.current) return;
+
+    conditionChangeConfirmationInProgressRef.current = true;
+    setIsConditionChangeSaving(true);
+    try {
+      const saved = await updateItemCondition(
+        pendingConditionChange.equipmentId,
+        pendingConditionChange.referenceId,
+        pendingConditionChange.newCondition
+      );
+      if (saved) setPendingConditionChange(null);
+    } finally {
+      conditionChangeConfirmationInProgressRef.current = false;
+      setIsConditionChangeSaving(false);
+    }
+  };
+
+  const cancelItemConditionChange = () => {
+    if (conditionChangeConfirmationInProgressRef.current) return;
+    setPendingConditionChange(null);
   };
 
   const generateEquipmentReport = async (filter) => {
@@ -723,7 +763,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
                       </td>
                       <td className="eq-td-condition">
                         <span className={`eq-condition-badge eq-condition-badge--${(equipment.condition || 'Good').toLowerCase().replace(/\s+/g, '-')}`}>
-                          {equipment.condition || 'Good'}
+                          {equipment.condition === 'Under Repair' ? 'Repair' : (equipment.condition || 'Good')}
                         </span>
                       </td>
                       <td className="eq-td-qty">{quantityDisplay}</td>
@@ -739,14 +779,16 @@ export default function AdminEquipments({ onUpdateInventory }) {
                         <td className="eq-detail-refid" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{item.referenceId}</td>
                         <td className="eq-detail-condition" colSpan="2">
                           <select
-                            value={item.condition}
-                            onChange={(e) => updateItemCondition(equipment.id, item.referenceId, e.target.value)}
+                            value={item.condition === 'Under Repair' ? 'Repair' : item.condition}
+                            onChange={(e) => requestItemConditionChange(equipment.id, item.referenceId, e.target.value)}
+                            disabled={Boolean(pendingConditionChange)}
                             className="eq-condition-select"
                             style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #ddd' }}
                           >
                             <option value="Good">Good</option>
                             <option value="Damaged">Damaged</option>
                             <option value="Lost">Lost</option>
+                            <option value="Repair">Repair</option>
                           </select>
                         </td>
                         <td></td>
@@ -773,6 +815,18 @@ export default function AdminEquipments({ onUpdateInventory }) {
         cancelText="Keep"
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+      />
+      <ConfirmModal
+        isOpen={Boolean(pendingConditionChange)}
+        title="Change Equipment Condition"
+        message={pendingConditionChange
+          ? `Change ${pendingConditionChange.equipmentName} (${pendingConditionChange.referenceId}) from ${pendingConditionChange.previousCondition} to ${pendingConditionChange.newCondition}?`
+          : ''}
+        confirmText={isConditionChangeSaving ? 'Saving...' : 'Confirm'}
+        cancelText="Cancel"
+        onConfirm={confirmItemConditionChange}
+        onCancel={cancelItemConditionChange}
+        confirmDisabled={isConditionChangeSaving}
       />
       <NotificationToast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
     </div>
