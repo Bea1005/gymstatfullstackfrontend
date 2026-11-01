@@ -35,7 +35,7 @@ export default function DocumentViewer({
       </div>
 
       {navigationVisible && (
-        <div className="docviewer-navigation" aria-label="Requirement photo navigation">
+        <div className="docviewer-navigation"         aria-label="Requirement document navigation">
           <button type="button" onClick={onPrevious} disabled={navigationLoading} aria-label="Previous photo">&lt;</button>
           <span>{navigationLabel}</span>
           <button type="button" onClick={onNext} disabled={navigationLoading} aria-label="Next photo">&gt;</button>

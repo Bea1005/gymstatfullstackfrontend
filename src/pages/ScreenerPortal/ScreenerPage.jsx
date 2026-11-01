@@ -38,12 +38,23 @@ const isPdfFile = (entry) => (
   || getFileExtension(entry?.fileName) === '.pdf'
 );
 
-const getRequirementFileUrl = (entry) => {
-  if (entry?.fileUrl) return entry.fileUrl;
+const getRequirementFileUrl = (entry, fileIndex = 0) => {
+  if (entry?.files?.[fileIndex]?.fileUrl) return entry.files[fileIndex].fileUrl;
+  if (fileIndex === 0 && entry?.fileUrl) return entry.fileUrl;
   if (!entry?.submissionId) return '';
   const participation = encodeURIComponent(entry.participationType || 'Intrams');
-  return `/screener/requirements/${String(entry.submissionId)}/preview?participationType=${participation}`;
+  return `/screener/requirements/${String(entry.submissionId)}/preview?participationType=${participation}&fileIndex=${fileIndex}`;
 };
+
+const getRequirementFiles = (entry) => (
+  entry?.files?.length
+    ? entry.files
+    : entry
+      ? [{ fileName: entry.fileName, fileType: entry.fileType }]
+      : []
+);
+
+const getRequirementPreviewKey = (entry, fileIndex = 0) => `${entry.submissionId}:${fileIndex}`;
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
   return api.getProtectedImageObjectUrl(fileUrl, { cache: 'no-store' });
@@ -82,6 +93,9 @@ const ScreenerPage = () => {
   const [viewerSrc, setViewerSrc] = useState(null);
   const [viewerName, setViewerName] = useState(null);
   const [viewerType, setViewerType] = useState('');
+  const [viewerFiles, setViewerFiles] = useState([]);
+  const [viewerFileIndex, setViewerFileIndex] = useState(0);
+  const [viewerNavigationLoading, setViewerNavigationLoading] = useState(false);
 
   const { notify } = useNotifications();
   const hasNotifiedLoadErrorRef = useRef(false);
@@ -277,7 +291,12 @@ const ScreenerPage = () => {
     let cancelled = false;
     const createdUrls = [];
     const entries = (selectedStudent?.requirements?.documents || [])
-      .map((entry) => [entry.submissionId, entry, getRequirementFileUrl(entry)])
+      .flatMap((entry) => getRequirementFiles(entry)
+        .map((file, index) => [
+          getRequirementPreviewKey(entry, index),
+          { ...entry, ...file },
+          getRequirementFileUrl(entry, index)
+        ]))
       .filter(([, , fileUrl]) => Boolean(fileUrl));
 
     setPreviewUrls({});
@@ -422,18 +441,42 @@ const ScreenerPage = () => {
       await markResubmissionViewed(entry.submissionId, entry.participationType);
     }
     try {
-      const fileUrl = getRequirementFileUrl(entry);
+      const files = getRequirementFiles(entry).map((file, index) => ({
+        ...file,
+        fileUrl: getRequirementFileUrl(entry, index)
+      }));
+      const fileUrl = files[0]?.fileUrl;
       const attachmentUrl = fileUrl
         ? await loadAttachmentBlobUrl(fileUrl)
         : fallbackSrc;
       setViewerSrc(attachmentUrl);
+      setViewerFiles(files);
+      setViewerFileIndex(0);
+      setViewerName(files[0]?.fileName || entry?.fileName || fallbackName);
+      setViewerType(files[0]?.fileType || entry?.fileType || '');
+      setViewerOpen(true);
     } catch (error) {
       notify('screener-error', 'Unable to open file', error.message);
-      return;
     }
-    setViewerName(entry?.fileName || fallbackName);
-    setViewerType(entry?.fileType || '');
-    setViewerOpen(true);
+  };
+
+  const handleViewerNavigation = async (direction) => {
+    if (viewerNavigationLoading || viewerFiles.length < 2) return;
+    const nextIndex = (viewerFileIndex + direction + viewerFiles.length) % viewerFiles.length;
+    const selectedFile = viewerFiles[nextIndex];
+    setViewerNavigationLoading(true);
+    try {
+      const source = await loadAttachmentBlobUrl(selectedFile.fileUrl);
+      if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
+      setViewerSrc(source);
+      setViewerName(selectedFile.fileName || 'Requirement Document');
+      setViewerType(selectedFile.fileType || '');
+      setViewerFileIndex(nextIndex);
+    } catch (error) {
+      notify('screener-error', 'Unable to open file', error.message);
+    } finally {
+      setViewerNavigationLoading(false);
+    }
   };
 
   // --- VIEW 1: REQUIREMENTS SCREENING PORTAL DASHBOARD LIST ---
@@ -450,7 +493,7 @@ const ScreenerPage = () => {
                 <span className="header-badge" title="Resubmitted requirement(s) awaiting review">{resubmissionCount}</span>
               )}
             </div>
-            <p>Review coach-approved requirements from complete sport groups and finalize each student-athlete's documents.</p>
+            <p>Review documents forwarded by coaches for student-athletes in your assigned department.</p>
           </div>
           <button className="logout-btn" onClick={handleLogout}>
             Log Out 
@@ -599,7 +642,10 @@ const ScreenerPage = () => {
         entry,
         cardKey: entry?.submissionId || `${req.id}-empty-${index}`,
         viewerName: entry?.fileName || req.title,
-        previewUrl: entry?.submissionId ? previewUrls[entry.submissionId] || '' : ''
+        previewKey: entry?.submissionId ? getRequirementPreviewKey(entry) : '',
+        previewUrl: entry?.submissionId
+          ? previewUrls[getRequirementPreviewKey(entry)] || ''
+          : ''
       }));
     }).concat(requirementDocuments
       .filter((entry) => {
@@ -612,7 +658,8 @@ const ScreenerPage = () => {
         entry,
         cardKey: entry.submissionId,
         viewerName: entry.fileName || entry.label || 'Requirement Document',
-        previewUrl: previewUrls[entry.submissionId] || ''
+        previewKey: getRequirementPreviewKey(entry),
+        previewUrl: previewUrls[getRequirementPreviewKey(entry)] || ''
       })));
 
     return (
@@ -650,14 +697,14 @@ const ScreenerPage = () => {
                   {getRequirementFileUrl(req.entry) ? (
                     <>
                       {req.previewUrl && isImageFile(req.entry) && (
-                        !previewErrors[req.entry.submissionId] && (
+                        !previewErrors[req.previewKey] && (
                           <img
                             src={req.previewUrl}
                             alt={req.entry.fileName || req.title}
                             className="document-img"
                             onError={() => setPreviewErrors((current) => ({
                               ...current,
-                              [req.entry.submissionId]: true
+                              [req.previewKey]: true
                             }))}
                           />
                         )
@@ -669,14 +716,14 @@ const ScreenerPage = () => {
                           className="document-frame"
                         />
                       )}
-                      {!req.previewUrl && previewLoading[req.entry.submissionId] && (
+                      {!req.previewUrl && previewLoading[req.previewKey] && (
                         <span className="document-loading-label">Loading document...</span>
                       )}
-                      {req.previewUrl && isImageFile(req.entry) && !previewErrors[req.entry.submissionId] && (
+                      {req.previewUrl && isImageFile(req.entry) && !previewErrors[req.previewKey] && (
                         <div className="document-file-label">{getDisplayFileName(req.entry.fileName)}</div>
                       )}
-                      {(!req.previewUrl || previewErrors[req.entry.submissionId] || (!isImageFile(req.entry) && !isPdfFile(req.entry)))
-                        && !previewLoading[req.entry.submissionId] && (
+                      {(!req.previewUrl || previewErrors[req.previewKey] || (!isImageFile(req.entry) && !isPdfFile(req.entry)))
+                        && !previewLoading[req.previewKey] && (
                         <div className="document-file-label">
                           <div>Document preview unavailable</div>
                           <div>{getDisplayFileName(req.entry.fileName)}</div>
@@ -699,7 +746,9 @@ const ScreenerPage = () => {
                           await handleOpenRequirementViewer(req.entry, '', req.viewerName);
                         }}
                       >
-                        View Documents
+                        {req.entry.files?.length > 1
+                          ? `View Documents (${req.entry.files.length})`
+                          : 'View Documents'}
                       </button>
                     </>
                   ) : (
@@ -814,7 +863,20 @@ const ScreenerPage = () => {
           src={viewerSrc}
           fileName={viewerName}
           fileType={viewerType}
-          onClose={() => { setViewerOpen(false); setViewerSrc(null); setViewerName(null); setViewerType(''); }}
+          onClose={() => {
+            if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
+            setViewerOpen(false);
+            setViewerSrc(null);
+            setViewerName(null);
+            setViewerType('');
+            setViewerFiles([]);
+            setViewerFileIndex(0);
+          }}
+          navigationVisible={viewerFiles.length > 1}
+          navigationLabel={`${viewerFileIndex + 1} / ${viewerFiles.length}`}
+          navigationLoading={viewerNavigationLoading}
+          onPrevious={() => handleViewerNavigation(-1)}
+          onNext={() => handleViewerNavigation(1)}
         />
       </div>
     );
