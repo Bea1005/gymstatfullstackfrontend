@@ -6,7 +6,12 @@ import ConfirmModal from '../../components/ConfirmModal';
 import Icon from '../../components/Icon';
 import TimeInput from '../../components/TimeInput';
 import borrowersTemplateDoc from '../../assets/borrowers-template.doc?url';
-import { getDueBorrowings, isBorrowingDeadlineApproaching } from '../../utils/borrowingDue';
+import {
+  getDueBorrowings,
+  isBorrowingDeadlineApproaching,
+  isBorrowingDue,
+  isBorrowingReturned,
+} from '../../utils/borrowingDue';
 import { getUniqueBorrowerCount } from './borrowerCount';
 import { toggleEquipmentSelection, toggleEquipmentReferenceSelection } from './borrowingEquipmentSelection';
 import {
@@ -115,6 +120,7 @@ const createEmptyForm = (now = new Date()) => ({
   selectedEquipment: [],
   selectedReferenceIdsByEquipment: {},
   date: getManilaDateString(now),
+  endDate: getManilaDateString(now),
   startTime: '09:00 AM',
   endTime: ''
 });
@@ -135,6 +141,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   const [search, setSearch] = useState('');
   const [borrowerTypeFilter, setBorrowerTypeFilter] = useState('All Borrower Types');
   const [error, setError] = useState('');
+  const [dateErrors, setDateErrors] = useState({ endDate: '' });
   const [timeErrors, setTimeErrors] = useState({ startTime: '', endTime: '' });
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [pendingConditionChange, setPendingConditionChange] = useState(null);
@@ -390,11 +397,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
   // Determine if a transaction is ongoing based on status
   const isTransactionOngoing = (record) => {
-    const status = String(record.status || '').trim().toLowerCase();
-    if (['returned', 'completed'].includes(status) || record.returnedAt || record.returnedTimestamp) {
-      return false;
-    }
-    return true;
+    return !isBorrowingReturned(record);
   };
 
   // Sort records with ongoing at top, then by date
@@ -461,6 +464,22 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       return; 
     }
 
+    const endDate = form.endDate || form.date;
+    const parsedEndDate = new Date(`${endDate}T00:00:00.000Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
+      || Number.isNaN(parsedEndDate.getTime())
+      || parsedEndDate.toISOString().slice(0, 10) !== endDate
+      || endDate < form.date
+    ) {
+      const endDateError = 'End Date cannot be earlier than Start Date.';
+      setDateErrors({ endDate: endDateError });
+      setError(endDateError);
+      setToast({ message: endDateError, type: 'error' });
+      return;
+    }
+    setDateErrors({ endDate: '' });
+
     if (form.borrowerType === 'Others (Office/Agency)' && !form.borrowerTypeOther.trim()) {
       const borrowerTypeError = 'Enter the office or agency name for this borrower type.';
       setError(borrowerTypeError);
@@ -504,7 +523,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       startTime: startTime ? '' : 'Enter a valid time, such as 9:00 AM.',
       endTime: form.endTime.trim() && !endTime ? 'Enter a valid time, such as 5:00 PM.' : '',
     };
-    if (startTime && endTime && endTime.minutes <= startTime.minutes) {
+    if (startTime && endTime && endDate === form.date && endTime.minutes <= startTime.minutes) {
       nextTimeErrors.endTime = 'End time must be later than start time.';
     }
     setTimeErrors(nextTimeErrors);
@@ -518,7 +537,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     const submissionTime = new Date();
     const dateTimeError = getPastBorrowingDateTimeError(form.date, form.startTime, submissionTime)
       || (form.endTime.trim()
-        ? getPastBorrowingDateTimeError(form.date, form.endTime, submissionTime)
+        ? getPastBorrowingDateTimeError(endDate, form.endTime, submissionTime)
         : '');
     if (dateTimeError) {
       setError(dateTimeError);
@@ -563,6 +582,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
         referenceIds: flattenedReferenceIds,
         referenceConditions: flattenedReferenceConditions,
         borrowTimestamp,
+        returnDate: endDate,
         endTime: form.endTime.trim(),
         returnedTimestamp: null,
         status: 'Out',
@@ -581,6 +601,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
       setForm(createEmptyForm());
       setError('');
+      setDateErrors({ endDate: '' });
       setTimeErrors({ startTime: '', endTime: '' });
     } catch (error) {
       console.error('Error creating borrowing:', error);
@@ -722,7 +743,11 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   // Keep the field in ISO format so the native date picker can display it correctly.
   const manilaToday = getManilaDateString(currentTime);
   const formattedDate = form.date || manilaToday;
-  const disabledBorrowingTimes = form.date === manilaToday
+  const formattedEndDate = form.endDate || formattedDate;
+  const disabledStartTimes = form.date === manilaToday
+    ? TIME_OPTIONS.filter((time) => isPastManilaTime(time, currentTime))
+    : [];
+  const disabledEndTimes = formattedEndDate === manilaToday
     ? TIME_OPTIONS.filter((time) => isPastManilaTime(time, currentTime))
     : [];
 
@@ -773,6 +798,45 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               value={form.fullname}
               onChange={e => { setForm(f => ({ ...f, fullname: e.target.value })); setError(''); }}
             />
+          </div>
+
+          <div className="bw-form-group bw-form-group--full">
+            <label className="bw-form-label" htmlFor="borrowing-type">BORROWER TYPE</label>
+            <select
+              id="borrowing-type"
+              className="bw-form-input bw-form-select"
+              value={form.borrowerType}
+              onChange={(event) => {
+                const borrowerType = event.target.value;
+                setForm((current) => ({
+                  ...current,
+                  borrowerType,
+                  borrowerTypeOther: borrowerType === 'Others (Office/Agency)'
+                    ? current.borrowerTypeOther
+                    : '',
+                }));
+                setError('');
+              }}
+            >
+              <option value="Student">Student</option>
+              <option value="Faculty">Faculty</option>
+              <option value="Coach/Trainer">Coach/Trainer</option>
+              <option value="Others (Office/Agency)">Others (Office/Agency)</option>
+            </select>
+            {form.borrowerType === 'Others (Office/Agency)' && (
+              <input
+                type="text"
+                className="bw-form-input"
+                aria-label="Office or agency name"
+                placeholder="Enter office or agency name"
+                value={form.borrowerTypeOther}
+                onChange={(event) => setForm((current) => ({
+                  ...current,
+                  borrowerTypeOther: event.target.value,
+                }))}
+                required
+              />
+            )}
           </div>
 
           <div className="bw-form-group bw-form-group--full">
@@ -919,15 +983,23 @@ export default function AdminBorrowing({ onBorrowingChange }) {
 
           <div className="bw-form-row">
             <div className="bw-form-group">
-              <label className="bw-form-label">DATE</label>
+              <label className="bw-form-label" htmlFor="borrowing-start-date">START DATE</label>
               <div style={{ position: 'relative', width: '100%' }}>
                 <input
+                  id="borrowing-start-date"
                   type="date"
                   className="bw-form-input"
                   value={formattedDate}
                   min={manilaToday}
                   onChange={e => {
-                    setForm(f => ({ ...f, date: e.target.value || manilaToday }));
+                    const nextDate = e.target.value || manilaToday;
+                    setForm((current) => ({
+                      ...current,
+                      date: nextDate,
+                      endDate: current.endDate < nextDate ? nextDate : current.endDate,
+                    }));
+                    setDateErrors({ endDate: '' });
+                    setError('');
                   }}
                   style={{ 
                     paddingRight: '20px',
@@ -936,6 +1008,33 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                 />
 
               </div>
+            </div>
+            <div className="bw-form-group">
+              <label className="bw-form-label" htmlFor="borrowing-end-date">END DATE</label>
+              <input
+                id="borrowing-end-date"
+                type="date"
+                className="bw-form-input"
+                value={formattedEndDate}
+                min={formattedDate}
+                onChange={(event) => {
+                  const nextEndDate = event.target.value || formattedDate;
+                  const endDateError = nextEndDate < formattedDate
+                    ? 'End Date cannot be earlier than Start Date.'
+                    : '';
+                  setForm((current) => ({ ...current, endDate: nextEndDate }));
+                  setDateErrors({ endDate: endDateError });
+                  setError(endDateError);
+                }}
+                aria-invalid={Boolean(dateErrors.endDate)}
+                aria-describedby={dateErrors.endDate ? 'borrowing-end-date-error' : undefined}
+                style={{ paddingRight: '20px', width: '100%' }}
+              />
+              {dateErrors.endDate && (
+                <small id="borrowing-end-date-error" className="schedule-time-error" role="alert">
+                  {dateErrors.endDate}
+                </small>
+              )}
             </div>
             <div className="bw-form-group">
               <label className="bw-form-label" htmlFor="borrowing-start-time">START TIME</label>
@@ -956,7 +1055,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                     startTime: parseBorrowingTime(form.startTime) ? '' : 'Enter a valid time, such as 9:00 AM.',
                   }))}
                   options={TIME_OPTIONS}
-                  disabledOptions={disabledBorrowingTimes}
+                  disabledOptions={disabledStartTimes}
                   placeholder="e.g., 9:00 AM"
                   invalid={Boolean(timeErrors.startTime)}
                   describedBy={timeErrors.startTime ? 'borrowing-start-time-error' : undefined}
@@ -986,51 +1085,13 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                       : '',
                   }))}
                   options={TIME_OPTIONS}
-                  disabledOptions={disabledBorrowingTimes}
+                  disabledOptions={disabledEndTimes}
                   placeholder="Select End Time..."
                   invalid={Boolean(timeErrors.endTime)}
                   describedBy={timeErrors.endTime ? 'borrowing-end-time-error' : undefined}
                 />
               </div>
               {timeErrors.endTime && <small id="borrowing-end-time-error" className="schedule-time-error" role="alert">{timeErrors.endTime}</small>}
-            </div>
-            <div className="bw-form-group">
-              <label className="bw-form-label" htmlFor="borrowing-type">BORROWER TYPE</label>
-              <select
-                id="borrowing-type"
-                className="bw-form-input bw-form-select"
-                value={form.borrowerType}
-                onChange={(event) => {
-                  const borrowerType = event.target.value;
-                  setForm((current) => ({
-                    ...current,
-                    borrowerType,
-                    borrowerTypeOther: borrowerType === 'Others (Office/Agency)'
-                      ? current.borrowerTypeOther
-                      : '',
-                  }));
-                  setError('');
-                }}
-              >
-                <option value="Student">Student</option>
-                <option value="Faculty">Faculty</option>
-                <option value="Coach/Trainer">Coach/Trainer</option>
-                <option value="Others (Office/Agency)">Others (Office/Agency)</option>
-              </select>
-              {form.borrowerType === 'Others (Office/Agency)' && (
-                <input
-                  type="text"
-                  className="bw-form-input"
-                  aria-label="Office or agency name"
-                  placeholder="Enter office or agency name"
-                  value={form.borrowerTypeOther}
-                  onChange={(event) => setForm((current) => ({
-                    ...current,
-                    borrowerTypeOther: event.target.value,
-                  }))}
-                  required
-                />
-              )}
             </div>
           </div>
 
@@ -1084,6 +1145,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                 <th>CONDITION</th>
                 <th>QUANTITY</th>
                 <th>BORROWED TIMESTAMP</th>
+                <th>EXPECTED RETURN</th>
                 <th>RETURNED TIMESTAMP</th>
               </tr>
             </thead>
@@ -1097,14 +1159,13 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                 const isOngoing = isTransactionOngoing(record);
                 const isDeadlineApproaching = isBorrowingDeadlineApproaching(record, currentTime);
                 const status = String(record.status || '').trim().toLowerCase();
-                const isDueWarning = isOngoing
-                  && !['overdue', 'returned', 'completed'].includes(status)
-                  && isDeadlineApproaching;
+                const isDue = isOngoing && status !== 'overdue' && isBorrowingDue(record, currentTime);
+                const expectedReturnDate = record.returnDate || record.endDate;
                 
                 return (
                   <React.Fragment key={record.id}>
                     {/* Main Transaction Row */}
-                    <tr className={`${isOngoing ? 'bw-row--ongoing' : ''} ${isDueWarning ? 'bw-row--due' : ''} ${!isOngoing ? 'bw-row--returned' : ''}`.trim()}>
+                    <tr className={`${isOngoing ? 'bw-row--ongoing' : ''} ${isDue ? 'bw-row--due' : ''} ${!isOngoing ? 'bw-row--returned' : ''}`.trim()}>
                       <td className="bw-td-name">
                         <button
                           onClick={() => setSelectedBorrowerDetails(record)}
@@ -1129,10 +1190,10 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                             fontWeight: 'bold',
                             padding: '2px 6px',
                             borderRadius: '12px',
-                            backgroundColor: isDueWarning ? '#ffdc00' : '#4caf50',
-                            color: isDueWarning ? '#5a0000' : 'white'
+                            backgroundColor: isDue ? '#ffdc00' : status === 'overdue' ? '#f44336' : '#4caf50',
+                            color: isDue ? '#5a0000' : 'white'
                           }}>
-                            {isDueWarning ? 'DUE' : 'ONGOING'}
+                            {isDue ? 'DUE' : status === 'overdue' ? 'OVERDUE' : 'ONGOING'}
                           </span>
                         )}
                       </td>
@@ -1184,6 +1245,14 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                           <>
                             {record.borrowTimestamp.date}<br />
                             <span style={{ fontSize: '11px', color: '#666' }}>{record.borrowTimestamp.time}</span>
+                          </>
+                        ) : '—'}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {expectedReturnDate ? (
+                          <>
+                            {String(expectedReturnDate).slice(0, 10)}<br />
+                            <span style={{ fontSize: '11px', color: '#666' }}>{record.endTime || '—'}</span>
                           </>
                         ) : '—'}
                       </td>
@@ -1314,6 +1383,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                         <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}></td>
                         <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}></td>
                         <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}></td>
+                        <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}></td>
                       </tr>
                     )}
                   </React.Fragment>
@@ -1321,7 +1391,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="bw-empty">No records found.</td>
+                  <td colSpan="8" className="bw-empty">No records found.</td>
                 </tr>
               )}
             </tbody>

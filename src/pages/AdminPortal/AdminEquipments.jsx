@@ -729,7 +729,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
             <button type="submit" className="eq-add-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
               {isSubmitting
                 ? 'ADDING TO INVENTORY…'
-                : `ADD ${form.quantity || ''} ${form.quantity === '' ? '' : ''} TO INVENTORY`}
+                : `ADD  ${form.quantity === '' ? '' : ''} TO INVENTORY`}
             </button>
           </div>
         </form>

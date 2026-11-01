@@ -572,7 +572,7 @@ const AdminRequirements = () => {
           }}
           onKeyDown={handleRequirementsTabKeyDown}
         >
-          Add Student Requirements
+          Manage Requirements
         </button>
       </div>
 

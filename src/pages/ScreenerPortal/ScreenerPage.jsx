@@ -465,7 +465,7 @@ const ScreenerPage = () => {
         <div className="metrics-row">
           <div className="metric-card">
             <h2>{stats.totalStudents}</h2>
-            <p>Total Student</p>
+            <p>Total Athlete</p>
           </div>
           <div className="metric-card">
             <h2>{stats.pendingRequirements}</h2>

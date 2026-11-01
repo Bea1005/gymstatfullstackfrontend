@@ -565,13 +565,6 @@
   overflow: hidden;
 }
 
-.sport-batch-status {
-  margin-top: 5px;
-  color: #5b5560;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .document-review-status {
   display: flex;
   justify-content: center;

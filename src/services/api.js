@@ -1074,6 +1074,10 @@ export const reviewCoachRequirement = async (submissionId, reviewData) => {
   });
 };
 
+export const forwardCoachRequirements = async () => (
+  apiRequest('/coach/requirements/forward', { method: 'POST' })
+);
+
 export const markCoachRequirementViewed = async (submissionId, participationType = 'Intrams') => {
   return apiRequest(`/coach/requirements/${encodeURIComponent(submissionId)}/viewed`, {
     method: 'PUT',

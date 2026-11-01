@@ -1,13 +1,26 @@
+const BORROWING_TIME_ZONE = 'Asia/Manila';
+const manilaDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: BORROWING_TIME_ZONE,
+  calendar: 'gregory',
+  numberingSystem: 'latn',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
 const parseStoredDateParts = (value) => {
-  const dateText = value instanceof Date
-    ? value.toISOString().slice(0, 10)
-    : String(value || '').trim().slice(0, 10);
+  if (value instanceof Date && Number.isNaN(value.getTime())) return null;
+  const dateText = value instanceof Date ? value.toISOString().slice(0, 10) : String(value || '').trim().slice(0, 10);
   const match = dateText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
 
   const parts = match.slice(1).map(Number);
-  const date = new Date(parts[0], parts[1] - 1, parts[2]);
-  if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+  const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  if (date.getUTCFullYear() !== parts[0] || date.getUTCMonth() !== parts[1] - 1 || date.getUTCDate() !== parts[2]) return null;
   return { year: parts[0], month: parts[1], day: parts[2], text: dateText };
 };
 
@@ -28,24 +41,52 @@ const parseStoredEndTime = (value) => {
   return { hours, minutes };
 };
 
+const getManilaDateTime = ({ year, month, day }, { hours, minutes }) => {
+  const utcGuess = Date.UTC(year, month - 1, day, hours, minutes);
+  const manilaParts = Object.fromEntries(
+    manilaDateTimeFormatter.formatToParts(new Date(utcGuess))
+      .filter(({ type }) => type !== 'literal')
+      .map(({ type, value }) => [type, Number(value)])
+  );
+  const manilaTimeAsUtc = Date.UTC(
+    manilaParts.year,
+    manilaParts.month - 1,
+    manilaParts.day,
+    manilaParts.hour,
+    manilaParts.minute,
+    manilaParts.second
+  );
+  return new Date(utcGuess - (manilaTimeAsUtc - utcGuess));
+};
+
+const hasReturnedTimestamp = (timestamp) => {
+  if (!timestamp) return false;
+  if (typeof timestamp === 'string') return Boolean(timestamp.trim());
+  if (typeof timestamp !== 'object') return true;
+  return Boolean(String(timestamp.date || '').trim() || String(timestamp.time || '').trim());
+};
+
+export const isBorrowingReturned = (record) => (
+  ['returned', 'completed'].includes(String(record.status || '').trim().toLowerCase())
+  || Boolean(record.returnedAt)
+  || hasReturnedTimestamp(record.returnedTimestamp)
+);
+
 export const getBorrowingDueDateTime = (record) => {
-  const dateParts = parseStoredDateParts(record.returnDate || record.borrowTimestamp?.date || record.borrowDate);
+  const dateParts = parseStoredDateParts(
+    record.returnDate || record.endDate || record.borrowTimestamp?.date || record.borrowDate
+  );
   const timeParts = parseStoredEndTime(record.endTime);
   if (!dateParts || !timeParts) return null;
 
   return {
-    value: new Date(dateParts.year, dateParts.month - 1, dateParts.day, timeParts.hours, timeParts.minutes),
+    value: getManilaDateTime(dateParts, timeParts),
     date: dateParts.text,
   };
 };
 
 export const isBorrowingDeadlineApproaching = (record, now = new Date()) => {
-  const status = String(record.status || '').trim().toLowerCase();
-  if (
-    ['returned', 'completed'].includes(status)
-    || record.returnedAt
-    || record.returnedTimestamp
-  ) return false;
+  if (isBorrowingReturned(record)) return false;
 
   const dueDateTime = getBorrowingDueDateTime(record);
   if (!dueDateTime) return false;
@@ -54,13 +95,14 @@ export const isBorrowingDeadlineApproaching = (record, now = new Date()) => {
   return remainingMs > 0 && remainingMs <= 60 * 60 * 1000;
 };
 
-export const getDueBorrowings = (records, now = new Date()) => records
-  .filter((record) => {
-    const status = String(record.status || '').trim().toLowerCase();
-    if (['returned', 'completed'].includes(status) || record.returnedAt || record.returnedTimestamp) return false;
+export const isBorrowingDue = (record, now = new Date()) => {
+  if (isBorrowingReturned(record)) return false;
 
-    const dueDateTime = getBorrowingDueDateTime(record);
-    return Boolean(dueDateTime && dueDateTime.value <= now);
-  })
+  const dueDateTime = getBorrowingDueDateTime(record);
+  return Boolean(dueDateTime && dueDateTime.value <= now);
+};
+
+export const getDueBorrowings = (records, now = new Date()) => records
+  .filter((record) => isBorrowingDue(record, now))
   .map((record) => ({ ...record, dueDate: getBorrowingDueDateTime(record).date }))
   .sort((first, second) => getBorrowingDueDateTime(first).value - getBorrowingDueDateTime(second).value);
