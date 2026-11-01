@@ -1,7 +1,40 @@
 export const getRequirementNotificationUnread = (notification) => {
-  const reviewedAt = new Date(notification.reviewedAt || notification.updatedAt || 0).getTime();
+  const reviewedAt = new Date(
+    notification.notificationReviewAt
+    || notification.coachReviewedAt
+    || notification.reviewedAt
+    || notification.updatedAt
+    || 0
+  ).getTime();
   const readAt = new Date(notification.notificationReadAt || 0).getTime();
   return !readAt || readAt < reviewedAt;
+};
+
+const getLatestRequirementReview = (requirement) => {
+  const status = String(requirement.status || '').toLowerCase();
+  const coachStatus = String(requirement.coachStatus || '').toLowerCase();
+  const statusReview = ['approved', 'rejected'].includes(status)
+    ? {
+        status,
+        reviewedAt: requirement.reviewedAt || requirement.approvalDate || requirement.updatedAt || requirement.createdAt,
+        remarks: requirement.remarks
+      }
+    : null;
+  const coachReview = ['approved', 'rejected'].includes(coachStatus)
+    ? {
+        status: coachStatus,
+        reviewedAt: requirement.coachReviewedAt || requirement.updatedAt || requirement.createdAt,
+        remarks: requirement.coachRemarks
+      }
+    : null;
+
+  if (!statusReview) return coachReview;
+  if (!coachReview) return statusReview;
+
+  return new Date(coachReview.reviewedAt || 0).getTime()
+    >= new Date(statusReview.reviewedAt || 0).getTime()
+    ? coachReview
+    : statusReview;
 };
 
 export const buildStudentNotifications = (requirements, announcements, publishedRequirements = []) => {
@@ -17,18 +50,25 @@ export const buildStudentNotifications = (requirements, announcements, published
   );
 
   (Array.isArray(requirements) ? requirements : [])
-    .filter((requirement) => ['approved', 'rejected'].includes(String(requirement.status || '').toLowerCase()))
     .forEach((requirement) => {
       const id = requirement._id || requirement.id;
       if (!id) return;
+      const review = getLatestRequirementReview(requirement);
+      if (!review) return;
 
       notificationsById.set('requirement:' + id, {
         ...requirement,
+        status: review.status,
+        remarks: review.remarks || '',
+        notificationReviewAt: review.reviewedAt,
         notificationId: 'requirement:' + id,
         notificationSource: 'requirement',
         notificationCategory: 'document',
-        notificationDate: requirement.reviewedAt || requirement.updatedAt || requirement.createdAt,
-        notificationUnread: getRequirementNotificationUnread(requirement)
+        notificationDate: review.reviewedAt,
+        notificationUnread: getRequirementNotificationUnread({
+          ...requirement,
+          notificationReviewAt: review.reviewedAt
+        })
       });
     });
 

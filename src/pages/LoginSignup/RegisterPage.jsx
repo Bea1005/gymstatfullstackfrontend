@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   register as registerUser,
+  checkStudentIdAvailability,
   verifyRegistrationOtp,
   resendRegistrationOtp,
 } from "../../services/api";
@@ -34,7 +35,8 @@ const DUMMY_EMAIL_PREFIXES = new Set([
   "noreply", "no-reply", "asdf", "qwerty", "lorem", "ipsum"
 ]);
 const GMAIL_EMAIL_PATTERN = /^[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?@gmail\.com$/i;
-const PHILIPPINE_MOBILE_PATTERN = /^(?:\+639\d{9}|09\d{9})$/;
+const STUDENT_ID_PATTERN = /^23[BGST]\d{4}$/;
+const DUPLICATE_STUDENT_ID_MESSAGE = "This ID number has already been used. Please use a different ID number.";
 
 const validateFullName = (value) => {
   const trimmedValue = String(value || "").trim();
@@ -120,40 +122,18 @@ const validateEmailAddress = (value) => {
 };
 
 const validateRegistrationId = (value) => {
-  const trimmedValue = value.trim();
+  const trimmedValue = String(value || "").trim();
 
   if (!trimmedValue) {
     return "Please enter your ID number.";
-  }
-
-  if (/\s/.test(trimmedValue)) {
-    return "ID number cannot contain spaces.";
   }
 
   if (/^\d{4}-\d{4}$/.test(trimmedValue)) {
     return null;
   }
 
-  if (trimmedValue.length < 7) {
-    return "Student ID numbers must be at least 7 characters long.";
-  }
-
-  if (!/^[A-Za-z0-9!@#$%^&*(),.?":{}|<>_-]+$/.test(trimmedValue)) {
-    return "The ID number format is invalid. Use letters, numbers, or common special characters only.";
-  }
-
-  return null;
-};
-
-const validateContactNumber = (value) => {
-  const sanitizedValue = String(value || "").trim();
-
-  if (!sanitizedValue) {
-    return "Please enter your contact number.";
-  }
-
-  if (!PHILIPPINE_MOBILE_PATTERN.test(sanitizedValue)) {
-    return "Use a valid Philippine mobile number in the format 09XXXXXXXXX or +639XXXXXXXXX.";
+  if (!STUDENT_ID_PATTERN.test(trimmedValue)) {
+    return "ID Number format is invalid.";
   }
 
   return null;
@@ -168,7 +148,6 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     fullname: "",
     email: "",
-    contactNumber: "",
     password: "",
     department: "",
     sport: "",
@@ -182,12 +161,8 @@ export default function RegisterPage() {
   const [registrationSuccessPopup, setRegistrationSuccessPopup] = useState(false);
   const [registrationSuccessMessage, setRegistrationSuccessMessage] = useState("Registration Successful!");
   const [emailError, setEmailError] = useState("");
-  const [contactNumberError, setContactNumberError] = useState("");
-  const [verificationMethod, setVerificationMethod] = useState("email");
-  const [verificationSelectionStep, setVerificationSelectionStep] = useState(false);
   const [verificationStep, setVerificationStep] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
-  const [verificationContactNumber, setVerificationContactNumber] = useState("");
   const [verificationCodeSent, setVerificationCodeSent] = useState(true);
   const [verificationNotice, setVerificationNotice] = useState("");
   const [verificationOtp, setVerificationOtp] = useState("");
@@ -198,6 +173,7 @@ export default function RegisterPage() {
   const [mainCategory, setMainCategory] = useState("");
   const [sportSubcategory, setSportSubcategory] = useState("");
   const [preferredCategory, setPreferredCategory] = useState("");
+  const [checkingStudentId, setCheckingStudentId] = useState(false);
 
   const registrationRole = /^\d{4}-\d{4}$/.test(form.id.trim()) ? "coach" : "student";
   const selectedCategory = REGISTRATION_CATEGORIES.find(({ name }) => name === mainCategory);
@@ -241,18 +217,13 @@ export default function RegisterPage() {
     setForm((prev) => ({ ...prev, password: e.target.value }));
   };
 
-  const showVerificationStep = (email, resendDelay = 60, emailSent = true, notice = "", method = "email", contactNumber = "") => {
+  const showVerificationStep = (email, resendDelay = 60, emailSent = true, notice = "") => {
     setVerificationEmail(email);
-    setVerificationContactNumber(contactNumber || form.contactNumber || "");
     setVerificationCodeSent(emailSent);
-    setVerificationNotice(notice || (method === "sms"
-      ? "Registration saved. Enter the 6-digit OTP sent to your contact number."
-      : "Registration saved. Check your email for the verification code."));
+    setVerificationNotice(notice || "Registration saved. Check your email for the verification code.");
     setVerificationOtp("");
-    setVerificationSelectionStep(false);
     setVerificationStep(true);
     setResendSecondsLeft(resendDelay);
-    setVerificationMethod(method);
   };
 
   const handleRegister = async (e) => {
@@ -298,23 +269,39 @@ export default function RegisterPage() {
     }
     setEmailError("");
 
-    const contactValidationError = validateContactNumber(form.contactNumber);
-    if (contactValidationError) {
-      setContactNumberError(contactValidationError);
-      notify("warning", "Invalid Contact Number", contactValidationError);
-      return;
-    }
-    setContactNumberError("");
-
     if (form.password !== confirmPassword) {
       notify("warning", "Passwords Do Not Match", "Passwords do not match.");
       return;
     }
 
-    const idValidationError = validateRegistrationId(trimmedId);
+    const idValidationError = registrationRole === "student"
+      ? validateRegistrationId(trimmedId)
+      : null;
     if (idValidationError) {
-      notify("warning", "Invalid ID Number", idValidationError);
+      notify("warning", "Invalid ID Number", "ID Number format is invalid.");
       return;
+    }
+
+    if (registrationRole === "student") {
+      setCheckingStudentId(true);
+      try {
+        const availability = await checkStudentIdAvailability(trimmedId);
+        if (availability?.success !== true || typeof availability.available !== "boolean") {
+          throw new Error("The ID availability service returned an invalid response.");
+        }
+        if (!availability?.available) {
+          notify("warning", "ID Number Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
+          return;
+        }
+        notify("success", "ID Number Available", "This ID Number is available.");
+      } catch (error) {
+        console.error("Unable to verify student ID availability:", error);
+        const availabilityError = "Unable to verify this ID number right now. Please try again.";
+        notify("error", "ID Number Verification Failed", availabilityError);
+        return;
+      } finally {
+        setCheckingStudentId(false);
+      }
     }
 
     const passwordValidationError = validatePassword(form.password);
@@ -323,62 +310,53 @@ export default function RegisterPage() {
       return;
     }
 
-    setVerificationSelectionStep(true);
+    await submitRegistration();
   };
 
-  const submitRegistration = async (method) => {
+  const submitRegistration = async () => {
     if (registrationInFlightRef.current) return;
     registrationInFlightRef.current = true;
     setLoading(true);
-    setVerificationMethod(method);
     try {
       const email = form.email.trim().toLowerCase();
-      const contactNumber = form.contactNumber.trim();
       const data = registrationPendingRef.current
-        ? await resendRegistrationOtp(email, method)
+        ? await resendRegistrationOtp(email)
         : await registerUser({
           ...form,
           fullname: form.fullname.trim(),
           email,
           id: form.id.trim(),
-          contactNumber,
-          verificationMethod: method,
           role: registrationRole
         });
 
       if (data.success && data.verificationRequired) {
         registrationPendingRef.current = true;
         const retryAfter = Number.isInteger(data.retryAfterSeconds) ? data.retryAfterSeconds : 60;
-        const selectedMethod = data.verificationMethod || method;
-        const codeSent = data.codeSent !== false && (
-          selectedMethod === "sms" ? data.smsSent !== false : data.emailSent !== false
-        );
+        const codeSent = data.codeSent !== false && data.emailSent !== false;
         showVerificationStep(
           email,
           retryAfter,
           codeSent,
-          data.message || "",
-          selectedMethod,
-          contactNumber
+          data.message || ""
         );
         if (!codeSent) {
-          notify(
-            "warning",
-            selectedMethod === "sms" ? "OTP Not Sent" : "Email Not Sent",
-            data.message || "Your registration is awaiting verification. Request a new code when delivery is available."
-          );
+          notify("warning", "Email Not Sent", data.message || "Your registration is awaiting email verification. Request a new code when delivery is available.");
         }
       } else {
         notify("error", "Registration Failed", data.message || "Please review your information and try again.");
       }
     } catch (err) {
       console.error("Register error:", err);
+      if (err.status === 409 && /id/i.test(err.message || "")) {
+        notify("warning", "ID Number Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
+        return;
+      }
+      if (registrationRole === "student" && /student id must be 7 characters/i.test(err.message || "")) {
+        notify("warning", "Invalid ID Number", "ID Number format is invalid.");
+        return;
+      }
       if (err.responseData?.verificationRequired) {
-        notify(
-          "warning",
-          method === "sms" ? "SMS Verification Unavailable" : "Email Not Sent",
-          err.message || "The verification code could not be sent. Choose a method and try again."
-        );
+        notify("warning", "Email Not Sent", err.message || "The verification code could not be sent. Please try again.");
         return;
       }
       // Show the actual error message from the API
@@ -393,19 +371,13 @@ export default function RegisterPage() {
   const handleVerifyEmail = async (event) => {
     event.preventDefault();
     if (!/^\d{6}$/.test(verificationOtp)) {
-      notify("warning", "Invalid Code", verificationMethod === "sms"
-        ? "Enter the 6-digit OTP sent to your contact number."
-        : "Enter the 6-digit verification code from your email.");
+      notify("warning", "Invalid Code", "Enter the 6-digit verification code from your email.");
       return;
     }
 
     setVerificationLoading(true);
     try {
-      await verifyRegistrationOtp(
-        verificationEmail,
-        verificationOtp,
-        verificationMethod
-      );
+      await verifyRegistrationOtp(verificationEmail, verificationOtp);
       showRegistrationSuccessPopup("Registration Successful!");
       setTimeout(() => navigate("/login"), 1600);
     } catch (error) {
@@ -420,11 +392,8 @@ export default function RegisterPage() {
 
     setResendLoading(true);
     try {
-      const result = await resendRegistrationOtp(
-        verificationEmail,
-        verificationMethod
-      );
-      if (result.codeSent === false || (verificationMethod === "email" && result.emailSent === false)) {
+      const result = await resendRegistrationOtp(verificationEmail);
+      if (result.codeSent === false || result.emailSent === false) {
         setVerificationCodeSent(false);
         setVerificationNotice(result.message || "The verification code could not be sent. Please try again.");
         setResendSecondsLeft(Number(result.retryAfterSeconds || 0));
@@ -432,11 +401,9 @@ export default function RegisterPage() {
         return;
       }
       setVerificationCodeSent(true);
-      setVerificationNotice(verificationMethod === "sms"
-        ? "A new OTP was sent to your contact number."
-        : "A new verification code was sent. Check your email, including the spam folder.");
+      setVerificationNotice("A new verification code was sent. Check your email, including the spam folder.");
       setResendSecondsLeft(60);
-      showRegistrationSuccessPopup(verificationMethod === "sms" ? "OTP sent!" : "Verification code sent!");
+      showRegistrationSuccessPopup("Verification code sent!");
     } catch (error) {
       const retryAfterSeconds = Number(error.responseData?.retryAfterSeconds || 0);
       setVerificationCodeSent(false);
@@ -477,7 +444,7 @@ export default function RegisterPage() {
       <div className="login-right">
         <div className="login-right-inner">
           <h2 className="login-title">
-            {verificationStep ? (verificationMethod === "sms" ? "Verify Your Contact Number" : "Verify Your Email") : "Sign Up Your Account"}
+            {verificationStep ? "Verify Your Email" : "Sign Up Your Account"}
           </h2>
 
           {verificationStep ? (
@@ -488,18 +455,16 @@ export default function RegisterPage() {
                 aria-live="polite"
               >
                 <strong>{verificationCodeSent
-                  ? (verificationMethod === "sms" ? "Registration received — check your contact number." : "Registration received — check your email.")
-                  : (verificationMethod === "sms" ? "Registration saved — SMS OTP could not be sent." : "Registration saved — verification email not sent.")}</strong>
+                  ? "Registration received — check your email."
+                  : "Registration saved — verification email not sent."}</strong>
                 <span>{verificationNotice}</span>
-                <span><strong>{verificationMethod === "sms" ? (verificationContactNumber || "Contact number") : verificationEmail}</strong></span>
+                <span><strong>{verificationEmail}</strong></span>
                 {verificationCodeSent && (
-                  <span>{verificationMethod === "sms"
-                    ? "Enter the OTP below to complete registration."
-                    : "Enter the code below to complete registration. If you do not see it, check your spam folder."}</span>
+                  <span>Enter the code below to complete registration. If you do not see it, check your spam folder.</span>
                 )}
               </div>
               <div className="login-field">
-                <label htmlFor="registration-verification-code">{verificationMethod === "sms" ? "6-Digit OTP" : "6-Digit Verification Code"}</label>
+                <label htmlFor="registration-verification-code">6-Digit Verification Code</label>
                 <input
                   id="registration-verification-code"
                   type="text"
@@ -510,7 +475,7 @@ export default function RegisterPage() {
                   autoComplete="one-time-code"
                   pattern="[0-9]{6}"
                   maxLength={6}
-                  placeholder={verificationMethod === "sms" ? "Enter the OTP" : "Enter your code"}
+                  placeholder="Enter your code"
                   required
                 />
               </div>
@@ -519,7 +484,7 @@ export default function RegisterPage() {
                 className="login-submit-btn"
                 disabled={!verificationCodeSent || verificationLoading || verificationOtp.length !== 6}
               >
-                {verificationLoading ? "Verifying..." : (verificationMethod === "sms" ? "Verify OTP" : "Verify Email")}
+                {verificationLoading ? "Verifying..." : "Verify Email"}
               </button>
               <button
                 type="button"
@@ -533,56 +498,7 @@ export default function RegisterPage() {
                     ? `Resend Code (${resendSecondsLeft}s)`
                     : "Resend Code"}
               </button>
-              <p className="login-switch-text">
-                Need to update your registration?{" "}
-                <button
-                  type="button"
-                  className="login-link-btn"
-                  onClick={() => {
-                    setVerificationStep(false);
-                    setVerificationSelectionStep(true);
-                  }}
-                  disabled={verificationLoading || resendLoading}
-                >
-                  Choose another verification method
-                </button>
-              </p>
             </form>
-          ) : verificationSelectionStep ? (
-            <div className="login-form registration-verification-form">
-              <div className="registration-verification-notice registration-verification-notice-success" role="status" aria-live="polite">
-                <strong>Choose how to verify your identity</strong>
-                <span>Only the selected method will receive a verification code.</span>
-                <span>Email verification code will be sent to <strong>{form.email.trim()}</strong>.</span>
-                <span>SMS OTP will be sent to <strong>{form.contactNumber.trim()}</strong>.</span>
-              </div>
-              <button
-                type="button"
-                className="login-submit-btn"
-                onClick={() => submitRegistration("email")}
-                disabled={loading}
-              >
-                {loading && verificationMethod === "email" ? "Sending..." : "Email Verification"}
-              </button>
-              <button
-                type="button"
-                className="login-submit-btn"
-                onClick={() => submitRegistration("sms")}
-                disabled={loading}
-              >
-                {loading && verificationMethod === "sms" ? "Sending..." : "OTP Verification via Contact Number"}
-              </button>
-              {!registrationPendingRef.current && (
-                <button
-                  type="button"
-                  className="login-link-btn registration-resend-btn"
-                  onClick={() => setVerificationSelectionStep(false)}
-                  disabled={loading}
-                >
-                  Back to registration form
-                </button>
-              )}
-            </div>
           ) : (
           <form onSubmit={handleRegister} className="login-form">
             <div className="login-field">
@@ -617,28 +533,6 @@ export default function RegisterPage() {
                 required
               />
               {emailError && <p className="password-match-error">{emailError}</p>}
-            </div>
-
-            <div className="login-field">
-              <label>Contact Number</label>
-              <input
-                type="tel"
-                className={`login-input ${contactNumberError ? "input-error" : ""}`}
-                value={form.contactNumber}
-                onChange={(event) => {
-                  const nextValue = event.target.value.replace(/[^\d+]/g, "").slice(0, 13);
-                  setForm((previous) => ({ ...previous, contactNumber: nextValue }));
-                  if (contactNumberError) setContactNumberError("");
-                }}
-                onBlur={() => {
-                  setContactNumberError(validateContactNumber(form.contactNumber));
-                }}
-                placeholder="09XXXXXXXXX or +639XXXXXXXXX"
-                autoComplete="tel"
-                aria-invalid={Boolean(contactNumberError)}
-                required
-              />
-              {contactNumberError && <p className="password-match-error">{contactNumberError}</p>}
             </div>
 
             <div className="login-field">
@@ -830,8 +724,8 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <button type="submit" className="login-submit-btn" disabled={loading}>
-              {loading ? "Registering..." : "Sign Up"}
+            <button type="submit" className="login-submit-btn" disabled={loading || checkingStudentId}>
+              {checkingStudentId ? "Checking ID..." : loading ? "Registering..." : "Sign Up"}
             </button>
 
             <p className="login-switch-text">

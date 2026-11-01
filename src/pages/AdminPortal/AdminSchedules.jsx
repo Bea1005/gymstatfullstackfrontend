@@ -6,6 +6,12 @@ import TimeInput from '../../components/TimeInput';
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
 import { TIMES } from '../../constants/scheduleTimes';
+import {
+  getCalendarDateString,
+  isDateFullyOccupied,
+  isPastScheduleDate,
+  isPastScheduleTime,
+} from '../../utils/scheduleAvailability';
 import './AdminPortal.css';
 
 const parseScheduleTime = (value) => {
@@ -23,6 +29,30 @@ const parseScheduleTime = (value) => {
 const timeToMinutes = (value) => parseScheduleTime(value)?.minutes ?? 0;
 const isActiveSchedule = (schedule) => String(schedule?.status || 'active').toLowerCase() === 'active';
 const sameScheduleId = (firstId, secondId) => String(firstId) === String(secondId);
+const sortScheduleRequestsByCreatedAt = (requests) => [...requests].sort((first, second) => {
+  const firstCreatedAt = first?.createdAt ? new Date(first.createdAt).getTime() : NaN;
+  const secondCreatedAt = second?.createdAt ? new Date(second.createdAt).getTime() : NaN;
+  const firstHasTimestamp = Number.isFinite(firstCreatedAt);
+  const secondHasTimestamp = Number.isFinite(secondCreatedAt);
+  if (!firstHasTimestamp || !secondHasTimestamp) {
+    if (firstHasTimestamp === secondHasTimestamp) return 0;
+    return firstHasTimestamp ? -1 : 1;
+  }
+  return secondCreatedAt - firstCreatedAt;
+});
+
+const formatScheduleRequestCreatedAt = (createdAt) => {
+  const timestamp = new Date(createdAt);
+  if (!createdAt || Number.isNaN(timestamp.getTime())) return 'Submission time unavailable';
+
+  return timestamp.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+};
 
 const AdminSchedules = () => {
   const [reservations, setReservations] = useState([
@@ -52,9 +82,10 @@ const AdminSchedules = () => {
     return new Date(year, month, 1).getDay();
   };
 
-  const currentDate = new Date();
-  const [currentYear, setCurrentYear] = useState(currentDate.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(currentDate.getMonth());
+  const [now, setNow] = useState(() => new Date());
+  const todayString = getCalendarDateString(now);
+  const [currentYear, setCurrentYear] = useState(Number(todayString.slice(0, 4)));
+  const [currentMonth, setCurrentMonth] = useState(Number(todayString.slice(5, 7)) - 1);
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [downloadingCalendar, setDownloadingCalendar] = useState(false);
@@ -62,11 +93,13 @@ const AdminSchedules = () => {
   const saveScheduleInProgressRef = useRef(false);
   const calendarDownloadInProgressRef = useRef(false);
   const [confirmCancelId, setConfirmCancelId] = useState(null);
+  const [confirmScheduleDeleteId, setConfirmScheduleDeleteId] = useState(null);
+  const [deletingSchedule, setDeletingSchedule] = useState(false);
   const REQUESTS_KEY = 'gymstatScheduleRequests';
   const [scheduleRequests, setScheduleRequests] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
-      return Array.isArray(stored) ? stored : [];
+      return Array.isArray(stored) ? sortScheduleRequestsByCreatedAt(stored) : [];
     } catch (error) {
       console.warn('Unable to load locally saved schedule requests:', error);
       return [];
@@ -188,9 +221,7 @@ const AdminSchedules = () => {
         if (response.data.length === 0) {
           const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
           if (Array.isArray(stored) && stored.length > 0) {
-            const cachedRequests = stored.map(normalizeScheduleRequest).sort((a, b) =>
-              new Date(b.createdAt) - new Date(a.createdAt)
-            );
+            const cachedRequests = sortScheduleRequestsByCreatedAt(stored.map(normalizeScheduleRequest));
             setScheduleRequests(cachedRequests);
             setToast({
               message: 'The server returned no schedule requests. Showing locally saved requests; verify the server connection before making changes.',
@@ -200,10 +231,7 @@ const AdminSchedules = () => {
           }
         }
 
-        const normalized = response.data.map(normalizeScheduleRequest);
-        const sortedRequests = [...normalized].sort((a, b) =>
-          new Date(b.createdAt) - new Date(a.createdAt)
-        );
+        const sortedRequests = sortScheduleRequestsByCreatedAt(response.data.map(normalizeScheduleRequest));
         setScheduleRequests(sortedRequests);
         localStorage.setItem(REQUESTS_KEY, JSON.stringify(sortedRequests));
       } catch (err) {
@@ -219,9 +247,7 @@ const AdminSchedules = () => {
         try {
           const stored = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
           if (Array.isArray(stored)) {
-            const sortedStored = [...stored].sort((a, b) =>
-              new Date(b.createdAt) - new Date(a.createdAt)
-            );
+            const sortedStored = sortScheduleRequestsByCreatedAt(stored);
             setScheduleRequests(sortedStored);
           }
         } catch (fallbackErr) {
@@ -290,6 +316,11 @@ const AdminSchedules = () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('gymstatStorageUpdate', handleCustomStorage);
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -456,9 +487,75 @@ const AdminSchedules = () => {
     };
   };
 
+  const scheduleConflicts = (candidate, existingSchedule) => {
+    if (!isActiveSchedule(existingSchedule)) return false;
+
+    const existingStart = new Date(`${existingSchedule.startDate}T00:00:00`);
+    const existingEnd = new Date(`${existingSchedule.endDate}T00:00:00`);
+    const existingPrep = Number(existingSchedule.prepDays || 0) || 0;
+    const prepAdjustedStart = new Date(existingStart);
+    prepAdjustedStart.setDate(prepAdjustedStart.getDate() - existingPrep);
+
+    const newStartDate = new Date(`${candidate.startDate}T00:00:00`);
+    const newEndDate = new Date(`${candidate.endDate}T00:00:00`);
+    if (newEndDate < prepAdjustedStart || newStartDate > existingEnd) return false;
+
+    const newStartMs = newStartDate.getTime() + timeToMinutes(candidate.startTime) * 60000;
+    const newEndMs = newEndDate.getTime() + timeToMinutes(candidate.endTime) * 60000;
+    const existingStartMs = existingStart.getTime() + timeToMinutes(existingSchedule.startTime) * 60000;
+    const existingEndMs = existingEnd.getTime() + timeToMinutes(existingSchedule.endTime) * 60000;
+    if (newStartMs >= newEndMs || existingStartMs >= existingEndMs) return true;
+    return newStartMs < existingEndMs && newEndMs > existingStartMs;
+  };
+
+  const getAvailableEndTimes = (
+    startTime = formData.startTime,
+    startDate = formData.startDate,
+    endDate = formData.endDate,
+    excludeScheduleId = formData.id
+  ) => {
+    if (!startDate || !endDate || endDate < startDate) return [];
+    if (isDateFullyOccupied(endDate, reservations, excludeScheduleId)) return [];
+
+    return TIMES.filter((endTime) => {
+      if (startDate === endDate && timeToMinutes(endTime) <= timeToMinutes(startTime)) return false;
+      if (isPastScheduleTime(endDate, endTime, now)) return false;
+      return !reservations.some((schedule) => (
+        !sameScheduleId(schedule.id || schedule._id, excludeScheduleId)
+        && scheduleConflicts({ startDate, endDate, startTime, endTime }, schedule)
+      ));
+    });
+  };
+
+  const getAvailableStartTimes = (
+    startDate = formData.startDate,
+    endDate = formData.endDate,
+    excludeScheduleId = formData.id
+  ) => {
+    if (!startDate || !endDate || endDate < startDate) return [];
+    if (isDateFullyOccupied(startDate, reservations, excludeScheduleId)) return [];
+
+    return TIMES.filter((startTime) => (
+      !isPastScheduleTime(startDate, startTime, now)
+      && getAvailableEndTimes(startTime, startDate, endDate, excludeScheduleId).length > 0
+    ));
+  };
+
   const handleCreateNewSchedule = () => {
     setShowNotAvailableModal(false);
     setTimeErrors({ startTime: '', endTime: '' });
+    const startTimes = getAvailableStartTimes(selectedDate, selectedDate, null);
+    const startTime = startTimes[0] || '08:00 AM';
+    const endTimes = getAvailableEndTimes(startTime, selectedDate, selectedDate, null);
+    const endTime = endTimes.includes('12:00 PM') ? '12:00 PM' : endTimes[0] || '12:00 PM';
+    setFormData({
+      event: '',
+      startDate: selectedDate,
+      endDate: selectedDate,
+      startTime,
+      endTime,
+      prepDays: 0,
+    });
     setShowModal(true);
   };
 
@@ -508,7 +605,9 @@ const AdminSchedules = () => {
         const remainingRequests = requests.filter((request) => request.id !== id);
         setScheduleRequests(remainingRequests);
         localStorage.setItem(REQUESTS_KEY, JSON.stringify(remainingRequests));
-        setToast({ message: 'Approved schedule request deleted successfully.', type: 'success' });
+        await loadSchedulesFromServer();
+        notifyScheduleRefresh();
+        setToast({ message: 'Schedule request deleted successfully.', type: 'success' });
       } else if (type === 'approve') {
         req.status = 'approved';
         req.reviewedAt = new Date().toISOString();
@@ -525,6 +624,7 @@ const AdminSchedules = () => {
         });
 
         await loadSchedulesFromServer();
+        notifyScheduleRefresh();
       } else if (type === 'reject') {
         req.status = 'rejected';
         req.reviewedAt = new Date().toISOString();
@@ -576,6 +676,7 @@ const AdminSchedules = () => {
 
   const handleDateClick = (day) => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (isPastScheduleDate(dateStr, now) || isDateFullyOccupied(dateStr, reservations)) return;
     const eventsOnDate = getEventsForDate(dateStr);
     
     if (eventsOnDate.length > 0) {
@@ -585,12 +686,14 @@ const AdminSchedules = () => {
     } else {
       setSelectedDate(dateStr);
       setTimeErrors({ startTime: '', endTime: '' });
+      const startTime = getAvailableStartTimes(dateStr, dateStr, null)[0] || '08:00 AM';
+      const endTimes = getAvailableEndTimes(startTime, dateStr, dateStr, null);
       setFormData({
         event: '',
         startDate: dateStr,
         endDate: dateStr,
-        startTime: '08:00 AM',
-        endTime: '12:00 PM',
+        startTime,
+        endTime: endTimes.includes('12:00 PM') ? '12:00 PM' : endTimes[0] || '12:00 PM',
         prepDays: 0
       });
       setShowModal(true);
@@ -612,6 +715,15 @@ const AdminSchedules = () => {
       setToast({ message: 'Error: Please select an end date.', type: 'error' });
       return;
     }
+    if (isPastScheduleDate(formData.startDate, now) || isPastScheduleDate(formData.endDate, now)) {
+      setToast({ message: 'Past dates cannot be scheduled.', type: 'error' });
+      return;
+    }
+    if (isDateFullyOccupied(formData.startDate, reservations, formData.id)
+      || isDateFullyOccupied(formData.endDate, reservations, formData.id)) {
+      setToast({ message: 'A selected date is fully booked. Please choose another date.', type: 'error' });
+      return;
+    }
 
     const parsedStartTime = parseScheduleTime(formData.startTime);
     const parsedEndTime = parseScheduleTime(formData.endTime);
@@ -625,6 +737,12 @@ const AdminSchedules = () => {
         message: nextTimeErrors.startTime || nextTimeErrors.endTime,
         type: 'error',
       });
+      return;
+    }
+    if (isPastScheduleTime(formData.startDate, formData.startTime, now)
+      || isPastScheduleTime(formData.endDate, formData.endTime, now)) {
+      const message = 'Past times cannot be scheduled.';
+      setToast({ message, type: 'error' });
       return;
     }
 
@@ -786,6 +904,36 @@ const AdminSchedules = () => {
     setConfirmCancelId(null);
   };
 
+  const confirmDeleteSchedule = async () => {
+    if (!confirmScheduleDeleteId || deletingSchedule) return;
+    setDeletingSchedule(true);
+    try {
+      const response = await api.deleteSchedule(confirmScheduleDeleteId);
+      if (!response?.success) {
+        throw new Error(response?.message || 'Unable to delete schedule.');
+      }
+
+      const updatedReservations = reservations.filter(
+        (schedule) => !sameScheduleId(schedule.id, confirmScheduleDeleteId)
+      );
+      saveApprovedSchedules(updatedReservations);
+      await loadSchedulesFromServer();
+      notifyScheduleRefresh();
+      setToast({ message: 'Schedule deleted successfully.', type: 'success' });
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      setToast({
+        message: error?.status === 401 || error?.code === 'SESSION_EXPIRED'
+          ? 'Your admin session could not be verified. Please sign in again.'
+          : error?.message || 'Unable to delete schedule. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setDeletingSchedule(false);
+      setConfirmScheduleDeleteId(null);
+    }
+  };
+
   const handleEdit = (reservation) => {
     setTimeErrors({ startTime: '', endTime: '' });
     setFormData({ ...reservation });
@@ -838,138 +986,194 @@ const AdminSchedules = () => {
     calendarDownloadInProgressRef.current = true;
     setDownloadingCalendar(true);
     try {
-      const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
-      const pageWidth = 1100;
-      const pageHeight = 700;
-      const marginX = 56;
-      const marginY = 48;
-      const headerHeight = 72;
-      const weekdayHeight = 36;
-      const rows = Math.max(5, Math.ceil((firstDay + daysInMonth) / 7));
-      const cellWidth = (pageWidth - marginX * 2) / 7;
-      const cellHeight = (pageHeight - marginY * 2 - headerHeight - weekdayHeight) / rows;
-
-      const escapeXml = (value) => String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-
-      const wrapText = (text, maxChars) => {
-        const words = String(text).split(' ');
-        const lines = [];
-        let line = '';
-
-        words.forEach((word) => {
-          const candidate = line ? `${line} ${word}` : word;
-          if (candidate.length <= maxChars) {
-            line = candidate;
-          } else {
-            if (line) lines.push(line);
-            line = word;
-          }
-        });
-
-        if (line) lines.push(line);
-        return lines.slice(0, 3);
-      };
-
-      const cells = [];
-      for (let i = 0; i < firstDay; i += 1) cells.push(null);
-      for (let day = 1; day <= daysInMonth; day += 1) {
-        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        cells.push({ day, dateStr, events: sortEventsByTime(getEventsForDate(dateStr)) });
-      }
-      while (cells.length % 7 !== 0) cells.push(null);
-
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 28;
+      const gridTop = 76;
+      const gridBottom = pageHeight - 30;
+      const availableGridHeight = gridBottom - gridTop;
+      const columnWidth = (pageWidth - margin * 2) / 7;
+      const contentWidth = columnWidth - 12;
+      const dayHeaderHeight = 18;
+      const lineHeight = 10;
+      const minimumWeekHeight = 48;
       const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}">`;
-      svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
-      svg += `<rect x="40" y="28" width="${pageWidth - 80}" height="${pageHeight - 56}" rx="18" fill="#ffffff" stroke="#e0e0e0" stroke-width="1.2"/>`;
-      svg += `<text x="${marginX}" y="${marginY + 24}" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#7b1e1e">${escapeXml(monthLabel)}</text>`;
-      svg += `<text x="${marginX}" y="${marginY + 50}" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#777">Short Bond Paper • Landscape</text>`;
+      const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
+      const generatedAt = new Date().toLocaleString();
+      const eventTitleFontSize = 8.2;
+      const eventTimeFontSize = 7.4;
 
-      weekdayLabels.forEach((dayName, index) => {
-        const x = marginX + index * cellWidth;
-        svg += `<rect x="${x}" y="${marginY + headerHeight}" width="${cellWidth}" height="${weekdayHeight}" fill="#f8f9fa" stroke="#e6e6e6" stroke-width="1"/>`;
-        svg += `<text x="${x + cellWidth / 2}" y="${marginY + headerHeight + 24}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#7b1e1e">${escapeXml(dayName)}</text>`;
-      });
-
-      cells.forEach((cell, index) => {
-        const row = Math.floor(index / 7);
-        const col = index % 7;
-        const x = marginX + col * cellWidth;
-        const y = marginY + headerHeight + weekdayHeight + row * cellHeight;
-        const hasDay = Boolean(cell);
-
-        svg += `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="8" fill="${hasDay ? '#ffffff' : '#fafafa'}" stroke="#e6e6e6" stroke-width="1"/>`;
-
-        if (hasDay) {
-          svg += `<text x="${x + 8}" y="${y + 18}" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#333">${cell.day}</text>`;
-
-          const visibleEvents = cell.events.slice(0, 3);
-          visibleEvents.forEach((event, eventIndex) => {
-            const eventY = y + 34 + eventIndex * 20;
-            const shortTitle = wrapText(event.event, 18);
-            const timeLine = wrapText(formatTimeDisplay(event.startTime, event.endTime), 18);
-            const lines = [...shortTitle, ...timeLine];
-            const color = '#2e7d32';
-
-            svg += `<rect x="${x + 7}" y="${eventY - 12}" width="${cellWidth - 14}" height="${12 + lines.length * 11}" rx="4" fill="#eef7ee"/>`;
-            lines.forEach((line, lineIndex) => {
-              const lineY = eventY + lineIndex * 10;
-              svg += `<text x="${x + 12}" y="${lineY}" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="${color}">${escapeXml(line)}</text>`;
-            });
-          });
-        }
-      });
-
-      svg += `</svg>`;
-
-        const { jsPDF } = await import('jspdf');
-        await import('svg2pdf.js');
-
-        const parsedSvg = new DOMParser().parseFromString(svg, 'image/svg+xml');
-        if (parsedSvg.querySelector('parsererror')) {
-          throw new Error('The calendar could not be prepared for PDF export.');
-        }
-        const svgElement = document.importNode(parsedSvg.documentElement, true);
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: [11, 8.5] });
-        const pdfPageWidth = doc.internal.pageSize.getWidth();
-        const pdfPageHeight = doc.internal.pageSize.getHeight();
-
+      const drawPageHeader = () => {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(13);
         doc.setTextColor(123, 30, 30);
-        doc.text('GYMSTAT CALENDAR', pdfPageWidth / 2, 0.36, { align: 'center' });
+        doc.text('GYMSTAT CALENDAR', pageWidth / 2, 22, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text(monthLabel, margin, 45);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
+        doc.setFontSize(7.5);
         doc.setTextColor(90, 90, 90);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, pdfPageWidth / 2, 0.57, { align: 'center' });
-        doc.setDrawColor(255, 220, 0);
-        doc.setLineWidth(0.015);
-        doc.line(pdfPageWidth / 2 - 0.45, 0.7, pdfPageWidth / 2 + 0.45, 0.7);
+        doc.text(`Generated: ${generatedAt}`, pageWidth - margin, 45, { align: 'right' });
 
-        const pdfMargin = 0.5;
-        const headerAreaHeight = 0.88;
-        const bottomMargin = 0.5;
-        const availableWidth = pdfPageWidth - pdfMargin * 2;
-        const availableHeight = pdfPageHeight - headerAreaHeight - bottomMargin;
-        const scale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight);
-        const calendarWidth = pageWidth * scale;
-        const calendarHeight = pageHeight * scale;
-        const calendarX = (pdfPageWidth - calendarWidth) / 2;
-        const calendarY = headerAreaHeight + (availableHeight - calendarHeight) / 2;
+        weekdayLabels.forEach((dayName, index) => {
+          const x = margin + index * columnWidth;
+          doc.setFillColor(248, 249, 250);
+          doc.setDrawColor(220, 224, 228);
+          doc.rect(x, 54, columnWidth, 22, 'FD');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.setTextColor(123, 30, 30);
+          doc.text(dayName, x + columnWidth / 2, 68, { align: 'center' });
+        });
+      };
 
-        await doc.svg(svgElement, {
-          x: calendarX,
-          y: calendarY,
-          width: calendarWidth,
-          height: calendarHeight,
+      const buildCell = (day) => {
+        if (!day) return null;
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const lines = [];
+
+        sortEventsByTime(getEventsForDate(dateStr)).forEach((event) => {
+          const sourceColor = normalizeScheduleSource(event) === 'public'
+            ? [155, 30, 75]
+            : [46, 125, 50];
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(eventTitleFontSize);
+          const titleLines = doc.splitTextToSize(String(event.event || ''), contentWidth - 4);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(eventTimeFontSize);
+          const timeLines = doc.splitTextToSize(
+            formatTimeDisplay(event.startTime, event.endTime),
+            contentWidth - 4
+          );
+          titleLines.forEach((text) => lines.push({ text, type: 'title', color: sourceColor }));
+          timeLines.forEach((text) => lines.push({ text, type: 'time', color: sourceColor }));
         });
 
-        doc.save(`gymnasium-schedule-${currentYear}-${String(currentMonth + 1).padStart(2, '0')}.pdf`);
+        return { day, lines };
+      };
+
+      const calendarCells = [];
+      for (let index = 0; index < firstDay; index += 1) calendarCells.push(null);
+      for (let day = 1; day <= daysInMonth; day += 1) calendarCells.push(buildCell(day));
+      while (calendarCells.length % 7 !== 0) calendarCells.push(null);
+
+      const weeks = [];
+      for (let index = 0; index < calendarCells.length; index += 7) {
+        weeks.push(calendarCells.slice(index, index + 7));
+      }
+
+      const getWeekHeight = (week) => Math.max(
+        minimumWeekHeight,
+        ...week.map((cell) => cell
+          ? dayHeaderHeight + 8 + cell.lines.length * lineHeight
+          : minimumWeekHeight)
+      );
+
+      const drawWeek = (week, y, height, lineOffset = 0, linesPerCell = Infinity) => {
+        week.forEach((cell, index) => {
+          const x = margin + index * columnWidth;
+          doc.setFillColor(cell ? 255 : 250, cell ? 255 : 250, cell ? 255 : 250);
+          doc.setDrawColor(220, 224, 228);
+          doc.rect(x, y, columnWidth, height, 'FD');
+          if (!cell) return;
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.setTextColor(45, 45, 45);
+          doc.text(String(cell.day), x + 5, y + 12);
+
+          const visibleLines = cell.lines.slice(lineOffset, lineOffset + linesPerCell);
+          visibleLines.forEach((line, lineIndex) => {
+            const lineY = y + dayHeaderHeight + 4 + lineIndex * lineHeight;
+            const background = line.color[0] === 155 ? [255, 242, 246] : [238, 247, 238];
+            doc.setFillColor(...background);
+            doc.roundedRect(x + 4, lineY - 7, columnWidth - 8, lineHeight, 2, 2, 'F');
+            doc.setFont('helvetica', line.type === 'title' ? 'bold' : 'normal');
+            doc.setFontSize(line.type === 'title' ? eventTitleFontSize : eventTimeFontSize);
+            doc.setTextColor(...line.color);
+            doc.text(line.text, x + 6, lineY);
+          });
+        });
+      };
+
+      const addCalendarPage = () => {
+        doc.addPage();
+        drawPageHeader();
+        return gridTop;
+      };
+
+      drawPageHeader();
+      let y = gridTop;
+      let pageHasCalendarRows = false;
+      const maxLinesPerOverflowPage = Math.max(
+        1,
+        Math.floor((availableGridHeight - dayHeaderHeight - 8) / lineHeight)
+      );
+
+      weeks.forEach((week, weekIndex) => {
+        const weekHeight = getWeekHeight(week);
+        if (weekHeight <= availableGridHeight) {
+          if (y + weekHeight > gridBottom) {
+            y = addCalendarPage();
+            pageHasCalendarRows = false;
+          }
+          drawWeek(week, y, weekHeight);
+          y += weekHeight;
+          pageHasCalendarRows = true;
+          return;
+        }
+
+        if (pageHasCalendarRows || y > gridTop) {
+          y = addCalendarPage();
+          pageHasCalendarRows = false;
+        }
+
+        const overflowPages = Math.max(
+          1,
+          ...week.map((cell) => cell ? Math.ceil(cell.lines.length / maxLinesPerOverflowPage) : 1)
+        );
+        for (let pageIndex = 0; pageIndex < overflowPages; pageIndex += 1) {
+          if (pageIndex > 0) y = addCalendarPage();
+          const lineOffset = pageIndex * maxLinesPerOverflowPage;
+          const visibleLineCount = Math.max(
+            0,
+            ...week.map((cell) => cell
+              ? Math.min(maxLinesPerOverflowPage, cell.lines.length - lineOffset)
+              : 0)
+          );
+          const rowHeight = Math.min(
+            availableGridHeight,
+            Math.max(minimumWeekHeight, dayHeaderHeight + 8 + visibleLineCount * lineHeight)
+          );
+          drawWeek(week, y, rowHeight, lineOffset, maxLinesPerOverflowPage);
+        }
+
+        pageHasCalendarRows = false;
+        if (weekIndex < weeks.length - 1) y = addCalendarPage();
+      });
+
+      const pageCount = doc.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        doc.setPage(page);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Internal schedules', margin, pageHeight - 12);
+        doc.setFillColor(46, 125, 50);
+        doc.circle(margin + 62, pageHeight - 14, 2, 'F');
+        doc.setTextColor(100, 100, 100);
+        doc.text('External schedules', margin + 70, pageHeight - 12);
+        doc.setFillColor(155, 30, 75);
+        doc.circle(margin + 132, pageHeight - 14, 2, 'F');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`${page} / ${pageCount}`, pageWidth - margin, pageHeight - 12, {
+          align: 'right'
+        });
+      }
+
+      doc.save(`gymnasium-schedule-${currentYear}-${String(currentMonth + 1).padStart(2, '0')}.pdf`);
     } catch (error) {
       console.error('Failed to export calendar PDF:', error);
       setToast({ message: 'Unable to download the calendar PDF. Please try again.', type: 'error' });
@@ -1008,6 +1212,9 @@ const AdminSchedules = () => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const eventsOnDate = sortEventsByTime(getEventsForDate(dateStr));
     const hasEvent = eventsOnDate.length > 0;
+    const isPastDate = isPastScheduleDate(dateStr, now);
+    const isFullyBooked = isDateFullyOccupied(dateStr, reservations);
+    const isDisabled = isPastDate || isFullyBooked;
     const hasPublic = eventsOnDate.some((event) => normalizeScheduleSource(event) === 'public');
     const hasInternal = eventsOnDate.some((event) => normalizeScheduleSource(event) === 'internal');
     const sourceClass = hasEvent
@@ -1021,17 +1228,18 @@ const AdminSchedules = () => {
     calendarDays.push(
       <div 
         key={day} 
-        className={`calendar-day ${hasEvent ? 'has-event' : ''} ${sourceClass}`.trim()}
-        onClick={() => handleDateClick(day)}
+        className={`calendar-day ${hasEvent ? 'has-event' : ''} ${sourceClass} ${isFullyBooked ? 'calendar-day--full' : ''} ${isPastDate ? 'calendar-day--past' : ''}`.trim()}
+        onClick={isDisabled ? undefined : () => handleDateClick(day)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
+          if (!isDisabled && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault();
             handleDateClick(day);
           }
         }}
         role="button"
-        tabIndex="0"
-        aria-label={`${dateStr}${hasEvent ? `, ${eventsOnDate.length} scheduled event${eventsOnDate.length === 1 ? '' : 's'}` : ', available for scheduling'}`}
+        tabIndex={isDisabled ? -1 : 0}
+        aria-disabled={isDisabled}
+        aria-label={`${dateStr}${isPastDate ? ', past date' : isFullyBooked ? ', fully booked' : hasEvent ? `, ${eventsOnDate.length} scheduled event${eventsOnDate.length === 1 ? '' : 's'}` : ', available for scheduling'}`}
       >
         <span className="day-number">{day}</span>
         {hasEvent && (
@@ -1057,7 +1265,17 @@ const AdminSchedules = () => {
     );
   }
 
-  const sortedReservations = [...reservations].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  const sortedReservations = [...reservations].sort((a, b) => {
+    const dateOrder = String(b.startDate || '').localeCompare(String(a.startDate || ''));
+    if (dateOrder !== 0) return dateOrder;
+
+    const aStartTime = parseScheduleTime(a.startTime)?.minutes ?? Number.POSITIVE_INFINITY;
+    const bStartTime = parseScheduleTime(b.startTime)?.minutes ?? Number.POSITIVE_INFINITY;
+    return aStartTime - bStartTime;
+  });
+  const pendingRequestCount = scheduleRequests.filter(
+    (request) => String(request?.status || '').toLowerCase() === 'pending'
+  ).length;
 
   return (
     <div className="admin-page-content">
@@ -1067,7 +1285,11 @@ const AdminSchedules = () => {
           <p className="sub-title-desc">Schedule and manage all gymnasium activities and reservations in one place.</p>
         </div>
         <div className="header-actions">
-          <button className="request-badge-btn" onClick={openRequestPanel} aria-label="View schedule requests">
+          <button
+            className={`request-badge-btn${pendingRequestCount > 0 ? ' request-badge-btn--pending' : ''}`}
+            onClick={openRequestPanel}
+            aria-label="View schedule requests"
+          >
             <span className="envelope-icon"> 
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -1080,8 +1302,8 @@ const AdminSchedules = () => {
               </svg>
             </span>
             Schedule Requests
-            {scheduleRequests.filter(r => r.status === 'pending').length > 0 && (
-              <span className="request-count">{scheduleRequests.filter(r => r.status === 'pending').length}</span>
+            {pendingRequestCount > 0 && (
+              <span className="request-count">{pendingRequestCount}</span>
             )}
           </button>
         </div>
@@ -1090,7 +1312,7 @@ const AdminSchedules = () => {
       <hr className="divider" />
 
       {/* Calendar Section */}
-      <div className="calendar-container">
+      <div className={`calendar-container${pendingRequestCount > 0 ? ' calendar-container--pending' : ''}`}>
         <div className="calendar-header">
           <button type="button" onClick={handlePrevMonth} className="calendar-nav-btn" aria-label="View previous month">◀ Previous</button>
           <div className="calendar-title-group">
@@ -1146,10 +1368,25 @@ const AdminSchedules = () => {
                       <td>{res.startTime} - {res.endTime}</td>
                       <td className="schedule-actions-cell">
                         <div className="schedule-action-buttons">
-                          <button type="button" className="btn-edit-action" onClick={() => handleEdit(res)}>Edit schedule</button>
-                          {isActiveSchedule(res) && (
-                            <button type="button" className="btn-cancel-action" onClick={() => handleDelete(res.id)}>Cancel schedule</button>
-                          )}
+                          <button
+                            type="button"
+                            className="schedule-action-icon"
+                            onClick={() => handleEdit(res)}
+                            title="Edit schedule"
+                            aria-label={`Edit ${res.event || 'schedule'}`}
+                          >
+                            <Icon name="pencil" size={17} strokeWidth={1.8} />
+                          </button>
+                          <button
+                            type="button"
+                            className="schedule-action-icon"
+                            onClick={() => setConfirmScheduleDeleteId(res.id)}
+                            disabled={deletingSchedule}
+                            title="Delete schedule"
+                            aria-label={`Delete ${res.event || 'schedule'}`}
+                          >
+                            <Icon name="trash" size={17} strokeWidth={1.8} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1205,7 +1442,23 @@ const AdminSchedules = () => {
                     id="schedule-start-date"
                     type="date" 
                     value={formData.startDate} 
-                    onChange={(e) => setFormData({...formData, startDate: e.target.value})} 
+                    min={todayString}
+                    onChange={(e) => {
+                      const nextDate = e.target.value;
+                      if (isPastScheduleDate(nextDate, now)) {
+                        setToast({ message: 'Past dates cannot be scheduled.', type: 'error' });
+                        return;
+                      }
+                      if (isDateFullyOccupied(nextDate, reservations, formData.id)) {
+                        setToast({ message: 'This date is fully booked. Please choose another date.', type: 'error' });
+                        return;
+                      }
+                      setFormData((current) => ({
+                        ...current,
+                        startDate: nextDate,
+                        endDate: current.endDate < nextDate ? nextDate : current.endDate,
+                      }));
+                    }}
                     required
                   />
                 </div>
@@ -1227,6 +1480,10 @@ const AdminSchedules = () => {
                         startTime: parseScheduleTime(formData.startTime) ? '' : 'Enter a valid time, such as 1:30 PM.',
                       }))}
                       options={TIMES}
+                      disabledOptions={TIMES.filter((time) => !getAvailableStartTimes(
+                        formData.startDate,
+                        formData.endDate
+                      ).includes(time))}
                       placeholder="e.g., 1:30 PM"
                       invalid={Boolean(timeErrors.startTime)}
                       describedBy={timeErrors.startTime ? 'schedule-start-time-error' : undefined}
@@ -1244,7 +1501,23 @@ const AdminSchedules = () => {
                     id="schedule-end-date"
                     type="date" 
                     value={formData.endDate} 
-                    onChange={(e) => setFormData({...formData, endDate: e.target.value})} 
+                    min={formData.startDate > todayString ? formData.startDate : todayString}
+                    onChange={(e) => {
+                      const nextDate = e.target.value;
+                      if (isPastScheduleDate(nextDate, now)) {
+                        setToast({ message: 'Past dates cannot be scheduled.', type: 'error' });
+                        return;
+                      }
+                      if (isDateFullyOccupied(nextDate, reservations, formData.id)) {
+                        setToast({ message: 'This date is fully booked. Please choose another date.', type: 'error' });
+                        return;
+                      }
+                      if (nextDate < formData.startDate) {
+                        setToast({ message: 'End date cannot be before the start date.', type: 'error' });
+                        return;
+                      }
+                      setFormData((current) => ({ ...current, endDate: nextDate }));
+                    }}
                     required
                   />
                 </div>
@@ -1266,6 +1539,11 @@ const AdminSchedules = () => {
                         endTime: parseScheduleTime(formData.endTime) ? '' : 'Enter a valid time, such as 2:45 PM.',
                       }))}
                       options={TIMES}
+                      disabledOptions={TIMES.filter((time) => !getAvailableEndTimes(
+                        formData.startTime,
+                        formData.startDate,
+                        formData.endDate
+                      ).includes(time))}
                       placeholder="e.g., 2:45 PM"
                       invalid={Boolean(timeErrors.endTime)}
                       describedBy={timeErrors.endTime ? 'schedule-end-time-error' : undefined}
@@ -1377,8 +1655,8 @@ const AdminSchedules = () => {
                           <span className="request-title-bold">
                             {req.requesterName} <span className="title-separator">–</span> {req.eventName}
                           </span>
-                          <span className="request-date-duration">
-                            {req.startDate} - {req.endDate} • Start: {req.startTime}
+                          <span className="request-created-at">
+                            Created at: {formatScheduleRequestCreatedAt(req.createdAt)}
                           </span>
                         </div>
                         <div className="request-status-actions">
@@ -1416,11 +1694,17 @@ const AdminSchedules = () => {
                         <div className="request-card-details-expanded">
                           <hr className="inner-divider" />
                           <div className="details-grid">
+                            <p><strong>Event Name:</strong> {req.eventName}</p>
+                            <p><strong>Start Date:</strong> {req.startDate}</p>
+                            <p><strong>End Date:</strong> {req.endDate}</p>
+                            <p><strong>Requester:</strong> {req.requesterName}</p>
                             <p><strong>Email:</strong> {req.requesterEmail || 'Not provided.'}</p>
                             <p><strong>Contact Number:</strong> {req.requesterPhone || 'Not provided.'}</p>
                             <p><strong>Start Time:</strong> {req.startTime}</p>
                             <p><strong>End Time:</strong> {req.endTime}</p>
                             <p><strong>Prep Days:</strong> {req.prepDays || 0} Day(s)</p>
+                            {req.organization && <p><strong>Organization:</strong> {req.organization}</p>}
+                            {req.purpose && <p className="full-row"><strong>Purpose:</strong> {req.purpose}</p>}
                             {req.description && <p className="full-row"><strong>Description:</strong> {req.description}</p>}
                           </div>
                           
@@ -1536,6 +1820,20 @@ const AdminSchedules = () => {
           message="Are you sure you want to cancel this approved schedule entry?"
           onConfirm={confirmDelete}
           onCancel={cancelDelete}
+        />
+      )}
+
+      {confirmScheduleDeleteId && (
+        <ConfirmModal
+          isOpen={!!confirmScheduleDeleteId}
+          title="Delete Schedule"
+          message="Are you sure you want to permanently delete this schedule?"
+          onConfirm={confirmDeleteSchedule}
+          onCancel={() => {
+            if (!deletingSchedule) setConfirmScheduleDeleteId(null);
+          }}
+          confirmText={deletingSchedule ? 'Deleting...' : 'Delete'}
+          confirmDisabled={deletingSchedule}
         />
       )}
 

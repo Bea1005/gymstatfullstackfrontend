@@ -10,6 +10,10 @@ const today = () => {
   const d = new Date();
   return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
 };
+const getEquipmentRegistrationTime = (equipment) => {
+  const timestamp = equipment?.createdAt ? new Date(equipment.createdAt).getTime() : NaN;
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
 
 // Sports equipment type options for dropdown
 // Sports equipment options - can now be freely typed in Equipment Name field
@@ -93,6 +97,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
       onLoan,
       damagedUnits: condition === 'Damaged' ? total : 0,
       date: equipment.createdAt ? new Date(equipment.createdAt).toLocaleDateString() : today(),
+      createdAt: equipment.createdAt,
       referenceId: normalizedReferenceId,
       referenceIds,
       condition,
@@ -115,34 +120,46 @@ export default function AdminEquipments({ onUpdateInventory }) {
       if (serverItems.length > 0) {
         const groupedEquipment = new Map();
 
-        serverItems.forEach((equipment) => {
-          const normalizedName = equipment.name || 'Unknown Equipment';
-          const item = mapEquipmentToUiShape(equipment);
-          const groupingKey = JSON.stringify([normalizedName, item.type]);
-          const existing = groupedEquipment.get(groupingKey);
+        [...serverItems]
+          .sort((a, b) => {
+            const aCreatedAt = getEquipmentRegistrationTime(a);
+            const bCreatedAt = getEquipmentRegistrationTime(b);
+            if (aCreatedAt === null) return bCreatedAt === null ? 0 : 1;
+            if (bCreatedAt === null) return -1;
+            return bCreatedAt - aCreatedAt;
+          })
+          .forEach((equipment) => {
+            const normalizedName = equipment.name || 'Unknown Equipment';
+            const item = mapEquipmentToUiShape(equipment);
+            const groupingKey = JSON.stringify([normalizedName, item.type]);
+            const existing = groupedEquipment.get(groupingKey);
 
-          if (!existing) {
-            groupedEquipment.set(groupingKey, {
-              ...item,
-              referenceIds: [...item.referenceIds],
-              items: [...item.items],
-            });
-            return;
-          }
+            if (!existing) {
+              groupedEquipment.set(groupingKey, {
+                ...item,
+                referenceIds: [...item.referenceIds],
+                items: [...item.items],
+              });
+              return;
+            }
 
-          const nextReferenceIds = [...new Set([...existing.referenceIds, ...item.referenceIds])];
-          const nextItems = [...existing.items, ...item.items].filter((entry) => entry.referenceId);
+            const nextReferenceIds = [...new Set([...existing.referenceIds, ...item.referenceIds])];
+            const nextItems = [...existing.items, ...item.items].filter((entry) => entry.referenceId);
 
-          existing.total = Number(existing.total || 0) + Number(item.total || 0);
-          existing.available = Number(existing.available || 0) + Number(item.available || 0);
-          existing.onLoan = Number(existing.onLoan || 0) + Number(item.onLoan || 0);
-          existing.damagedUnits = Number(existing.damagedUnits || 0) + Number(item.damagedUnits || 0);
-          existing.referenceId = nextReferenceIds[0] || '';
-          existing.referenceIds = nextReferenceIds;
-          existing.items = nextItems;
-          existing.condition = item.condition || existing.condition || 'Good';
-          existing.date = existing.date || item.date;
-        });
+            existing.total = Number(existing.total || 0) + Number(item.total || 0);
+            existing.available = Number(existing.available || 0) + Number(item.available || 0);
+            existing.onLoan = Number(existing.onLoan || 0) + Number(item.onLoan || 0);
+            existing.damagedUnits = Number(existing.damagedUnits || 0) + Number(item.damagedUnits || 0);
+            existing.referenceId = nextReferenceIds[0] || '';
+            existing.referenceIds = nextReferenceIds;
+            existing.items = nextItems;
+            existing.condition = item.condition || existing.condition || 'Good';
+            existing.date = existing.date || item.date;
+            if (getEquipmentRegistrationTime(item) > getEquipmentRegistrationTime(existing)) {
+              existing.createdAt = item.createdAt;
+              existing.date = item.date;
+            }
+          });
 
         setItems(Array.from(groupedEquipment.values()).map((group) => ({
           ...group,
@@ -231,7 +248,13 @@ export default function AdminEquipments({ onUpdateInventory }) {
     sum + Number(equipment.damagedUnits || 0)
   ), 0);
 
-  const filtered = filterEquipmentGroups(items, search);
+  const filtered = [...filterEquipmentGroups(items, search)].sort((a, b) => {
+    const aCreatedAt = getEquipmentRegistrationTime(a);
+    const bCreatedAt = getEquipmentRegistrationTime(b);
+    if (aCreatedAt === null) return bCreatedAt === null ? 0 : 1;
+    if (bCreatedAt === null) return -1;
+    return bCreatedAt - aCreatedAt;
+  });
 
   const toggleExpand = (id) => {
     setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
@@ -318,6 +341,10 @@ export default function AdminEquipments({ onUpdateInventory }) {
         existing.referenceIds = [...existing.referenceIds, ...newlyRegisteredItems.map((item) => item.referenceId)];
         existing.items = [...existing.items, ...newlyRegisteredItems];
         existing.referenceId = existing.referenceIds[0] || '';
+        if (getEquipmentRegistrationTime(savedItem) > getEquipmentRegistrationTime(existing)) {
+          existing.createdAt = savedItem.createdAt;
+          existing.date = savedItem.date;
+        }
         existing.total += newlyRegisteredItems.reduce((sum, item) => sum + Number(item.totalStock || 0), 0);
         existing.available += newlyRegisteredItems.reduce((sum, item) => sum + Number(item.available || 0), 0);
         existing.onLoan += newlyRegisteredItems.reduce((sum, item) => sum + Number(item.onLoan || 0), 0);

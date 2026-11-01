@@ -237,6 +237,8 @@ const isAdminRequirementMutation = (endpoint, method) => {
 
   const pathname = String(endpoint || '').split('?')[0];
   return (pathname === '/users' && normalizedMethod === 'POST')
+    || (/^\/admin\/equipment(?:\/[a-f\d]{24}(?:\/(?:borrow|return))?)?$/i.test(pathname)
+      && ['POST', 'PUT', 'DELETE'].includes(normalizedMethod))
     || pathname === '/schedules'
     || /^\/schedules\/[a-f\d]{24}$/i.test(pathname)
     || /^\/schedule-requests\/[a-f\d]{24}$/i.test(pathname)
@@ -248,7 +250,6 @@ const isAdminRequirementMutation = (endpoint, method) => {
 // List of public endpoints that don't require authentication
 const PUBLIC_ENDPOINTS = [
   '/login',
-  '/register',
   '/refresh',
   '/logout',
   '/forgot-password',
@@ -256,6 +257,7 @@ const PUBLIC_ENDPOINTS = [
 ];
 
 const PUBLIC_GET_ENDPOINTS = [
+  '/register/check-id',
   '/schedules',
   '/schedule-requests/public-calendar',
 ];
@@ -453,24 +455,29 @@ export const register = async (userData) => {
       sport: userData.sport || "",
       sports: userData.sports || [userData.sport].filter(Boolean),
       id: userData.id,
-      contactNumber: userData.contactNumber || "",
-      verificationMethod: userData.verificationMethod || "email",
       role: userData.role || "student"
     }),
   });
 };
 
-export const verifyRegistrationOtp = async (email, otp, verificationMethod = "email") => {
-  return apiRequest('/register/verify', {
-    method: 'POST',
-    body: JSON.stringify({ email, otp, verificationMethod }),
+export const checkStudentIdAvailability = async (id) => {
+  const params = new URLSearchParams({ id });
+  return apiRequest(`/register/check-id?${params}`, {
+    method: 'GET',
   });
 };
 
-export const resendRegistrationOtp = async (email, verificationMethod = "email") => {
+export const verifyRegistrationOtp = async (email, otp) => {
+  return apiRequest('/register/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+};
+
+export const resendRegistrationOtp = async (email) => {
   return apiRequest('/register/resend', {
     method: 'POST',
-    body: JSON.stringify({ email, verificationMethod }),
+    body: JSON.stringify({ email }),
   });
 };
 

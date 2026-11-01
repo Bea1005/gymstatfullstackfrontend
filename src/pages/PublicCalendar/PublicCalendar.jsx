@@ -5,6 +5,12 @@ import TimeInput from '../../components/TimeInput';
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
 import { TIMES } from '../../constants/scheduleTimes';
+import {
+  getCalendarDateString,
+  isDateFullyOccupied,
+  isPastScheduleDate,
+  isPastScheduleTime,
+} from '../../utils/scheduleAvailability';
 import './PublicCalendar.css';
 import gymBackground from '../../assets/gym-background.jpg';
 
@@ -101,11 +107,15 @@ const fetchPublicCalendarMonth = (startDate, endDate) => {
 
 export default function PublicCalendar() {
   const navigate = useNavigate();
-  const today    = new Date();
+  const [now, setNow] = useState(() => new Date());
+  const todayString = getCalendarDateString(now);
+  const initialYear = Number(todayString.slice(0, 4));
+  const initialMonth = Number(todayString.slice(5, 7)) - 1;
 
-  const [year,  setYear]  = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
-  const [initialCalendarCache] = useState(() => readPublicCalendarCache(today.getFullYear(), today.getMonth()));
+  const [year,  setYear]  = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
+  const [calendarRefreshCounter, setCalendarRefreshCounter] = useState(0);
+  const [initialCalendarCache] = useState(() => readPublicCalendarCache(initialYear, initialMonth));
   const [approvedSchedules, setApprovedSchedules] = useState(initialCalendarCache?.approvedSchedules || []);
   const [scheduleRequests, setScheduleRequests] = useState(initialCalendarCache?.scheduleRequests || []);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
@@ -186,7 +196,23 @@ export default function PublicCalendar() {
     return () => {
       isCurrentMonth = false;
     };
-  }, [year, month]);
+  }, [year, month, calendarRefreshCounter]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    const refreshCalendar = () => setCalendarRefreshCounter((current) => current + 1);
+    const handleStorage = (event) => {
+      if (event.key === 'gymstat-schedule-updated') refreshCalendar();
+    };
+
+    window.addEventListener('gymstat-schedule-updated', refreshCalendar);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('gymstat-schedule-updated', refreshCalendar);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   /* ── calendar helpers ── */
   const totalDays  = new Date(year, month + 1, 0).getDate();
@@ -324,6 +350,13 @@ export default function PublicCalendar() {
   /* ── open modal ── */
   const openModal = (d) => {
     const ds = toStr(d);
+    if (isPastScheduleDate(ds, now) || isDateFullyOccupied(ds, approvedSchedules)) return;
+    const validStartTimes = getAvailableStartTimes(ds, ds, '12:00 PM');
+    const startTime = validStartTimes[0] || '08:00 AM';
+    const validEndTimes = getAvailableEndTimes(startTime, ds, ds);
+    const endTime = validEndTimes.includes('12:00 PM')
+      ? '12:00 PM'
+      : validEndTimes[0] || '12:00 PM';
     setClickedDate(ds);
     setForm({
       eventName: '',
@@ -333,9 +366,9 @@ export default function PublicCalendar() {
       purpose: '',
       details: '',
       startDate: ds,
-      startTime: '08:00 AM',
+      startTime,
       endDate: ds,
-      endTime: '12:00 PM',
+      endTime,
       prepDays: '',
     });
     setRequestFile({ name: '', type: '', data: '' });
@@ -360,9 +393,11 @@ export default function PublicCalendar() {
 
   const getAvailableEndTimes = (startTime = form.startTime, startDate = form.startDate, endDate = form.endDate) => {
     if (!startDate || !endDate) return TIMES;
+    if (isDateFullyOccupied(endDate, approvedSchedules)) return [];
 
     return TIMES.filter((endTime) => {
       if (startDate === endDate && toMinutes(endTime) <= toMinutes(startTime)) return false;
+      if (isPastScheduleTime(endDate, endTime, now)) return false;
 
       return !approvedSchedules.some((schedule) => getScheduleConflict({
         startDate,
@@ -375,8 +410,10 @@ export default function PublicCalendar() {
 
   const getAvailableStartTimes = (startDate = form.startDate, endDate = form.endDate, endTime = form.endTime) => {
     if (!startDate || !endDate) return TIMES;
+    if (isDateFullyOccupied(startDate, approvedSchedules)) return [];
 
     return TIMES.filter((startTime, index) => {
+      if (isPastScheduleTime(startDate, startTime, now)) return false;
       const nextTime = TIMES[index + 1] || '11:59 PM';
       const slotEndTime = nextTime === '11:59 PM' ? '11:59 PM' : nextTime;
       const slotIsOccupied = approvedSchedules.some((schedule) => getScheduleConflict({
@@ -497,10 +534,24 @@ export default function PublicCalendar() {
     if (!form.endDate) e.endDate = 'Required.';
     if (form.startDate && form.endDate && form.endDate < form.startDate)
       e.endDate = 'End date cannot be before start date.';
+    if (isPastScheduleDate(form.startDate, now)) e.startDate = 'Past dates cannot be scheduled.';
+    if (isPastScheduleDate(form.endDate, now)) e.endDate = 'Past dates cannot be scheduled.';
+    if (form.startDate && isDateFullyOccupied(form.startDate, approvedSchedules)) {
+      e.startDate = 'This date is fully booked. Please choose another date.';
+    }
+    if (form.endDate && isDateFullyOccupied(form.endDate, approvedSchedules)) {
+      e.endDate = 'This date is fully booked. Please choose another date.';
+    }
     const startMinutes = parseCalendarTime(form.startTime);
     const endMinutes = parseCalendarTime(form.endTime);
     if (startMinutes === null) e.startTime = 'Enter a valid time, such as 1:30 PM.';
     if (endMinutes === null) e.endTime = 'Enter a valid time, such as 2:45 PM.';
+    if (form.startDate && isPastScheduleTime(form.startDate, form.startTime, now)) {
+      e.startTime = 'Past times cannot be scheduled.';
+    }
+    if (form.endDate && isPastScheduleTime(form.endDate, form.endTime, now)) {
+      e.endTime = 'Past times cannot be scheduled.';
+    }
     if (startMinutes !== null && endMinutes !== null && form.startDate && form.endDate) {
       const startDateTime = new Date(`${form.startDate}T00:00:00`).getTime() + startMinutes * 60000;
       const endDateTime = new Date(`${form.endDate}T00:00:00`).getTime() + endMinutes * 60000;
@@ -618,14 +669,27 @@ export default function PublicCalendar() {
   for (let d = 1; d <= totalDays; d++) {
     const ds     = toStr(d);
     const evs    = eventsOn(ds);
-    const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+    const isToday = ds === todayString;
     const hasEvents = evs.length > 0;
+    const isPastDate = isPastScheduleDate(ds, now);
+    const isFullyBooked = isDateFullyOccupied(ds, approvedSchedules);
+    const isDisabled = isPastDate || isFullyBooked;
 
     cells.push(
       <div
         key={d}
-        className={`pc-day${hasEvents ? ' pc-day--booked' : ''}${isToday ? ' pc-day--today' : ''}`}
-        onClick={() => openModal(d)}
+        className={`pc-day${hasEvents ? ' pc-day--booked' : ''}${isToday ? ' pc-day--today' : ''}${isFullyBooked ? ' pc-day--full' : ''}${isPastDate ? ' pc-day--past' : ''}`}
+        onClick={isDisabled ? undefined : () => openModal(d)}
+        role="button"
+        tabIndex={isDisabled ? -1 : 0}
+        aria-disabled={isDisabled}
+        aria-label={`${ds}${isPastDate ? ', past date' : isFullyBooked ? ', fully booked' : hasEvents ? ', partially booked' : ', available'}`}
+        onKeyDown={(event) => {
+          if (!isDisabled && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            openModal(d);
+          }
+        }}
       >
         <span className="pc-day__num">{d}</span>
         {hasEvents && (
@@ -832,9 +896,22 @@ export default function PublicCalendar() {
                       type="date"
                       className={`pcm-input${errors.startDate ? ' pcm-input--err' : ''}`}
                       value={form.startDate}
+                      min={todayString}
                       onChange={e => {
                         const nextDate = e.target.value;
-                        setForm((current) => ({ ...current, startDate: nextDate }));
+                        if (isPastScheduleDate(nextDate, now)) {
+                          setErrors((current) => ({ ...current, startDate: 'Past dates cannot be scheduled.' }));
+                          return;
+                        }
+                        if (isDateFullyOccupied(nextDate, approvedSchedules)) {
+                          setErrors((current) => ({ ...current, startDate: 'This date is fully booked. Please choose another date.' }));
+                          return;
+                        }
+                        setForm((current) => ({
+                          ...current,
+                          startDate: nextDate,
+                          endDate: current.endDate < nextDate ? nextDate : current.endDate,
+                        }));
                         setErrors((current) => ({ ...current, startDate: '', endDate: '' }));
                       }}
                     />
@@ -874,8 +951,17 @@ export default function PublicCalendar() {
                       type="date"
                       className={`pcm-input${errors.endDate ? ' pcm-input--err' : ''}`}
                       value={form.endDate}
+                      min={form.startDate > todayString ? form.startDate : todayString}
                       onChange={e => {
                         const nextDate = e.target.value;
+                        if (isPastScheduleDate(nextDate, now)) {
+                          setErrors((current) => ({ ...current, endDate: 'Past dates cannot be scheduled.' }));
+                          return;
+                        }
+                        if (isDateFullyOccupied(nextDate, approvedSchedules)) {
+                          setErrors((current) => ({ ...current, endDate: 'This date is fully booked. Please choose another date.' }));
+                          return;
+                        }
                         setForm((current) => ({ ...current, endDate: nextDate }));
                         setErrors((current) => ({ ...current, startDate: '', endDate: '' }));
                       }}

@@ -669,3 +669,13 @@
   .pcm-actions     { flex-direction: column-reverse; }
   .pcm-btn         { width: 100%; text-align: center; }
 }
+
+.pc-day--full,
+.pc-day--full:hover,
+.pc-day--full.pc-day--today {
+  background: #e5e7eb;
+  cursor: not-allowed;
+}
+.pc-day--past {
+  cursor: not-allowed;
+}

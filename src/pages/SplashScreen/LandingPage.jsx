@@ -247,7 +247,10 @@ const LandingPage = () => {
           <div className="landing-footer-section">
             <h5>Connect</h5>
             <div className="landing-footer-social">
-              <p>Follow us for updates and announcements</p>
+              <p>pajanustan.gerald@marsu.edu.ph</p>
+              <p>09277169490</p>
+              <p>dwaynejandusay@gmail.com</p>
+              <p>09454992489</p>
             </div>
           </div>
 

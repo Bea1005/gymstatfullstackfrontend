@@ -45,9 +45,52 @@ const CONDITION_OPTIONS = [
 
 const EDITABLE_CONDITION_OPTIONS = CONDITION_OPTIONS;
 
-const todayStr = () => {
-  const d = new Date();
-  return d.toISOString().split('T')[0];
+const getManilaDateParts = (date) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+};
+
+const getManilaDateString = (date) => {
+  const { year, month, day } = getManilaDateParts(date);
+  return `${year}-${month}-${day}`;
+};
+
+const isPastManilaTime = (time, date) => {
+  const parsedTime = parseBorrowingTime(time);
+  if (!parsedTime) return false;
+
+  const { hour, minute, second } = getManilaDateParts(date);
+  const currentSeconds = Number(hour) * 3600
+    + Number(minute) * 60
+    + Number(second)
+    + date.getMilliseconds() / 1000;
+  return parsedTime.minutes * 60 < currentSeconds;
+};
+
+const getPastBorrowingDateTimeError = (date, time, now) => {
+  const today = getManilaDateString(now);
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return 'Select a valid borrowing date.';
+  }
+  if (date < today) {
+    return 'Past borrowing dates are not allowed.';
+  }
+  if (!parseBorrowingTime(time)) {
+    return 'Enter a valid borrowing time, such as 9:00 AM.';
+  }
+  if (date === today && isPastManilaTime(time, now)) {
+    return 'Past borrowing times are not allowed.';
+  }
+  return '';
 };
 
 const getCurrentTimestamp = () => {
@@ -63,16 +106,18 @@ const getRecordEquipmentItems = (record) => (
     : [{ equipment: record.equipment || '', referenceIds: record.referenceIds || [], quantity: record.qty || record.quantity || 1 }]
 );
 
-const EMPTY_FORM = { 
+const createEmptyForm = (now = new Date()) => ({
   fullname: '', 
   contactNo: '',
   facebookAccount: '',
+  borrowerType: 'Student',
+  borrowerTypeOther: '',
   selectedEquipment: [],
   selectedReferenceIdsByEquipment: {},
-  date: todayStr(), 
+  date: getManilaDateString(now),
   startTime: '09:00 AM',
   endTime: ''
-};
+});
 
 export default function AdminBorrowing({ onBorrowingChange }) {
   const location = useLocation();
@@ -86,8 +131,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   const [records, setRecords] = useState([]);
   const [equipmentWithRefs, setEquipmentWithRefs] = useState({});
   const [allEquipment, setAllEquipment] = useState([]);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => createEmptyForm());
   const [search, setSearch] = useState('');
+  const [borrowerTypeFilter, setBorrowerTypeFilter] = useState('All Borrower Types');
   const [error, setError] = useState('');
   const [timeErrors, setTimeErrors] = useState({ startTime: '', endTime: '' });
   const [toast, setToast] = useState({ message: '', type: 'success' });
@@ -185,7 +231,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   }, [location.hash]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 30000);
+    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 1000);
     return () => window.clearInterval(intervalId);
   }, []);
 
@@ -366,14 +412,20 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     });
   };
 
-  const filtered = sortedRecords().filter((record) =>
-    String(record.fullname || '').toLowerCase().includes(search.toLowerCase()) ||
-    String(record.equipment || '').toLowerCase().includes(search.toLowerCase()) ||
-    getRecordEquipmentItems(record).some((item) =>
-      item.equipment.toLowerCase().includes(search.toLowerCase())
-      || item.referenceIds.some((referenceId) => referenceId.toLowerCase().includes(search.toLowerCase()))
-    )
-  );
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = sortedRecords().filter((record) => {
+    const matchesBorrowerType = borrowerTypeFilter === 'All Borrower Types'
+      || record.borrowerType === borrowerTypeFilter;
+    if (!matchesBorrowerType) return false;
+    if (!normalizedSearch) return true;
+
+    return String(record.fullname || '').toLowerCase().includes(normalizedSearch)
+      || String(record.equipment || '').toLowerCase().includes(normalizedSearch)
+      || getRecordEquipmentItems(record).some((item) =>
+        item.equipment.toLowerCase().includes(normalizedSearch)
+        || item.referenceIds.some((referenceId) => referenceId.toLowerCase().includes(normalizedSearch))
+      );
+  });
 
   const handleEquipmentChange = (equipmentName) => {
     setForm((current) => ({
@@ -407,6 +459,13 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       setError('Full name is required.'); 
       setToast({ message: 'Full name is required.', type: 'error' }); 
       return; 
+    }
+
+    if (form.borrowerType === 'Others (Office/Agency)' && !form.borrowerTypeOther.trim()) {
+      const borrowerTypeError = 'Enter the office or agency name for this borrower type.';
+      setError(borrowerTypeError);
+      setToast({ message: borrowerTypeError, type: 'error' });
+      return;
     }
     
     if (form.selectedEquipment.length === 0) {
@@ -455,6 +514,17 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       setToast({ message: timeError, type: 'error' });
       return;
     }
+
+    const submissionTime = new Date();
+    const dateTimeError = getPastBorrowingDateTimeError(form.date, form.startTime, submissionTime)
+      || (form.endTime.trim()
+        ? getPastBorrowingDateTimeError(form.date, form.endTime, submissionTime)
+        : '');
+    if (dateTimeError) {
+      setError(dateTimeError);
+      setToast({ message: dateTimeError, type: 'error' });
+      return;
+    }
     
     borrowingCreateInProgressRef.current = true;
     try {
@@ -482,6 +552,10 @@ export default function AdminBorrowing({ onBorrowingChange }) {
         fullname: form.fullname.trim(),
         contactNo: form.contactNo.trim(),
         facebookAccount: form.facebookAccount.trim(),
+        borrowerType: form.borrowerType,
+        borrowerTypeOther: form.borrowerType === 'Others (Office/Agency)'
+          ? form.borrowerTypeOther.trim()
+          : '',
         equipment: savedEquipmentItems.map((item) => item.equipment).join(', '),
         equipmentItems: savedEquipmentItems,
         quantity: calculatedQuantity,
@@ -505,7 +579,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       }
       await fetchData();
 
-      setForm(EMPTY_FORM);
+      setForm(createEmptyForm());
       setError('');
       setTimeErrors({ startTime: '', endTime: '' });
     } catch (error) {
@@ -646,7 +720,11 @@ export default function AdminBorrowing({ onBorrowingChange }) {
   ).filter(item => getAvailableQuantity(item.name) > 0 || form.selectedEquipment.includes(item.name));
 
   // Keep the field in ISO format so the native date picker can display it correctly.
-  const formattedDate = form.date || todayStr();
+  const manilaToday = getManilaDateString(currentTime);
+  const formattedDate = form.date || manilaToday;
+  const disabledBorrowingTimes = form.date === manilaToday
+    ? TIME_OPTIONS.filter((time) => isPastManilaTime(time, currentTime))
+    : [];
 
   return (
     <div className="bw-root">
@@ -847,8 +925,9 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                   type="date"
                   className="bw-form-input"
                   value={formattedDate}
+                  min={manilaToday}
                   onChange={e => {
-                    setForm(f => ({ ...f, date: e.target.value || todayStr() }));
+                    setForm(f => ({ ...f, date: e.target.value || manilaToday }));
                   }}
                   style={{ 
                     paddingRight: '20px',
@@ -877,6 +956,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                     startTime: parseBorrowingTime(form.startTime) ? '' : 'Enter a valid time, such as 9:00 AM.',
                   }))}
                   options={TIME_OPTIONS}
+                  disabledOptions={disabledBorrowingTimes}
                   placeholder="e.g., 9:00 AM"
                   invalid={Boolean(timeErrors.startTime)}
                   describedBy={timeErrors.startTime ? 'borrowing-start-time-error' : undefined}
@@ -906,12 +986,51 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                       : '',
                   }))}
                   options={TIME_OPTIONS}
+                  disabledOptions={disabledBorrowingTimes}
                   placeholder="Select End Time..."
                   invalid={Boolean(timeErrors.endTime)}
                   describedBy={timeErrors.endTime ? 'borrowing-end-time-error' : undefined}
                 />
               </div>
               {timeErrors.endTime && <small id="borrowing-end-time-error" className="schedule-time-error" role="alert">{timeErrors.endTime}</small>}
+            </div>
+            <div className="bw-form-group">
+              <label className="bw-form-label" htmlFor="borrowing-type">BORROWER TYPE</label>
+              <select
+                id="borrowing-type"
+                className="bw-form-input bw-form-select"
+                value={form.borrowerType}
+                onChange={(event) => {
+                  const borrowerType = event.target.value;
+                  setForm((current) => ({
+                    ...current,
+                    borrowerType,
+                    borrowerTypeOther: borrowerType === 'Others (Office/Agency)'
+                      ? current.borrowerTypeOther
+                      : '',
+                  }));
+                  setError('');
+                }}
+              >
+                <option value="Student">Student</option>
+                <option value="Faculty">Faculty</option>
+                <option value="Coach/Trainer">Coach/Trainer</option>
+                <option value="Others (Office/Agency)">Others (Office/Agency)</option>
+              </select>
+              {form.borrowerType === 'Others (Office/Agency)' && (
+                <input
+                  type="text"
+                  className="bw-form-input"
+                  aria-label="Office or agency name"
+                  placeholder="Enter office or agency name"
+                  value={form.borrowerTypeOther}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    borrowerTypeOther: event.target.value,
+                  }))}
+                  required
+                />
+              )}
             </div>
           </div>
 
@@ -927,17 +1046,31 @@ export default function AdminBorrowing({ onBorrowingChange }) {
       <div className="bw-records-card" id="records" ref={recordsCardRef}>
         <div className="bw-records-header">
           <h3 className="bw-records-title">Transaction Records</h3>
-          <div className="bw-search-box">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              className="bw-search-input"
-              placeholder="Search..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+          <div className="bw-records-controls">
+            <select
+              className="bw-borrower-type-filter bw-form-select"
+              aria-label="Filter by borrower type"
+              value={borrowerTypeFilter}
+              onChange={(event) => setBorrowerTypeFilter(event.target.value)}
+            >
+              <option>All Borrower Types</option>
+              <option>Student</option>
+              <option>Faculty</option>
+              <option>Coach/Trainer</option>
+              <option>Others (Office/Agency)</option>
+            </select>
+            <div className="bw-search-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                className="bw-search-input"
+                placeholder="Search..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
@@ -947,6 +1080,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               <tr>
                 <th>FULL NAME</th>
                 <th>EQUIPMENT</th>
+                <th>BORROWER TYPE</th>
                 <th>CONDITION</th>
                 <th>QUANTITY</th>
                 <th>BORROWED TIMESTAMP</th>
@@ -1031,6 +1165,13 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                         )}
                       </td>
                       <td>
+                        {record.borrowerType
+                          ? record.borrowerType === 'Others (Office/Agency)' && record.borrowerTypeOther
+                            ? `${record.borrowerType}: ${record.borrowerTypeOther}`
+                            : record.borrowerType
+                          : '—'}
+                      </td>
+                      <td>
                         {record.condition ? (
                           <span className={conditionBadge.class}>{conditionBadge.label}</span>
                         ) : (
@@ -1112,6 +1253,8 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                             ))}
                           </div>
                         </td>
+
+                        <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}></td>
                         
                         {/* Editable Condition dropdowns aligned under CONDITION column */}
                         <td style={{ padding: 0, backgroundColor: '#f9f9f9' }}>
@@ -1178,7 +1321,7 @@ export default function AdminBorrowing({ onBorrowingChange }) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="bw-empty">No records found.</td>
+                  <td colSpan="7" className="bw-empty">No records found.</td>
                 </tr>
               )}
             </tbody>
@@ -1213,6 +1356,15 @@ export default function AdminBorrowing({ onBorrowingChange }) {
                   <div style={{ marginBottom: '16px' }}>
                     <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Name</label>
                     <p style={{ margin: 0, color: '#666' }}>{selectedBorrowerDetails.fullname}</p>
+                  </div>
+
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>Borrower Type</label>
+                    <p style={{ margin: 0, color: '#666' }}>
+                      {selectedBorrowerDetails.borrowerType === 'Others (Office/Agency)'
+                        ? `${selectedBorrowerDetails.borrowerType}: ${selectedBorrowerDetails.borrowerTypeOther || '—'}`
+                        : selectedBorrowerDetails.borrowerType || '—'}
+                    </p>
                   </div>
                   
                   <div style={{ marginBottom: '16px' }}>

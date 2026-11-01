@@ -8,8 +8,24 @@ import {
 } from './studentNotificationUtils.js';
 
 const requirements = [
-  { _id: 'approved-1', status: 'approved', reviewedAt: '2026-01-03T00:00:00Z', notificationReadAt: null, fileName: 'COR.pdf' },
-  { _id: 'returned-1', status: 'rejected', reviewedAt: '2026-01-02T00:00:00Z', notificationReadAt: null, fileName: 'PSA.pdf' },
+  {
+    _id: 'approved-1',
+    status: 'pending',
+    coachStatus: 'approved',
+    coachReviewedAt: '2026-01-03T00:00:00Z',
+    notificationReadAt: null,
+    fileName: 'COR.pdf'
+  },
+  {
+    _id: 'returned-1',
+    status: 'rejected',
+    coachStatus: 'rejected',
+    reviewedAt: '2026-01-02T00:00:00Z',
+    coachReviewedAt: '2026-01-02T00:00:00Z',
+    coachRemarks: 'Please upload a clearer copy.',
+    notificationReadAt: null,
+    fileName: 'PSA.pdf'
+  },
   { _id: 'pending-1', status: 'pending', fileName: 'Insurance.pdf' }
 ];
 
@@ -35,6 +51,18 @@ test('includes only reviewed submissions and published requirement updates once'
   assert.equal(notifications.some((notification) => notification.notificationId === 'announcement:draft-1'), false);
   assert.equal(notifications.some((notification) => notification.notificationId === 'announcement:event-1'), false);
   assert.equal(notifications.some((notification) => notification.notificationId === 'announcement:document-1'), false);
+});
+
+test('includes coach approvals and rejection reasons in the student document notifications', () => {
+  const notifications = buildStudentNotifications(requirements, [], []);
+  const approval = notifications.find((notification) => notification.notificationId === 'requirement:approved-1');
+  const rejection = notifications.find((notification) => notification.notificationId === 'requirement:returned-1');
+
+  assert.equal(approval.status, 'approved');
+  assert.equal(approval.notificationDate, requirements[0].coachReviewedAt);
+  assert.equal(approval.notificationUnread, true);
+  assert.equal(rejection.status, 'rejected');
+  assert.equal(rejection.remarks, 'Please upload a clearer copy.');
 });
 
 test('deduplicates repeated records from each notification source', () => {
@@ -81,6 +109,21 @@ test('preserves read state and evaluates requirement notification timestamps', (
   const notifications = buildStudentNotifications(requirements, announcements, publishedRequirements);
   assert.equal(notifications.find((item) => item.notificationId === 'announcement:updated-1').notificationUnread, false);
   assert.equal(notifications.find((item) => item.notificationId === 'announcement:published-1').notificationUnread, true);
+});
+
+test('uses the most recent review status and preserves its read state', () => {
+  const notifications = buildStudentNotifications([{
+    _id: 'latest-review',
+    status: 'rejected',
+    reviewedAt: '2026-01-03T00:00:00Z',
+    remarks: 'Admin review reason',
+    coachStatus: 'approved',
+    coachReviewedAt: '2026-01-04T00:00:00Z',
+    notificationReadAt: '2026-01-04T00:00:00Z'
+  }], [], []);
+
+  assert.equal(notifications[0].status, 'approved');
+  assert.equal(notifications[0].notificationUnread, false);
 });
 
 test('calculates unread count only from document and requirement notifications', () => {
