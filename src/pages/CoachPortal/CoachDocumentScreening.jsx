@@ -103,6 +103,7 @@ const CoachDocumentScreening = () => {
         <RequirementScreeningInterface
           hideFilters={['program', 'sport']}
           initialSport={primarySport}
+          simpleDocumentPreview
         />
       </div>
     </div>

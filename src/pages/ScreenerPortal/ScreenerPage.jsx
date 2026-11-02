@@ -4,12 +4,12 @@ import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import RejectModal from '../../components/RejectModal';
 import { useNotifications } from '../../components/useNotifications';
-import DocumentViewer from '../../components/DocumentViewer';
 import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import completedStamp from '../../assets/GymstatStamps/Completed.png';
 import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
-import { SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
+import { YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
+import { REGISTRATION_SPORT_EVENT_OPTIONS } from '../../constants/registrationCategories';
 import {
   areRequirementsComplete,
   buildRequirementColumns,
@@ -54,6 +54,15 @@ const getRequirementFiles = (entry) => (
       : []
 );
 
+const getMatchingPublishedRequirement = (entry, publishedColumns) => {
+  const requirementType = String(entry?.requirementType || '').trim().toLocaleLowerCase();
+  return publishedColumns.find((column) => (
+    column.type === 'other'
+      ? String(entry?.customRequirementId || '') === column.requirementId
+      : column.id === `type:${requirementType === 'medical' ? 'med' : requirementType}`
+  ));
+};
+
 const getRequirementPreviewKey = (entry, fileIndex = 0) => `${entry.submissionId}:${fileIndex}`;
 
 const loadAttachmentBlobUrl = async (fileUrl) => {
@@ -78,9 +87,9 @@ const ScreenerPage = () => {
   const [previewUrls, setPreviewUrls] = useState({});
   const [previewLoading, setPreviewLoading] = useState({});
   const [previewErrors, setPreviewErrors] = useState({});
-  const [, setRequirementStatus] = useState({});
   const [students, setStudents] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
+  const [reviewingSubmissionIds, setReviewingSubmissionIds] = useState(() => new Set());
   const [assignedDepartment, setAssignedDepartment] = useState('');
   const [departmentUnassigned, setDepartmentUnassigned] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -90,6 +99,8 @@ const ScreenerPage = () => {
   // Modal states
   const [approveTarget, setApproveTarget] = useState(null); // req id being approved
   const [rejectTarget, setRejectTarget] = useState(null); // req id being rejected
+  const [showOverallApprovalConfirmation, setShowOverallApprovalConfirmation] = useState(false);
+  const [overallApprovalInProgress, setOverallApprovalInProgress] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerSrc, setViewerSrc] = useState(null);
   const [viewerName, setViewerName] = useState(null);
@@ -104,6 +115,7 @@ const ScreenerPage = () => {
   const activeRequestSportRef = useRef('');
   const pendingSportReloadRef = useRef(false);
   const requirementsPollingStoppedRef = useRef(false);
+  const reviewingSubmissionIdsRef = useRef(new Set());
 
   useEffect(() => {
     const role = String(user?.role || '').trim().toLowerCase();
@@ -124,7 +136,7 @@ const ScreenerPage = () => {
   const selectedSportRef = useRef(selectedSport);
   selectedSportRef.current = selectedSport;
   const sportFilterOptions = Array.from(new Map(
-    [...SPORT_OPTIONS, ...students.flatMap((student) => Array.isArray(student.sports) ? student.sports : [])]
+    [...REGISTRATION_SPORT_EVENT_OPTIONS, ...students.flatMap((student) => Array.isArray(student.sports) ? student.sports : [])]
       .filter((sport) => typeof sport === 'string' && sport.trim())
       .map((sport) => [String(sport).trim(), String(sport).trim()])
   ).values());
@@ -281,6 +293,69 @@ const ScreenerPage = () => {
     }
   };
 
+  const setSubmissionReviewInProgress = (submissionId, inProgress) => {
+    const nextSubmissionIds = new Set(reviewingSubmissionIdsRef.current);
+    if (inProgress) {
+      nextSubmissionIds.add(submissionId);
+    } else {
+      nextSubmissionIds.delete(submissionId);
+    }
+    reviewingSubmissionIdsRef.current = nextSubmissionIds;
+    setReviewingSubmissionIds(nextSubmissionIds);
+  };
+
+  const updateSelectedSubmission = (submissionId, savedSubmission) => {
+    const updateStudent = (student) => {
+      if (!student) return student;
+      const documents = Array.isArray(student.requirements?.documents)
+        ? student.requirements.documents.map((entry) => (
+          String(entry?.submissionId) === String(submissionId)
+            ? {
+              ...entry,
+              status: savedSubmission.status,
+              remarks: savedSubmission.remarks || '',
+            }
+            : entry
+        ))
+        : [];
+      return {
+        ...student,
+        requirements: {
+          ...student.requirements,
+          documents,
+        },
+      };
+    };
+
+    setStudents((currentStudents) => currentStudents.map((student) => (
+      student.id === selectedStudent?.id ? updateStudent(student) : student
+    )));
+    setSelectedStudent((currentStudent) => (
+      currentStudent?.id === selectedStudent?.id
+        ? updateStudent(currentStudent)
+        : currentStudent
+    ));
+  };
+
+  const refreshSelectedStudent = async () => {
+    const response = await api.getScreenerRequirements(
+      undefined,
+      sportFilter === 'All' ? '' : sportFilter
+    );
+    const data = Array.isArray(response?.data) ? response.data : [];
+    setStudents(data);
+    setSelectedStudent(data.find((student) => student.id === selectedStudent?.id) || null);
+  };
+
+  const broadcastRequirementUpdate = () => {
+    try {
+      localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
+      window.dispatchEvent(new Event('gymstat-requirement-updated'));
+    } catch (error) {
+      console.warn('Unable to broadcast requirement update', error);
+    }
+  };
+
   useEffect(() => {
     if (!authReady) return;
     setStudents([]);
@@ -323,7 +398,16 @@ const ScreenerPage = () => {
   useEffect(() => {
     let cancelled = false;
     const createdUrls = [];
+    const previewSport = sportFilter === 'All' ? selectedStudent?.sport : sportFilter;
+    const publishedColumns = buildRequirementColumns(publishedRequirements, previewSport);
     const entries = (selectedStudent?.requirements?.documents || [])
+      .filter((entry) => (
+        entry?.submissionId
+        && entry.hasUpload === true
+        && entry.screenerForwardedAt
+        && entry.coachStatus === 'approved'
+        && getMatchingPublishedRequirement(entry, publishedColumns)
+      ))
       .flatMap((entry) => getRequirementFiles(entry)
         .map((file, index) => [
           getRequirementPreviewKey(entry, index),
@@ -362,31 +446,11 @@ const ScreenerPage = () => {
       cancelled = true;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [notify, selectedStudent]);
-
-  // Requirement labels are display metadata only; previews come from MongoDB file records.
-  const requirementsTemplates = [
-    { id: "cor", title: "CERTIFICATE OF REGISTRATION" },
-    { id: "med", title: "MEDICAL CERTIFICATE" },
-    { id: "psa", title: "PSA" },
-    { id: "insurance", title: "INSURANCE" },
-    { id: "profile", title: "STUDENT PROFILE" },
-    { id: "consent", title: "PARENT CONSENT" }
-  ];
+  }, [notify, publishedRequirements, selectedStudent, sportFilter]);
 
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
     setCurrentView('view-details');
-    const initial = {};
-    ['cor','med','psa','insurance','profile','consent'].forEach((key) => {
-      const entry = student.requirements?.[key];
-      if (!entry) {
-        initial[key] = 'No Documents Attached';
-        return;
-      }
-      initial[key] = entry.status || 'Pending';
-    });
-    setRequirementStatus(initial);
   };
 
   const handleBackToList = () => {
@@ -413,15 +477,15 @@ const ScreenerPage = () => {
   // Filter students based on search query and filters
   const filteredStudents = students.filter((student) => {
     const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesAssignedDepartment = !isScreener
-      || (Boolean(assignedDepartment)
-        && normalizeDepartmentValue(student.department) === normalizeDepartmentValue(assignedDepartment));
+    // The Screener API already scopes records by the forwarding coach's department.
+    const hasAssignedDepartment = !isScreener
+      || Boolean(assignedDepartment);
     const matchesSport = sportFilter === 'All'
       || student.sport === sportFilter
       || student.sports?.includes(sportFilter);
     const matchesYear = yearLevelFilter === 'All' || student.yearLevel === yearLevelFilter;
     
-    return matchesAssignedDepartment && matchesSearch && matchesSport && matchesYear;
+    return hasAssignedDepartment && matchesSearch && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
     const getSurname = (student) => {
       const name = String(student.lastName || student.surname || student.name || '').trim();
@@ -478,18 +542,25 @@ const ScreenerPage = () => {
         ...file,
         fileUrl: getRequirementFileUrl(entry, index)
       }));
-      const fileUrl = files[0]?.fileUrl;
+      const selectedFile = files[0];
+      if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
+      setViewerFiles(files);
+      setViewerFileIndex(0);
+      setViewerName(selectedFile?.fileName || entry?.fileName || fallbackName);
+      setViewerType(selectedFile?.fileType || entry?.fileType || '');
+      setViewerSrc(null);
+      setViewerOpen(true);
+      setViewerNavigationLoading(true);
+      const fileUrl = selectedFile?.fileUrl;
       const attachmentUrl = fileUrl
         ? await loadAttachmentBlobUrl(fileUrl)
         : fallbackSrc;
       setViewerSrc(attachmentUrl);
-      setViewerFiles(files);
-      setViewerFileIndex(0);
-      setViewerName(files[0]?.fileName || entry?.fileName || fallbackName);
-      setViewerType(files[0]?.fileType || entry?.fileType || '');
-      setViewerOpen(true);
     } catch (error) {
+      setViewerOpen(false);
       notify('screener-error', 'Unable to open file', error.message);
+    } finally {
+      setViewerNavigationLoading(false);
     }
   };
 
@@ -510,6 +581,17 @@ const ScreenerPage = () => {
     } finally {
       setViewerNavigationLoading(false);
     }
+  };
+
+  const closeRequirementViewer = () => {
+    if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
+    setViewerOpen(false);
+    setViewerSrc(null);
+    setViewerName(null);
+    setViewerType('');
+    setViewerFiles([]);
+    setViewerFileIndex(0);
+    setViewerNavigationLoading(false);
   };
 
   // --- VIEW 1: REQUIREMENTS SCREENING PORTAL DASHBOARD LIST ---
@@ -663,37 +745,37 @@ const ScreenerPage = () => {
     const selectedSport = sportFilter === 'All' ? selectedStudent.sport : sportFilter;
     const selectedRequirements = getSportScopedRequirements(selectedStudent.requirements, selectedSport);
     const requirementDocuments = selectedRequirements.documents || [];
-    const standardRequirementKeys = new Set(requirementsTemplates.map((req) => req.id === 'med' ? 'med' : req.id));
-    const requirementCards = requirementsTemplates.flatMap((req) => {
-      const requirementKey = req.id === 'med' ? 'med' : req.id;
-      const entries = requirementDocuments
-        .filter((entry) => (entry.requirementType === 'medical' ? 'med' : entry.requirementType) === requirementKey);
-      const cards = entries.length > 0 ? entries : [null];
+    const publishedRequirementColumns = buildRequirementColumns(publishedRequirements, selectedSport);
+    const requirementCards = requirementDocuments.flatMap((entry) => {
+      if (!entry?.submissionId
+        || entry.hasUpload !== true
+        || !entry.screenerForwardedAt
+        || entry.coachStatus !== 'approved') return [];
 
-      return cards.map((entry, index) => ({
-        ...req,
-        entry,
-        cardKey: entry?.submissionId || `${req.id}-empty-${index}`,
-        viewerName: entry?.fileName || req.title,
-        previewKey: entry?.submissionId ? getRequirementPreviewKey(entry) : '',
-        previewUrl: entry?.submissionId
-          ? previewUrls[getRequirementPreviewKey(entry)] || ''
-          : ''
-      }));
-    }).concat(requirementDocuments
-      .filter((entry) => {
-        const requirementKey = entry.requirementType === 'medical' ? 'med' : entry.requirementType;
-        return !standardRequirementKeys.has(requirementKey);
-      })
-      .map((entry) => ({
-        id: entry.requirementType,
-        title: entry.label || entry.requirementType || 'REQUIREMENT',
+      const matchingColumn = getMatchingPublishedRequirement(entry, publishedRequirementColumns);
+      if (!matchingColumn) return [];
+
+      const previewKey = getRequirementPreviewKey(entry);
+      return [{
+        id: matchingColumn.id,
+        title: matchingColumn.label,
         entry,
         cardKey: entry.submissionId,
-        viewerName: entry.fileName || entry.label || 'Requirement Document',
-        previewKey: getRequirementPreviewKey(entry),
-        previewUrl: previewUrls[getRequirementPreviewKey(entry)] || ''
-      })));
+        viewerName: entry.fileName || matchingColumn.label,
+        previewKey,
+        previewUrl: previewUrls[previewKey] || '',
+      }];
+    });
+    const overallApprovalDocuments = requirementCards.map(({ entry }) => entry).filter((entry) => (
+      entry?.submissionId
+      && entry.screenerForwardedAt
+      && entry.coachStatus === 'approved'
+      && entry.hasUpload === true
+      && ['pending', 'approved'].includes(String(entry.status || '').trim().toLowerCase())
+    ));
+    const hasPendingOverallApproval = overallApprovalDocuments.some((entry) => (
+      String(entry.status || '').trim().toLowerCase() !== 'approved'
+    ));
 
     return (
       <div className="view-req-container">
@@ -710,9 +792,21 @@ const ScreenerPage = () => {
 
         <div className="view-req-card-wrapper">
           <div className="student-info-banner">
-            <h2>{selectedStudent.name}</h2>
-            <p><strong>Department :</strong> {selectedStudent.department || selectedStudent.dept || 'Not specified'}</p>
-            <p><strong>Sport :</strong> {selectedSport || 'Not specified'}</p>
+            <div className="student-info-details">
+              <h2>{selectedStudent.name}</h2>
+              <p><strong>Department :</strong> {selectedStudent.department || selectedStudent.dept || 'Not specified'}</p>
+              <p><strong>Sport :</strong> {selectedSport || 'Not specified'}</p>
+            </div>
+            {hasPendingOverallApproval && (
+              <button
+                type="button"
+                className="action-btn approved-btn overall-approve-btn"
+                onClick={() => setShowOverallApprovalConfirmation(true)}
+                disabled={overallApprovalInProgress || reviewingSubmissionIds.size > 0}
+              >
+                {overallApprovalInProgress ? 'Approving...' : 'Overall Approved'}
+              </button>
+            )}
           </div>
 
           <div className="req-documents-grid">
@@ -726,8 +820,8 @@ const ScreenerPage = () => {
                   </div>
                 )}
                 {req.entry?.resubmitted && <span className="document-card-resubmitted-label">Resubmitted</span>}
-                <div className={`document-preview-box${getRequirementFileUrl(req.entry) ? '' : ' document-preview-box--empty'}`}>
-                  {getRequirementFileUrl(req.entry) ? (
+                <div className="document-preview-box">
+                  {req.entry.hasUpload === true && getRequirementFileUrl(req.entry) ? (
                     <>
                       {req.previewUrl && isImageFile(req.entry) && (
                         !previewErrors[req.previewKey] && (
@@ -784,9 +878,7 @@ const ScreenerPage = () => {
                           : 'View Documents'}
                       </button>
                     </>
-                  ) : (
-                    <span className="no-document-label">NO DOCUMENTS</span>
-                  )}
+                  ) : null}
                 </div>
                 {req.entry?.status === 'rejected' && req.entry?.remarks && (
                   <div className="document-rejection-note">
@@ -797,15 +889,22 @@ const ScreenerPage = () => {
                 {req.entry?.submissionId && (
                   <div className="document-action-row">
                     <button
-                      className="action-btn approve-btn"
+                      type="button"
+                      className="action-btn approved-btn"
                       onClick={() => setApproveTarget(req.entry.submissionId)}
+                      disabled={String(req.entry.status || '').trim().toLowerCase() === 'approved'
+                        || overallApprovalInProgress
+                        || reviewingSubmissionIds.has(String(req.entry.submissionId))}
                       aria-label={`Approve ${req.title}`}
                     >
-                      Approve
+                      {reviewingSubmissionIds.has(String(req.entry.submissionId)) ? 'Saving...' : 'Approve'}
                     </button>
                     <button
+                      type="button"
                       className="action-btn reject-btn"
                       onClick={() => setRejectTarget(req.entry.submissionId)}
+                      disabled={overallApprovalInProgress
+                        || reviewingSubmissionIds.has(String(req.entry.submissionId))}
                       aria-label={`Reject ${req.title}`}
                     >
                       Reject
@@ -825,37 +924,72 @@ const ScreenerPage = () => {
           cancelText="Cancel"
           onCancel={() => setApproveTarget(null)}
           onConfirm={async () => {
+            const submissionId = String(approveTarget || '');
+            if (!submissionId || reviewingSubmissionIdsRef.current.has(submissionId)) return;
+            setSubmissionReviewInProgress(submissionId, true);
             try {
-              const submissionId = approveTarget;
               const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
               const reviewParticipationType = submission?.participationType || 'Intrams';
-              await api.reviewScreenerRequirement(submissionId, {
+              const response = await api.reviewScreenerRequirement(submissionId, {
                 status: 'approved',
                 feedback: 'Approved by screener',
                 participationType: reviewParticipationType,
                 studentId: selectedStudent?.id,
                 sport: sportFilter === 'All' ? '' : sportFilter
               });
+              if (response?.data?.status !== 'approved') {
+                throw new Error('The saved document status could not be confirmed. Refresh and try again.');
+              }
+              updateSelectedSubmission(submissionId, response.data);
               await markResubmissionViewed(submissionId, reviewParticipationType);
-              setRequirementStatus((s) => ({ ...s, [submissionId]: 'approved' }));
               notify('screener-success', 'Requirement Approved', 'Requirement is complete.');
               setApproveTarget(null);
+              broadcastRequirementUpdate();
+              try {
+                await refreshSelectedStudent();
+              } catch (refreshError) {
+                console.warn('Approval saved, but the Screener record could not refresh.', refreshError);
+                notify('screener-error', 'Approval Saved', 'The saved approval is confirmed, but the record could not refresh. It will update when the list reloads.');
+              }
+            } catch (err) {
+              notify('screener-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
+            } finally {
+              setSubmissionReviewInProgress(submissionId, false);
+            }
+          }}
+        />
+
+        <ConfirmModal
+          isOpen={showOverallApprovalConfirmation}
+          title="Approve All Forwarded Documents"
+          message={`Approve all eligible forwarded documents for ${selectedStudent.name} in ${selectedSport}?`}
+          confirmText="Overall Approved"
+          cancelText="Cancel"
+          onCancel={() => setShowOverallApprovalConfirmation(false)}
+          onConfirm={async () => {
+            setShowOverallApprovalConfirmation(false);
+            setOverallApprovalInProgress(true);
+            try {
+              await api.approveForwardedScreenerRequirements({
+                studentId: selectedStudent.id,
+                sport: selectedSport,
+                documents: overallApprovalDocuments.map((entry) => ({
+                  submissionId: entry.submissionId,
+                  participationType: entry.participationType || 'Intrams',
+                })),
+              });
+              notify('screener-success', 'Documents Approved', 'All eligible forwarded documents were approved.');
               try {
                 localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
                 window.dispatchEvent(new Event('gymstat-requirement-updated'));
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getScreenerRequirements(
-                undefined,
-                sportFilter === 'All' ? '' : sportFilter
-              );
-              const data = response?.data || [];
-              setStudents(data);
-              const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
-              setSelectedStudent(refreshedSelectedStudent);
-            } catch (err) {
-              notify('screener-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
+              await loadRequirements(true);
+            } catch (error) {
+              notify('screener-error', 'Approval Failed', error.message || 'Unable to approve forwarded documents.');
+            } finally {
+              setOverallApprovalInProgress(false);
             }
           }}
         />
@@ -864,10 +998,12 @@ const ScreenerPage = () => {
           isOpen={!!rejectTarget}
           onCancel={() => setRejectTarget(null)}
           onConfirm={async (payload) => {
+            const submissionId = String(rejectTarget || '');
+            if (!submissionId || reviewingSubmissionIdsRef.current.has(submissionId)) return;
+            setSubmissionReviewInProgress(submissionId, true);
             try {
-              const submissionId = rejectTarget;
               const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
-              await api.reviewScreenerRequirement(submissionId, {
+              const response = await api.reviewScreenerRequirement(submissionId, {
                 status: 'rejected',
                 feedback: payload.reason,
                 remarks: payload.remarks,
@@ -875,50 +1011,85 @@ const ScreenerPage = () => {
                 participationType: submission?.participationType || 'Intrams',
                 sport: sportFilter === 'All' ? '' : sportFilter
               });
-              setRejectTarget(null);
-              setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
-              const message = `Requirement deleted and student can re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
-              notify('screener-error', 'Requirement Rejected', message);
-              try {
-                localStorage.setItem('gymstat-requirement-updated', String(Date.now()));
-                window.dispatchEvent(new Event('gymstat-requirement-updated'));
-              } catch (error) {
-                console.warn('Unable to broadcast requirement update', error);
+              if (response?.data?.status !== 'rejected') {
+                throw new Error('The saved document status could not be confirmed. Refresh and try again.');
               }
-              const response = await api.getScreenerRequirements(
-                undefined,
-                sportFilter === 'All' ? '' : sportFilter
-              );
-              const data = response?.data || [];
-              setStudents(data);
-              const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
-              setSelectedStudent(refreshedSelectedStudent);
+              updateSelectedSubmission(submissionId, response.data);
+              setRejectTarget(null);
+              notify('screener-success', 'Requirement Rejected', 'Requirement was rejected and retained for re-upload.');
+              broadcastRequirementUpdate();
+              try {
+                await refreshSelectedStudent();
+              } catch (refreshError) {
+                console.warn('Rejection saved, but the Screener record could not refresh.', refreshError);
+                notify('screener-error', 'Rejection Saved', 'The saved rejection is confirmed, but the record could not refresh. It will update when the list reloads.');
+              }
             } catch (err) {
               notify('screener-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
+            } finally {
+              setSubmissionReviewInProgress(submissionId, false);
             }
           }}
         />
-        <DocumentViewer
-          key={viewerOpen ? viewerSrc : 'closed'}
-          isOpen={viewerOpen}
-          src={viewerSrc}
-          fileName={viewerName}
-          fileType={viewerType}
-          onClose={() => {
-            if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
-            setViewerOpen(false);
-            setViewerSrc(null);
-            setViewerName(null);
-            setViewerType('');
-            setViewerFiles([]);
-            setViewerFileIndex(0);
-          }}
-          navigationVisible={viewerFiles.length > 1}
-          navigationLabel={`${viewerFileIndex + 1} / ${viewerFiles.length}`}
-          navigationLoading={viewerNavigationLoading}
-          onPrevious={() => handleViewerNavigation(-1)}
-          onNext={() => handleViewerNavigation(1)}
-        />
+        {viewerOpen && (
+          <div
+            className="screener-document-preview-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) closeRequirementViewer();
+            }}
+          >
+            <section
+              className="screener-document-preview"
+              role="dialog"
+              aria-modal="true"
+              aria-label={viewerName || 'Document preview'}
+            >
+              <header className="screener-document-preview-header">
+                <strong title={viewerName}>{viewerName}</strong>
+                {viewerFiles.length > 1 && (
+                  <nav className="screener-document-preview-navigation" aria-label="Document navigation">
+                    <button
+                      type="button"
+                      onClick={() => handleViewerNavigation(-1)}
+                      disabled={viewerNavigationLoading}
+                      aria-label="Previous document"
+                    >
+                      Previous
+                    </button>
+                    <span>{viewerFileIndex + 1} / {viewerFiles.length}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleViewerNavigation(1)}
+                      disabled={viewerNavigationLoading}
+                      aria-label="Next document"
+                    >
+                      Next
+                    </button>
+                  </nav>
+                )}
+                <button
+                  type="button"
+                  className="screener-document-preview-close"
+                  onClick={closeRequirementViewer}
+                  aria-label="Close document preview"
+                >
+                  ×
+                </button>
+              </header>
+              <div className="screener-document-preview-content">
+                {viewerNavigationLoading ? (
+                  <span>Loading document…</span>
+                ) : isPdfFile({ fileName: viewerName, fileType: viewerType }) ? (
+                  <iframe src={viewerSrc} title={viewerName || 'PDF document preview'} />
+                ) : isImageFile({ fileName: viewerName, fileType: viewerType }) ? (
+                  <img src={viewerSrc} alt={viewerName || 'Uploaded document'} />
+                ) : (
+                  <span>Preview is unavailable for this file type.</span>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
       </div>
     );
   }

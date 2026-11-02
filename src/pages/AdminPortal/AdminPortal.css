@@ -3363,52 +3363,109 @@ textarea:focus-visible,
   border: 1px solid #ef9a9a;
 }
 
-.schedule-image-preview-overlay {
+.schedule-document-preview-overlay {
   position: fixed;
   inset: 0;
   z-index: 11000;
   display: flex;
-  align-items: safe center;
-  justify-content: safe center;
-  overflow: auto;
-  padding: 4vh 3vw;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.94);
-  cursor: zoom-out;
+  background: rgba(0, 0, 0, 0.72);
 }
 
-.schedule-image-preview {
-  display: block;
+.schedule-document-preview {
+  display: flex;
+  flex-direction: column;
+  width: min(1200px, 96vw);
+  height: min(900px, 92vh);
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+}
+
+.schedule-document-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.schedule-document-preview-header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #333333;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-document-preview-close {
   flex: 0 0 auto;
-  max-width: none;
-  max-height: none;
-  object-fit: contain;
-  cursor: zoom-in;
-}
-
-.schedule-image-preview-close {
-  position: fixed;
-  top: 16px;
-  right: 20px;
-  z-index: 1;
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-  font-size: 30px;
+  border: 1px solid #d5d5d5;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #333333;
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
 }
 
-.schedule-image-preview-close:hover,
-.schedule-image-preview-close:focus-visible {
-  background: rgba(255, 255, 255, 0.2);
+.schedule-document-preview-close:hover,
+.schedule-document-preview-close:focus-visible {
+  background: #f1f3f5;
 }
 
-.schedule-image-preview-close:focus-visible {
-  outline: 2px solid #fff;
+.schedule-document-preview-close:focus-visible {
+  outline: 2px solid #6b0000;
   outline-offset: 3px;
+}
+
+.schedule-document-preview-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 12px;
+  background: #f3f3f3;
+}
+
+.schedule-document-preview-content iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #ffffff;
+}
+
+.schedule-document-preview-content img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 600px) {
+  .schedule-document-preview-overlay {
+    padding: 8px;
+  }
+
+  .schedule-document-preview {
+    width: 100%;
+    height: 96vh;
+  }
+
+  .schedule-document-preview-header {
+    min-height: 50px;
+    padding: 6px 8px;
+  }
 }

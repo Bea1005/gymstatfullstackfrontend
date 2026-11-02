@@ -1049,6 +1049,7 @@ export const getCoachDocumentRequirements = async (sport) => {
   const query = sport ? `?sport=${encodeURIComponent(sport)}` : '';
   return apiRequest(`/coach/requirements${query}`, {
     method: 'GET',
+    cache: 'no-store',
   });
 };
 
@@ -1075,10 +1076,10 @@ export const reviewCoachRequirement = async (submissionId, reviewData) => {
   });
 };
 
-export const forwardCoachRequirements = async (sport) => (
+export const forwardCoachRequirements = async (sport, submissionIds = []) => (
   apiRequest('/coach/requirements/forward', {
     method: 'POST',
-    body: JSON.stringify({ sport }),
+    body: JSON.stringify({ sport, submissionIds }),
   })
 );
 
@@ -1100,6 +1101,13 @@ export const getScreenerRequirements = async (participationType, sport) => {
 
 export const reviewScreenerRequirement = async (submissionId, reviewData) => {
   return apiRequest(`/screener/requirements/${encodeURIComponent(submissionId)}/review`, {
+    method: 'PUT',
+    body: JSON.stringify(reviewData),
+  });
+};
+
+export const approveForwardedScreenerRequirements = async (reviewData) => {
+  return apiRequest('/screener/requirements/approve-forwarded', {
     method: 'PUT',
     body: JSON.stringify(reviewData),
   });

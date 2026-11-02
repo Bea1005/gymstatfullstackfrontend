@@ -16,7 +16,12 @@ import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import disqualifiedStamp from '../../assets/GymstatStamps/Disqualified.png';
 import noDocumentsStamp from '../../assets/GymstatStamps/NoDocuments.png';
 import * as api from '../../services/api';
-import { filterCoachCategoryOptions, groupAndSortCoachCategoryOptions } from './coachCategorySearch';
+import {
+  filterCoachCategoryOptions,
+  getCoachGalleryCategoryLabel,
+  groupAndSortCoachCategoryOptions,
+  isCoachGalleryCategorySelected,
+} from './coachCategorySearch';
 import { getMissingCoachUploadLabels } from './coachStudentUploadStatus';
 import './CoachPortal.css';
 
@@ -1599,7 +1604,7 @@ export default function CoachRecord() {
               aria-haspopup="dialog"
               aria-expanded={showSportDropdown}
             >
-              {coachProfile.mainSport || 'Select Sport Category'}
+              {getCoachGalleryCategoryLabel(coachProfile.mainSport) || 'Select Sport Category'}
             </button>
           </div>
           <div className="form-info-right">Date of Screening: (please refer to the STRASUC Olympics Manual)</div>
@@ -1701,7 +1706,7 @@ export default function CoachRecord() {
                     <section className="coach-category-option-group">
                       <h4 className="coach-category-option-heading">Sports</h4>
                       {sortedSportOptionGroups.sports.map((sport) => (
-                        <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
+                        <button key={sport} type="button" className={`coach-category-option${isCoachGalleryCategorySelected(coachProfile.mainSport, sport) ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
                           {sport}
                         </button>
                       ))}
@@ -1711,7 +1716,7 @@ export default function CoachRecord() {
                     <section className="coach-category-option-group">
                       <h4 className="coach-category-option-heading">Events</h4>
                       {sortedSportOptionGroups.events.map((sport) => (
-                        <button key={sport} type="button" className={`coach-category-option${coachProfile.mainSport === sport ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
+                        <button key={sport} type="button" className={`coach-category-option${isCoachGalleryCategorySelected(coachProfile.mainSport, sport) ? ' is-selected' : ''}`} onClick={() => handleSelectSport(sport)} disabled={categoryLoading}>
                           {sport}
                         </button>
                       ))}

@@ -6,7 +6,6 @@ import {
   REGISTRATION_CATEGORIES,
   REGISTRATION_SPORT_EVENT_OPTIONS,
 } from './registrationCategories.js';
-import { SPORT_OPTIONS } from './studentRegistrationOptions.js';
 
 test('registration categories contain the complete, unique category hierarchy', () => {
   assert.deepEqual(REGISTRATION_CATEGORIES.map(({ name }) => name), [
@@ -30,16 +29,15 @@ test('registration categories contain the complete, unique category hierarchy', 
 
   const sports = sportsEvent.subcategories.flatMap(({ sports: options }) => options);
   const events = REGISTRATION_CATEGORIES.slice(1).flatMap(({ events: options }) => options);
-  assert.equal(sports.length, 34);
+  assert.equal(sports.length, 36);
   assert.equal(events.length, 37);
   assert.equal(new Set([...sports, ...events]).size, sports.length + events.length);
   assert.equal(REGISTRATION_SPORT_EVENT_OPTIONS.length, sports.length + events.length);
-  assert.ok(REGISTRATION_SPORT_EVENT_OPTIONS.every((option) => SPORT_OPTIONS.includes(option)));
-  assert.ok(SPORT_OPTIONS.includes('Football Men'));
+  assert.deepEqual(REGISTRATION_SPORT_EVENT_OPTIONS, [...sports, ...events]);
   assert.ok(sports.includes('Basketball (Women)'));
   assert.ok(sports.includes('Softball (Women)'));
   assert.ok(sports.includes('Tae-Kwon-Do (Men)'));
-  assert.ok(events.includes('Additional Role: Technical – Sound/Music (Handles sound effects and music during the play to help set the mood of the Scenes)'));
+  assert.ok(events.includes('Additional Role: Technical – Sound/Music '));
   assert.ok(events.includes('Mobile Legends: Bang Bang'));
 });
 

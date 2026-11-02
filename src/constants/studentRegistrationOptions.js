@@ -1,5 +1,3 @@
-import { REGISTRATION_SPORT_EVENT_OPTIONS } from './registrationCategories.js';
-
 export const DEPARTMENT_OPTIONS = [
   'Bachelor of Science in Information Technology',
   'Bachelor of Science in Information Systems',
@@ -25,40 +23,3 @@ export const DEPARTMENT_OPTIONS = [
 ];
 
 export const YEAR_LEVEL_OPTIONS = ['I', 'II', 'III', 'IV'];
-
-export const SPORT_OPTIONS = [...new Set([
-  'Volleyball Women',
-  'Volleyball Men',
-  'Basketball Women',
-  'Basketball Men',
-  'Beach Volleyball Women',
-  'Beach Volleyball Men',
-  'Badminton Women',
-  'Badminton Men',
-  'Table Tennis Women',
-  'Table Tennis Men',
-  'Lawn Tennis Women',
-  'Lawn Tennis Men',
-  'Sepak Takraw Women',
-  'Sepak Takraw Men',
-  'Athletics Women',
-  'Athletics Men',
-  'Swimming Women',
-  'Swimming Men',
-  'Chess Women',
-  'Chess Men',
-  'Taekwondo Women',
-  'Taekwondo Men',
-  'Arnis Women',
-  'Arnis Men',
-  'Dancesport',
-  'Futsal Women',
-  'Futsal Men',
-  'Football Women',
-  'Football Men',
-  'Softball Women',
-  'Baseball Men',
-  'Mobile Legends Women',
-  'Mobile Legends Men',
-  ...REGISTRATION_SPORT_EVENT_OPTIONS,
-])];

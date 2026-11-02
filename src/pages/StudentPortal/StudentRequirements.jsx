@@ -14,6 +14,18 @@ const requirementTypes = [
   { id: 'consent', label: 'Parent Consent', icon: 'fileText' },
 ];
 
+const SUPPORTED_REQUIREMENT_FILE_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'png']);
+const SUPPORTED_REQUIREMENT_FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
+
+const isSupportedRequirementFile = (file) => {
+  const extension = String(file?.name || '').match(/\.([^.]+)$/)?.[1]?.toLowerCase();
+  return SUPPORTED_REQUIREMENT_FILE_EXTENSIONS.has(extension);
+};
+
+const notifyUnsupportedRequirementFile = (notify) => {
+  notify('error', 'Unsupported File Format', 'Upload PDF, JPEG, or PNG files only.');
+};
+
 const formatUploadDateTime = (value) => {
   if (!value) return 'Not available';
 
@@ -34,6 +46,12 @@ const formatUploadDateTime = (value) => {
 
   return `${datePart} | ${timePart}`;
 };
+
+const getSubmissionReviewStatus = (submission) => (
+  String(submission?.status || 'pending')
+    .trim()
+    .toLowerCase()
+);
 
 export default function StudentRequirements() {
   const navigate = useNavigate();
@@ -187,6 +205,10 @@ export default function StudentRequirements() {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
+    if (files.some((file) => !isSupportedRequirementFile(file))) {
+      notifyUnsupportedRequirementFile(notify);
+      return;
+    }
     if (files.length > 10) {
       notify('error', 'Too Many Photos', 'Select no more than 10 files for one requirement.');
       return;
@@ -245,6 +267,11 @@ export default function StudentRequirements() {
 
     if (!files?.length) {
       notify('error', 'File Required', 'Please select a file first');
+      return;
+    }
+
+    if (files.some((file) => !isSupportedRequirementFile(file))) {
+      notifyUnsupportedRequirementFile(notify);
       return;
     }
 
@@ -661,47 +688,58 @@ export default function StudentRequirements() {
                         </tr>
                       </thead>
                       <tbody>
-                        {submissions.map((submission) => (
-                          <tr key={submission._id} className="student-requirements-table-row">
-                            <td className="student-requirements-table-cell">
-                              {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.customRequirementLabel || submission.requirementType || 'Other'}
-                            </td>
-                            <td className="student-requirements-table-cell">
-                              <div className="my-submissions-status-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                <span className={`badge ${submission.status === 'approved' ? 'badge-completed' : submission.status === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
-                                  {submission.status || 'pending'}
-                                </span>
-                                {submission.status === 'rejected' && (
-                                  <span style={{ fontSize: '0.8rem', color: '#c62828', lineHeight: 1.4 }}>
-                                    {submission.remarks || submission.feedback || 'Please upload a corrected copy.'}
+                        {submissions.map((submission) => {
+                          const reviewStatus = getSubmissionReviewStatus(submission);
+                          const statusLabel = ['approved', 'rejected', 'pending'].includes(reviewStatus)
+                            ? `${reviewStatus[0].toLocaleUpperCase()}${reviewStatus.slice(1)}`
+                            : 'Pending';
+
+                          return (
+                            <tr key={submission._id} className="student-requirements-table-row">
+                              <td className="student-requirements-table-cell">
+                                {requirementTypes.find((type) => type.id === submission.requirementType)?.label || submission.customRequirementLabel || submission.requirementType || 'Other'}
+                              </td>
+                              <td className="student-requirements-table-cell">
+                                <div className="my-submissions-status-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                  <span className={`badge ${reviewStatus === 'approved' ? 'badge-completed' : reviewStatus === 'rejected' ? 'badge-declined' : 'badge-pending'}`}>
+                                    {statusLabel}
                                   </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.createdAt)}</td>
-                            <td className="student-requirements-table-cell">
-                              <button
-                                type="button"
-                                className="submit-single-btn"
-                                onClick={() => handleViewSubmission(submission)}
-                                disabled={loading}
-                                aria-label={`View ${submission.fileName || 'uploaded document'}`}
-                              >
-                                <Icon name="eye" size={16} /> View
-                              </button>
-                              <button
-                                type="button"
-                                className="student-requirement-download-btn"
-                                onClick={() => handleDownloadSubmission(submission)}
-                                disabled={loading}
-                                aria-label={`Download ${submission.fileName || 'uploaded document'}`}
-                                title="Download document"
-                              >
-                                <Icon name="download" size={18} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                                  {String(submission.coachStatus || '').trim().toLowerCase() === 'approved'
+                                    && reviewStatus !== 'approved' && (
+                                    <span className="badge badge-completed">Coach-Approved</span>
+                                  )}
+                                  {reviewStatus === 'rejected' && (
+                                    <span style={{ fontSize: '0.8rem', color: '#c62828', lineHeight: 1.4 }}>
+                                      {submission.coachRemarks || submission.remarks || submission.feedback || 'Please upload a corrected copy.'}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.createdAt)}</td>
+                              <td className="student-requirements-table-cell">
+                                <button
+                                  type="button"
+                                  className="submit-single-btn"
+                                  onClick={() => handleViewSubmission(submission)}
+                                  disabled={loading}
+                                  aria-label={`View ${submission.fileName || 'uploaded document'}`}
+                                >
+                                  <Icon name="eye" size={16} /> View
+                                </button>
+                                <button
+                                  type="button"
+                                  className="student-requirement-download-btn"
+                                  onClick={() => handleDownloadSubmission(submission)}
+                                  disabled={loading}
+                                  aria-label={`Download ${submission.fileName || 'uploaded document'}`}
+                                  title="Download document"
+                                >
+                                  <Icon name="download" size={18} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -848,7 +886,7 @@ export default function StudentRequirements() {
                           customRequirementId: cardCustomRequirementId,
                           customRequirementLabel: cardCustomRequirementLabel,
                         } : {})}
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
+                        accept={SUPPORTED_REQUIREMENT_FILE_ACCEPT}
                         disabled={uploading || (locked && !isPsaApproved && !isApprovedMedicalOrCor)}
                       />
                       {isRejected && (

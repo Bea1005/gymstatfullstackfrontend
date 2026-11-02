@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../../services/api";
 import { useNotifications } from "../../components/useNotifications";
-import { DEPARTMENT_OPTIONS, SPORT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
+import { DEPARTMENT_OPTIONS, YEAR_LEVEL_OPTIONS } from "../../constants/studentRegistrationOptions";
 import {
   PREFERRED_CATEGORY_OPTIONS,
   REGISTRATION_CATEGORIES,
+  REGISTRATION_SPORT_EVENT_OPTIONS,
 } from "../../constants/registrationCategories";
 import "./StudentProfile.css";
 
@@ -283,8 +284,8 @@ const StudentProfile = () => {
                           required
                         >
                           <option value="" disabled>Select Sport</option>
-                          {sport && !SPORT_OPTIONS.includes(sport) && <option value={sport}>{sport}</option>}
-                          {SPORT_OPTIONS.filter((option) => !form.sports.includes(option) || option === sport).map((option) => (
+                          {sport && !REGISTRATION_SPORT_EVENT_OPTIONS.includes(sport) && <option value={sport}>{sport}</option>}
+                          {REGISTRATION_SPORT_EVENT_OPTIONS.filter((option) => !form.sports.includes(option) || option === sport).map((option) => (
                             <option key={option} value={option}>{option}</option>
                           ))}
                         </select>

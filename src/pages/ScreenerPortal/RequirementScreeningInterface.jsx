@@ -8,9 +8,9 @@ import incompleteStamp from '../../assets/GymstatStamps/Incomplete.png';
 import * as api from '../../services/api';
 import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSession';
 import {
-  SPORT_OPTIONS,
   YEAR_LEVEL_OPTIONS
 } from '../../constants/studentRegistrationOptions';
+import { REGISTRATION_SPORT_EVENT_OPTIONS } from '../../constants/registrationCategories';
 import {
   buildRequirementColumns,
   getRequirementColumnEntry,
@@ -19,8 +19,8 @@ import {
 import './RequirementScreeningInterface.css';
 
 const INCOMPLETE_FORWARD_TITLE = 'Unable to Forward Documents';
-const INCOMPLETE_FORWARD_MESSAGE = 'Please complete the initial screening of all required documents for every student-athlete in the selected sport. All submitted requirements must be marked as Coach-Approved before you can forward them to the Screener.';
-const CONFIRM_FORWARD_MESSAGE = "Are you sure you want to forward all student-athletes' documents to the Screener? Please make sure that all submitted requirements have been reviewed and approved.";
+const INCOMPLETE_FORWARD_MESSAGE = 'All required documents for the selected sport must be approved by the coach before forwarding.';
+const CONFIRM_FORWARD_MESSAGE = 'Are you sure you want to forward all approved documents of the student-athletes assigned to your sport/event to the Screener for final review?';
 
 const normalizeYearLevel = (value) => {
   const compactValue = String(value || '')
@@ -105,6 +105,46 @@ const normalizeSportValue = (value) => {
     .toLocaleLowerCase();
 };
 
+const getCurrentCoachSubmissionIds = (students, selectedSport) => {
+  const selectedSportKey = normalizeSportValue(selectedSport);
+  const latestSubmissions = new Map();
+
+  (Array.isArray(students) ? students : []).forEach((student) => {
+    (Array.isArray(student?.requirements?.documents) ? student.requirements.documents : [])
+      .forEach((document) => {
+        const documentSports = String(document?.sport || '')
+          .split('|')
+          .map(normalizeSportValue)
+          .filter(Boolean);
+        if (selectedSportKey && documentSports.length
+          && !documentSports.includes('general')
+          && !documentSports.includes(selectedSportKey)) return;
+
+        const requirementType = normalizeRequirementType(document?.requirementType);
+        const requirementKey = requirementType === 'other'
+          ? `other:${document?.customRequirementId || document?.label || document?.submissionId || ''}`
+          : requirementType;
+        const key = [
+          student?.id || student?._id || '',
+          selectedSportKey || documentSports[0] || '',
+          requirementKey,
+        ].join(':');
+        const current = latestSubmissions.get(key);
+        if (!current || new Date(document?.uploadedAt || 0) > new Date(current?.uploadedAt || 0)) {
+          latestSubmissions.set(key, document);
+        }
+      });
+  });
+
+  return [...latestSubmissions.values()]
+    .filter((document) => (
+      document?.submissionId
+      && document.status === 'approved'
+      && document.hasUpload === true
+    ))
+    .map((document) => String(document.submissionId));
+};
+
 const getStudentSportValues = (student = {}) => {
   const sports = Array.isArray(student.sports) ? student.sports : [];
   return Array.from(new Map(
@@ -149,7 +189,11 @@ const loadAttachmentBlobUrl = async (fileUrl) => {
   return api.getProtectedImageObjectUrl(fileUrl, { cache: 'no-store' });
 };
 
-export const RequirementScreeningInterface = ({ hideFilters = [], initialSport = '' }) => {
+export const RequirementScreeningInterface = ({
+  hideFilters = [],
+  initialSport = '',
+  simpleDocumentPreview = false,
+}) => {
   // Navigation State: 'list' or 'view-details'
   const [currentView, setCurrentView] = useState('list');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -163,8 +207,11 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
     ready: false,
     forwarded: false,
     canForward: false,
+    incompleteAthletes: [],
   });
+  const [forwardingSubmissionIds, setForwardingSubmissionIds] = useState([]);
   const [forwardingInProgress, setForwardingInProgress] = useState(false);
+  const [checkingForwardEligibility, setCheckingForwardEligibility] = useState(false);
   const [showForwardConfirmation, setShowForwardConfirmation] = useState(false);
   const [pendingSportReload, setPendingSportReload] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -198,7 +245,7 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
   const [sportFilter, setSportFilter] = useState(initialSport || 'All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
   const sportFilterOptions = Array.from(new Map(
-    [...SPORT_OPTIONS, ...assignedSports, ...students.flatMap((student) => getStudentSportValues(student))]
+    [...REGISTRATION_SPORT_EVENT_OPTIONS, ...assignedSports, ...students.flatMap((student) => getStudentSportValues(student))]
       .filter((sport) => typeof sport === 'string' && sport.trim())
       .map((sport) => [normalizeSportValue(sport), sport.trim()])
   ).values());
@@ -242,10 +289,12 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
         forwarded: false,
         canForward: false,
       });
+      let activePublishedRequirements = [];
       if (publishedRequirementsResult.status === 'fulfilled') {
-        setPublishedRequirements(Array.isArray(publishedRequirementsResult.value?.data)
+        activePublishedRequirements = Array.isArray(publishedRequirementsResult.value?.data)
           ? publishedRequirementsResult.value.data
-          : []);
+          : [];
+        setPublishedRequirements(activePublishedRequirements);
         hasNotifiedPublishedRequirementsErrorRef.current = false;
       } else {
         console.error('Failed to load published requirement definitions', publishedRequirementsResult.reason);
@@ -266,9 +315,21 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
         return refreshedStudent || null;
       });
       const totalStudents = safeData.length;
+      const statisticSport = resolvedSport || requestedSport;
+      const activeRequirementColumns = buildRequirementColumns(
+        activePublishedRequirements,
+        statisticSport || 'All'
+      );
       const pendingRequirements = safeData.reduce((acc, student) => {
-        const statuses = Object.values(student.requirements || {}).filter((item) => !Array.isArray(item));
-        return acc + statuses.filter((item) => item && item.status !== 'approved').length;
+        const sportScopedRequirements = getSportScopedRequirements(
+          student.requirements,
+          statisticSport
+        );
+        return acc + activeRequirementColumns.filter((column) => (
+          String(getRequirementColumnEntry(sportScopedRequirements, column)?.status || '')
+            .trim()
+            .toLocaleLowerCase() === 'pending'
+        )).length;
       }, 0);
       const verifiedRequirements = safeData.reduce((acc, student) => {
         const statuses = Object.values(student.requirements || {}).filter((item) => !Array.isArray(item));
@@ -308,16 +369,52 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
     loadRequirementsEvent(true);
   }, [pendingSportReload]);
 
-  const handleForwardRequirements = () => {
-    if (!forwardingStatus.ready) {
-      notify('coach-error', INCOMPLETE_FORWARD_TITLE, INCOMPLETE_FORWARD_MESSAGE, 6000);
-      return;
-    }
-    if (forwardingInProgress) {
+  const handleForwardRequirements = async () => {
+    if (forwardingInProgress) return;
+    if (!selectedSport) {
+      notify('coach-error', 'Sport Unavailable', 'Your assigned sport could not be determined.');
       return;
     }
 
-    setShowForwardConfirmation(true);
+    setCheckingForwardEligibility(true);
+    try {
+      const response = await api.getCoachDocumentRequirements(selectedSport);
+      const latestForwardingStatus = response?.forwardingStatus || {
+        ready: false,
+        forwarded: false,
+        canForward: false,
+        incompleteAthletes: [],
+      };
+      setForwardingStatus(latestForwardingStatus);
+      const currentSubmissionIds = getCurrentCoachSubmissionIds(response?.data, selectedSport);
+      setForwardingSubmissionIds(currentSubmissionIds);
+
+      if (!currentSubmissionIds.length) {
+        notify(
+          'coach-error',
+          INCOMPLETE_FORWARD_TITLE,
+          'No uploaded, Coach-Approved documents are currently displayed for this sport.',
+          6000
+        );
+        return;
+      }
+
+      setForwardingStatus({
+        ...latestForwardingStatus,
+        ready: true,
+        forwarded: false,
+        canForward: true,
+      });
+      setShowForwardConfirmation(true);
+    } catch (error) {
+      notify(
+        'coach-error',
+        'Unable to Verify Requirements',
+        error.message || 'Could not verify the latest screening statuses. Please try again.'
+      );
+    } finally {
+      setCheckingForwardEligibility(false);
+    }
   };
 
   const confirmForwardRequirements = async () => {
@@ -330,8 +427,13 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
 
     setForwardingInProgress(true);
     try {
-      const response = await api.forwardCoachRequirements(selectedSport);
-      setForwardingStatus({ ready: true, forwarded: true, canForward: false });
+      const response = await api.forwardCoachRequirements(selectedSport, forwardingSubmissionIds);
+      setForwardingStatus({
+        ready: true,
+        forwarded: true,
+        canForward: false,
+        incompleteAthletes: [],
+      });
       notify(
         'coach-success',
         'Documents Forwarded',
@@ -387,6 +489,63 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
       });
     } catch (error) {
       console.warn('Unable to clear resubmission badge', error);
+    }
+  };
+
+  const applySavedCoachReview = (submissionId, response, expectedStatus) => {
+    const savedStatus = String(response?.data?.coachStatus || '').trim().toLowerCase();
+    if (savedStatus !== expectedStatus) {
+      throw new Error('The saved document status could not be confirmed. Please refresh and try again.');
+    }
+
+    const updateStudent = (student) => {
+      if (!student || String(student.id) !== String(selectedStudent?.id)) return student;
+
+      const updateEntry = (entry) => (
+        entry && String(entry.submissionId) === String(submissionId)
+          ? {
+              ...entry,
+              status: savedStatus,
+              coachStatus: savedStatus,
+              finalStatus: response.data.status,
+              remarks: response.data.remarks || entry.remarks || '',
+              resubmitted: false,
+            }
+          : entry
+      );
+      const requirements = Object.fromEntries(
+        Object.entries(student.requirements || {}).map(([key, value]) => [
+          key,
+          Array.isArray(value) ? value.map(updateEntry) : updateEntry(value),
+        ])
+      );
+
+      return { ...student, requirements };
+    };
+
+    setStudents((current) => current.map(updateStudent));
+    setSelectedStudent(updateStudent);
+  };
+
+  const refreshRequirementsAfterReview = async (action) => {
+    try {
+      const response = await api.getCoachDocumentRequirements(selectedSport);
+      const data = response?.data || [];
+      setStudents(data);
+      setAssignedSports(Array.isArray(response?.assignedSports) ? response.assignedSports : []);
+      setForwardingStatus(response?.forwardingStatus || {
+        ready: false,
+        forwarded: false,
+        canForward: false,
+      });
+      setSelectedStudent(data.find((student) => student.id === selectedStudent?.id) || null);
+    } catch (error) {
+      console.warn(`${action} was saved, but Coach requirements could not refresh.`, error);
+      notify(
+        'coach-error',
+        `${action} Saved`,
+        'The status was saved, but the document list could not refresh. It will update when the page reloads.'
+      );
     }
   };
 
@@ -624,6 +783,20 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
       const files = entry?.files?.length
         ? entry.files
         : [{ fileName: entry?.fileName || fallbackName, fileType: entry?.fileType || '', fileUrl: getRequirementFileUrl(entry) }];
+      if (simpleDocumentPreview) {
+        if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
+        setViewerSrc(null);
+        setViewerFiles(files);
+        setViewerFileIndex(0);
+        setViewerName(files[0]?.fileName || fallbackName);
+        setViewerType(files[0]?.fileType || entry?.fileType || '');
+        setViewerOpen(true);
+        setViewerNavigationLoading(true);
+        const fileUrl = getRequirementFileUrl(entry, 0);
+        setViewerSrc(fileUrl ? await loadAttachmentBlobUrl(fileUrl) : fallbackSrc);
+        return;
+      }
+
       const fileUrl = getRequirementFileUrl(entry, 0);
       const attachmentUrl = fileUrl
         ? await loadAttachmentBlobUrl(fileUrl)
@@ -635,9 +808,22 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
       setViewerType(files[0]?.fileType || entry?.fileType || '');
       setViewerOpen(true);
     } catch (error) {
+      if (simpleDocumentPreview) setViewerOpen(false);
       notify('coach-error', 'Unable to open file', error.message);
-      return;
+    } finally {
+      if (simpleDocumentPreview) setViewerNavigationLoading(false);
     }
+  };
+
+  const closeRequirementViewer = () => {
+    if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
+    setViewerOpen(false);
+    setViewerSrc(null);
+    setViewerName(null);
+    setViewerType('');
+    setViewerFiles([]);
+    setViewerFileIndex(0);
+    setViewerNavigationLoading(false);
   };
 
   const handleViewerNavigation = async (direction) => {
@@ -698,7 +884,7 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
         <div className="metrics-row">
           <div className="metric-card">
             <h2>{stats.totalStudents}</h2>
-            <p>Total Student</p>
+            <p>Total Athletes</p>
           </div>
           <div className="metric-card">
             <h2>{stats.pendingRequirements}</h2>
@@ -762,26 +948,26 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
             type="button"
             className="forward-screener-btn"
             onClick={handleForwardRequirements}
-            aria-disabled={loading || forwardingInProgress || !selectedSport || !forwardingStatus.ready}
-            disabled={loading || forwardingInProgress || !selectedSport || !forwardingStatus.ready}
-            title={!selectedSport
-              ? 'Select a sport to screen and forward its documents'
-              : forwardingStatus.ready
-                ? `Forward all coach-approved ${selectedSport} documents to the Screener`
-                : `Complete the initial screening of every ${selectedSport} student-athlete before forwarding`}
+            aria-disabled={loading || checkingForwardEligibility || forwardingInProgress}
+            disabled={loading || checkingForwardEligibility || forwardingInProgress}
+            title="Check approval status and forward approved documents to the Screener"
             style={{
-              backgroundColor: selectedSport && forwardingStatus.ready ? 'var(--primary-maroon)' : '#999',
+              backgroundColor: 'var(--primary-maroon)',
               color: '#fff',
               border: 0,
               borderRadius: '8px',
               padding: '10px 16px',
               fontFamily: 'inherit',
               fontWeight: 600,
-              cursor: selectedSport && forwardingStatus.ready && !forwardingInProgress ? 'pointer' : 'not-allowed',
+              cursor: loading || checkingForwardEligibility || forwardingInProgress ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
             }}
           >
-            {forwardingInProgress ? 'Forwarding…' : 'Forward to Screener'}
+            {checkingForwardEligibility
+              ? 'Checking…'
+              : forwardingInProgress
+                ? 'Forwarding…'
+                : 'Forward to Screener'}
           </button>
         </div>
 
@@ -970,6 +1156,7 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
                       <button
                         className="action-btn approve-btn"
                         onClick={() => setApproveTarget(req.entry.submissionId)}
+                        disabled={String(req.entry.coachStatus || req.entry.status || '').trim().toLowerCase() === 'approved'}
                         aria-label={`Approve ${req.title}`}
                       >
                         Approve
@@ -1001,12 +1188,13 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
               const submissionId = approveTarget;
               const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
               const reviewParticipationType = submission?.participationType || 'Intrams';
-              await api.reviewCoachRequirement(submissionId, {
+              const response = await api.reviewCoachRequirement(submissionId, {
                 status: 'approved',
                 feedback: 'Approved by coach',
                 participationType: reviewParticipationType,
                 studentId: selectedStudent?.id
               });
+              applySavedCoachReview(submissionId, response, 'approved');
               await markResubmissionViewed(submissionId, reviewParticipationType);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'approved' }));
               notify('coach-success', 'Requirement Approved', 'Requirement is complete.');
@@ -1016,17 +1204,7 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getCoachDocumentRequirements(selectedSport);
-              const data = response?.data || [];
-              setStudents(data);
-              setAssignedSports(Array.isArray(response?.assignedSports) ? response.assignedSports : []);
-              setForwardingStatus(response?.forwardingStatus || {
-                ready: false,
-                forwarded: false,
-                canForward: false,
-              });
-              const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
-              setSelectedStudent(refreshedSelectedStudent);
+              await refreshRequirementsAfterReview('Approval');
             } catch (err) {
               notify('coach-error', 'Approval Failed', err.message || 'Failed to approve requirement.');
             }
@@ -1041,13 +1219,14 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
               const submissionId = rejectTarget;
               const submission = selectedStudent?.requirements?.documents?.find((entry) => entry.submissionId === submissionId);
               const reviewParticipationType = submission?.participationType || 'Intrams';
-              await api.reviewCoachRequirement(submissionId, {
+              const response = await api.reviewCoachRequirement(submissionId, {
                 status: 'rejected',
                 feedback: payload.reason,
                 remarks: payload.remarks,
                 studentId: selectedStudent?.id,
                 participationType: reviewParticipationType
               });
+              applySavedCoachReview(submissionId, response, 'rejected');
               setRejectTarget(null);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
               const message = `Requirement rejected and retained for re-upload. Reason: ${payload.reason}${payload.remarks ? ' — ' + payload.remarks : ''}`;
@@ -1057,43 +1236,87 @@ export const RequirementScreeningInterface = ({ hideFilters = [], initialSport =
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getCoachDocumentRequirements(selectedSport);
-              const data = response?.data || [];
-              setStudents(data);
-              setAssignedSports(Array.isArray(response?.assignedSports) ? response.assignedSports : []);
-              setForwardingStatus(response?.forwardingStatus || {
-                ready: false,
-                forwarded: false,
-                canForward: false,
-              });
-              const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
-              setSelectedStudent(refreshedSelectedStudent);
+              await refreshRequirementsAfterReview('Rejection');
             } catch (err) {
               notify('coach-error', 'Rejection Failed', err.message || 'Failed to reject requirement.');
             }
           }}
         />
-        <DocumentViewer
-          key={viewerOpen ? 'screener-viewer' : 'closed'}
-          isOpen={viewerOpen}
-          src={viewerSrc}
-          fileName={viewerName}
-          fileType={viewerType}
-          onClose={() => {
-            if (viewerSrc?.startsWith('blob:')) URL.revokeObjectURL(viewerSrc);
-            setViewerOpen(false);
-            setViewerSrc(null);
-            setViewerName(null);
-            setViewerType('');
-            setViewerFiles([]);
-            setViewerFileIndex(0);
-          }}
-          navigationVisible={viewerFiles.length > 1}
-          navigationLabel={`${viewerFileIndex + 1} / ${viewerFiles.length}`}
-          navigationLoading={viewerNavigationLoading}
-          onPrevious={() => handleViewerNavigation(-1)}
-          onNext={() => handleViewerNavigation(1)}
-        />
+        {simpleDocumentPreview ? (
+          viewerOpen && (
+            <div
+              className="coach-document-preview-backdrop"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) closeRequirementViewer();
+              }}
+            >
+              <section
+                className="coach-document-preview"
+                role="dialog"
+                aria-modal="true"
+                aria-label={viewerName || 'Document preview'}
+              >
+                <header className="coach-document-preview-header">
+                  <strong title={viewerName}>{viewerName}</strong>
+                  {viewerFiles.length > 1 && (
+                    <nav className="coach-document-preview-navigation" aria-label="Document navigation">
+                      <button
+                        type="button"
+                        onClick={() => handleViewerNavigation(-1)}
+                        disabled={viewerNavigationLoading}
+                        aria-label="Previous document"
+                      >
+                        Previous
+                      </button>
+                      <span>{viewerFileIndex + 1} / {viewerFiles.length}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleViewerNavigation(1)}
+                        disabled={viewerNavigationLoading}
+                        aria-label="Next document"
+                      >
+                        Next
+                      </button>
+                    </nav>
+                  )}
+                  <button
+                    type="button"
+                    className="coach-document-preview-close"
+                    onClick={closeRequirementViewer}
+                    aria-label="Close document preview"
+                  >
+                    ×
+                  </button>
+                </header>
+                <div className="coach-document-preview-content">
+                  {viewerNavigationLoading ? (
+                    <span>Loading document…</span>
+                  ) : isPdfFile({ fileName: viewerName, fileType: viewerType }) ? (
+                    <iframe src={viewerSrc} title={viewerName || 'PDF document preview'} />
+                  ) : isImageFile({ fileName: viewerName, fileType: viewerType }) ? (
+                    <img src={viewerSrc} alt={viewerName || 'Uploaded document'} />
+                  ) : (
+                    <span>Preview is unavailable for this file type.</span>
+                  )}
+                </div>
+              </section>
+            </div>
+          )
+        ) : (
+          <DocumentViewer
+            key={viewerOpen ? 'screener-viewer' : 'closed'}
+            isOpen={viewerOpen}
+            src={viewerSrc}
+            fileName={viewerName}
+            fileType={viewerType}
+            onClose={closeRequirementViewer}
+            navigationVisible={viewerFiles.length > 1}
+            navigationLabel={`${viewerFileIndex + 1} / ${viewerFiles.length}`}
+            navigationLoading={viewerNavigationLoading}
+            onPrevious={() => handleViewerNavigation(-1)}
+            onNext={() => handleViewerNavigation(1)}
+          />
+        )}
       </div>
     );
   }

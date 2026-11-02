@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
-import DocumentViewer from '../../components/DocumentViewer';
 import TimeInput from '../../components/TimeInput';
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
@@ -109,7 +108,6 @@ const AdminSchedules = () => {
   const [requestPanelOpen, setRequestPanelOpen] = useState(false);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [previewFile, setPreviewFile] = useState({ url: '', name: '', type: '' });
-  const [imagePreviewScale, setImagePreviewScale] = useState(1);
   const APPROVED_KEY = 'gymstatApprovedSchedules';
   const [confirmAction, setConfirmAction] = useState(null);
   const [selectedRejectReason, setSelectedRejectReason] = useState('');
@@ -285,7 +283,6 @@ const AdminSchedules = () => {
   const closeRequestPanel = () => {
     setRequestPanelOpen(false);
     setExpandedRequestId(null);
-    setImagePreviewScale(1);
     if (previewFile.url) {
       URL.revokeObjectURL(previewFile.url);
       setPreviewFile({ url: '', name: '', type: '' });
@@ -447,7 +444,6 @@ const AdminSchedules = () => {
     try {
       const attachment = await getFileUrl(file);
       if (!attachment) return;
-      setImagePreviewScale(1);
       setPreviewFile({
         url: attachment.url,
         name: attachment.name,
@@ -463,17 +459,8 @@ const AdminSchedules = () => {
   const closeAttachment = () => {
     if (previewFile.url) URL.revokeObjectURL(previewFile.url);
     setPreviewFile({ url: '', name: '', type: '' });
-    setImagePreviewScale(1);
   };
   const closeAttachmentEvent = useEffectEvent(closeAttachment);
-
-  const zoomImagePreview = (direction) => {
-    setImagePreviewScale((scale) => Math.min(3, Math.max(0.5, +(scale + direction * 0.25).toFixed(2))));
-  };
-
-  const toggleImagePreviewZoom = () => {
-    setImagePreviewScale((scale) => scale <= 1 ? 2 : 1);
-  };
 
   const normalizeScheduleRequest = (request) => {
     if (!request) return request;
@@ -1837,62 +1824,46 @@ const AdminSchedules = () => {
         />
       )}
 
-      {/* Keep image previews limited to schedule-request attachments. */}
-      {previewFile.url && previewFile.type.startsWith('image/') && (
+      {previewFile.url && (
         <div
-          className="schedule-image-preview-overlay"
+          className="schedule-document-preview-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label={`Image preview: ${previewFile.name}`}
+          aria-label={`Attachment preview: ${previewFile.name}`}
           onClick={closeAttachment}
-          onWheel={(event) => {
-            if (!event.ctrlKey || event.deltaY === 0) return;
-            event.preventDefault();
-            zoomImagePreview(event.deltaY < 0 ? 1 : -1);
-          }}
         >
-          <button
-            type="button"
-            className="schedule-image-preview-close"
-            onClick={closeAttachment}
-            aria-label="Close image preview"
+          <section
+            className="schedule-document-preview"
+            onClick={(event) => event.stopPropagation()}
           >
-            ×
-          </button>
-          <img
-            className="schedule-image-preview"
-            src={previewFile.url}
-            alt={previewFile.name || 'Schedule request attachment'}
-            style={{
-              width: `${94 * imagePreviewScale}vw`,
-              height: `${92 * imagePreviewScale}vh`,
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label="Zoom image"
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleImagePreviewZoom();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                toggleImagePreviewZoom();
-              }
-            }}
-          />
+            <header className="schedule-document-preview-header">
+              <strong title={previewFile.name}>{previewFile.name || 'Schedule request attachment'}</strong>
+              <button
+                type="button"
+                className="schedule-document-preview-close"
+                onClick={closeAttachment}
+                aria-label="Close attachment preview"
+              >
+                ×
+              </button>
+            </header>
+            <div className="schedule-document-preview-content">
+              {previewFile.type === 'application/pdf' ? (
+                <iframe
+                  src={previewFile.url}
+                  title={previewFile.name || 'Schedule request PDF'}
+                />
+              ) : previewFile.type.startsWith('image/') ? (
+                <img
+                  src={previewFile.url}
+                  alt={previewFile.name || 'Schedule request attachment'}
+                />
+              ) : (
+                <span>Preview is unavailable for this file type.</span>
+              )}
+            </div>
+          </section>
         </div>
-      )}
-
-      {/* PDF attachments remain in the embedded document viewer. */}
-      {previewFile.url && previewFile.type === 'application/pdf' && (
-        <DocumentViewer
-          isOpen
-          src={previewFile.url}
-          fileName={previewFile.name}
-          fileType={previewFile.type}
-          onClose={closeAttachment}
-        />
       )}
 
       {/* Notification Toast System */}
