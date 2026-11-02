@@ -1045,8 +1045,9 @@ export const getStudentStats = async () => {
 };
 
 // Coach document screening endpoints use the existing student requirement records.
-export const getCoachDocumentRequirements = async () => {
-  return apiRequest('/coach/requirements', {
+export const getCoachDocumentRequirements = async (sport) => {
+  const query = sport ? `?sport=${encodeURIComponent(sport)}` : '';
+  return apiRequest(`/coach/requirements${query}`, {
     method: 'GET',
   });
 };
@@ -1074,8 +1075,11 @@ export const reviewCoachRequirement = async (submissionId, reviewData) => {
   });
 };
 
-export const forwardCoachRequirements = async () => (
-  apiRequest('/coach/requirements/forward', { method: 'POST' })
+export const forwardCoachRequirements = async (sport) => (
+  apiRequest('/coach/requirements/forward', {
+    method: 'POST',
+    body: JSON.stringify({ sport }),
+  })
 );
 
 export const markCoachRequirementViewed = async (submissionId, participationType = 'Intrams') => {
@@ -1085,10 +1089,12 @@ export const markCoachRequirementViewed = async (submissionId, participationType
   });
 };
 
-export const getScreenerRequirements = async (participationType) => {
-  const query = participationType
-    ? `?participationType=${encodeURIComponent(participationType)}`
-    : '';
+export const getScreenerRequirements = async (participationType, sport) => {
+  const params = new URLSearchParams();
+  if (participationType) params.set('participationType', participationType);
+  if (sport) params.set('sport', sport);
+  const serializedParams = params.toString();
+  const query = serializedParams ? `?${serializedParams}` : '';
   return apiRequest(`/screener/requirements${query}`, { method: 'GET' });
 };
 
@@ -1099,10 +1105,10 @@ export const reviewScreenerRequirement = async (submissionId, reviewData) => {
   });
 };
 
-export const markScreenerRequirementViewed = async (submissionId, participationType = 'Intrams') => {
+export const markScreenerRequirementViewed = async (submissionId, participationType = 'Intrams', sport = '') => {
   return apiRequest(`/screener/requirements/${encodeURIComponent(submissionId)}/viewed`, {
     method: 'PUT',
-    body: JSON.stringify({ participationType }),
+    body: JSON.stringify({ participationType, sport }),
   });
 };
 

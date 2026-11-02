@@ -84,6 +84,7 @@ const ScreenerPage = () => {
   const [assignedDepartment, setAssignedDepartment] = useState('');
   const [departmentUnassigned, setDepartmentUnassigned] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pendingSportReload, setPendingSportReload] = useState(false);
   const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
@@ -100,6 +101,8 @@ const ScreenerPage = () => {
   const { notify } = useNotifications();
   const hasNotifiedLoadErrorRef = useRef(false);
   const requirementsRequestInProgressRef = useRef(false);
+  const activeRequestSportRef = useRef('');
+  const pendingSportReloadRef = useRef(false);
   const requirementsPollingStoppedRef = useRef(false);
 
   useEffect(() => {
@@ -117,6 +120,9 @@ const ScreenerPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sportFilter, setSportFilter] = useState('All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
+  const selectedSport = sportFilter === 'All' ? '' : sportFilter;
+  const selectedSportRef = useRef(selectedSport);
+  selectedSportRef.current = selectedSport;
   const sportFilterOptions = Array.from(new Map(
     [...SPORT_OPTIONS, ...students.flatMap((student) => Array.isArray(student.sports) ? student.sports : [])]
       .filter((sport) => typeof sport === 'string' && sport.trim())
@@ -125,15 +131,22 @@ const ScreenerPage = () => {
   const requirementColumns = buildRequirementColumns(publishedRequirements, sportFilter);
 
   const loadRequirements = async (silent = false) => {
-    if (requirementsRequestInProgressRef.current || requirementsPollingStoppedRef.current) return;
+    if (requirementsPollingStoppedRef.current) return;
+    if (requirementsRequestInProgressRef.current) {
+      if (activeRequestSportRef.current !== selectedSport) pendingSportReloadRef.current = true;
+      return;
+    }
     requirementsRequestInProgressRef.current = true;
+    activeRequestSportRef.current = selectedSport;
+    const requestedSport = selectedSport;
 
     try {
       if (!silent && !students.length) setLoading(true);
       const [response, publishedRequirementsResponse] = await Promise.all([
-        api.getScreenerRequirements(),
+        api.getScreenerRequirements(undefined, requestedSport),
         api.getPublishedRequirements()
       ]);
+      if (requestedSport !== selectedSportRef.current) return;
       const data = response?.data || [];
       // Ensure data is always an array to avoid rendering crashes
       const safeData = Array.isArray(data) ? data : [];
@@ -170,6 +183,7 @@ const ScreenerPage = () => {
       setDepartmentUnassigned(false);
       hasNotifiedLoadErrorRef.current = false;
     } catch (error) {
+      if (requestedSport !== selectedSportRef.current) return;
       console.error('Failed to load screener requirements', error);
       if (isScreener && error?.status === 403
         && /department is not configured/i.test(error?.message || '')) {
@@ -203,16 +217,31 @@ const ScreenerPage = () => {
       }
     } finally {
       requirementsRequestInProgressRef.current = false;
+      activeRequestSportRef.current = '';
       if (!silent) setLoading(false);
+      if (pendingSportReloadRef.current) {
+        pendingSportReloadRef.current = false;
+        setPendingSportReload(true);
+      }
     }
   };
   const loadRequirementsEvent = useEffectEvent(loadRequirements);
+
+  useEffect(() => {
+    if (!pendingSportReload) return;
+    setPendingSportReload(false);
+    loadRequirementsEvent(true);
+  }, [pendingSportReload]);
 
   const markResubmissionViewed = async (submissionId, participationType = 'Intrams') => {
     if (!submissionId) return;
 
     try {
-      await api.markScreenerRequirementViewed(submissionId, participationType);
+      await api.markScreenerRequirementViewed(
+        submissionId,
+        participationType,
+        sportFilter === 'All' ? '' : sportFilter
+      );
       setStudents((current) => current.map((student) => {
         const updatedRequirements = { ...student.requirements };
         Object.keys(updatedRequirements).forEach((key) => {
@@ -254,8 +283,12 @@ const ScreenerPage = () => {
 
   useEffect(() => {
     if (!authReady) return;
+    setStudents([]);
+    setSelectedStudent(null);
+    setCurrentView('list');
+    setLoading(true);
     loadRequirementsEvent();
-  }, [authReady]);
+  }, [authReady, sportFilter]);
 
   useEffect(() => {
     if (!authReady) return undefined;
@@ -800,7 +833,8 @@ const ScreenerPage = () => {
                 status: 'approved',
                 feedback: 'Approved by screener',
                 participationType: reviewParticipationType,
-                studentId: selectedStudent?.id
+                studentId: selectedStudent?.id,
+                sport: sportFilter === 'All' ? '' : sportFilter
               });
               await markResubmissionViewed(submissionId, reviewParticipationType);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'approved' }));
@@ -812,7 +846,10 @@ const ScreenerPage = () => {
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getScreenerRequirements();
+              const response = await api.getScreenerRequirements(
+                undefined,
+                sportFilter === 'All' ? '' : sportFilter
+              );
               const data = response?.data || [];
               setStudents(data);
               const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
@@ -835,7 +872,8 @@ const ScreenerPage = () => {
                 feedback: payload.reason,
                 remarks: payload.remarks,
                 studentId: selectedStudent?.id,
-                participationType: submission?.participationType || 'Intrams'
+                participationType: submission?.participationType || 'Intrams',
+                sport: sportFilter === 'All' ? '' : sportFilter
               });
               setRejectTarget(null);
               setRequirementStatus((s) => ({ ...s, [submissionId]: 'removed' }));
@@ -847,7 +885,10 @@ const ScreenerPage = () => {
               } catch (error) {
                 console.warn('Unable to broadcast requirement update', error);
               }
-              const response = await api.getScreenerRequirements();
+              const response = await api.getScreenerRequirements(
+                undefined,
+                sportFilter === 'All' ? '' : sportFilter
+              );
               const data = response?.data || [];
               setStudents(data);
               const refreshedSelectedStudent = data.find((student) => student.id === selectedStudent?.id) || null;
