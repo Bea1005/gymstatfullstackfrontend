@@ -17,11 +17,11 @@ export default function NotificationProvider({ children }) {
     return () => timers.forEach((timer) => clearTimeout(timer));
   }, [notifications]);
 
-  const notify = (type, title, message, duration = 3000) => {
+  const notify = (type, title, message, duration) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setNotifications((current) => [
       ...current,
-      { id, type, title, message, duration },
+      { id, type, title, message, duration: duration ?? (type.startsWith('coach-') ? 5000 : 3000) },
     ]);
   };
 
@@ -30,7 +30,7 @@ export default function NotificationProvider({ children }) {
   return (
     <NotificationContext.Provider value={value}>
       {children}
-      <div className="notification-container">
+      <div className={`notification-container${notifications.some((notification) => notification.type.startsWith('coach-')) ? ' notification-container-coach' : ''}`}>
         {notifications.map((notification) => (
           <div
             key={notification.id}

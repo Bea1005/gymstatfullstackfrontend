@@ -439,6 +439,10 @@
   margin-bottom: 0;
 }
 
+.strasuc-form-page.coach-pdf-export {
+  box-shadow: none;
+}
+
 .coach-pdf-export-root {
   position: absolute;
   top: 0;

@@ -45,6 +45,35 @@
   background: linear-gradient(135deg, #d9534f, #c63131);
 }
 
+.notification-coach-success,
+.notification-coach-error {
+  border: 1px solid #d5bd79;
+  border-left-width: 5px;
+  overflow-wrap: anywhere;
+}
+
+.notification-coach-success {
+  background: #fffdf7;
+  border-left-color: #2d9f6f;
+  color: #4a0a16;
+}
+
+.notification-coach-error {
+  background: #fdecea;
+  border-color: #f2b4b4;
+  border-left-color: #c63131;
+  color: #7a1515;
+}
+
+.notification-coach-success .notification-message,
+.notification-coach-error .notification-message {
+  color: inherit;
+}
+
+.notification-container-coach {
+  z-index: 10001;
+}
+
 .notification-warning {
   background: linear-gradient(135deg, #f0ad4e, #e0851c);
 }

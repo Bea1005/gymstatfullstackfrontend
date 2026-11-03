@@ -11,7 +11,7 @@ import * as api from '../../services/api';
 import { YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { REGISTRATION_SPORT_EVENT_OPTIONS } from '../../constants/registrationCategories';
 import {
-  areRequirementsComplete,
+  areDisplayedRequirementsComplete,
   buildRequirementColumns,
   getRequirementColumnEntry,
   getSportScopedRequirements
@@ -519,9 +519,6 @@ const ScreenerPage = () => {
             <span className="resubmitted-table-label">Resubmitted</span>
           </div>
         )}
-        {entry?.coachStatus === 'approved' && (
-          <span className="badge badge-completed">Coach-Approved</span>
-        )}
         {renderStatusBadge(entry?.status)}
       </div>
     </td>
@@ -721,7 +718,9 @@ const ScreenerPage = () => {
                       ))}
                       <td>
                         {renderStatusBadge(
-                          areRequirementsComplete(displayedRequirements) ? 'Completed' : 'Incomplete'
+                          areDisplayedRequirementsComplete(displayedRequirements, requirementColumns)
+                            ? 'Completed'
+                            : 'Incomplete'
                         )}
                       </td>
                     </tr>

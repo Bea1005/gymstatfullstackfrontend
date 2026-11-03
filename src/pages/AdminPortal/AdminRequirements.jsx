@@ -311,6 +311,18 @@ const AdminRequirements = () => {
         if (response?.success === false) {
           throw new Error(response.message || 'Failed to update custom requirement.');
         }
+        const savedRequirement = response?.data || requirementData;
+        setCustomRequirements((current) => current.map((requirement) => (
+          String(requirement._id) === String(editingCustomRequirement._id)
+            ? {
+                ...requirement,
+                ...savedRequirement,
+                id: requirement._id,
+                isArchived: savedRequirement.status === 'archived' || savedRequirement.isActive === false
+              }
+            : requirement
+        )));
+        showToast(`Requirement "${title}" updated.`, 'success');
       } else {
         const createResponse = await createRequirement(requirementData);
         if (!createResponse?.success) {
@@ -896,17 +908,19 @@ const AdminRequirements = () => {
                     )}
                     <button
                       type="button"
-                      className="requirement-action-btn requirement-action-btn--secondary"
+                      className="requirement-action-btn requirement-action-btn--secondary requirement-box-action requirement-box-action--edit"
                       onClick={() => handleEditCustomRequirement(requirement)}
                     >
+                      <Icon name="pencil" size={16} />
                       Edit
                     </button>
                     {!requirement.isArchived && (
                       <button
                         type="button"
-                        className="requirement-action-btn requirement-action-btn--danger"
+                        className="requirement-action-btn requirement-action-btn--danger requirement-box-action requirement-box-action--archive"
                         onClick={() => setCustomRequirementToArchive(requirement)}
                       >
+                        <Icon name="archive" size={16} />
                         Archive
                       </button>
                     )}

@@ -1103,6 +1103,23 @@
 .requirement-box-content p  { font-size: 12px; color: #888; margin-bottom: 8px; }
 .requirement-box-meta { display: flex; gap: 12px; font-size: 11px; color: #999; flex-wrap: wrap; }
 .meta-date { display: flex; align-items: center; gap: 3px; }
+#admin-requirements-student-panel .requirement-entry-actions .requirement-box-action {
+  gap: 7px;
+  line-height: 1.2;
+  color: #6b0000;
+  background: #fff;
+  border: 1px solid #6b0000;
+}
+#admin-requirements-student-panel .requirement-entry-actions .requirement-box-action:hover,
+#admin-requirements-student-panel .requirement-entry-actions .requirement-box-action:focus-visible {
+  background: #fff8e1;
+  border-color: #9b7412;
+  color: #6b0000;
+}
+#admin-requirements-student-panel .requirement-entry-actions .requirement-box-action--archive {
+  background: #fff8e1;
+  border-color: #9b7412;
+}
 .admin-requirements-archived-panel .requirements-boxes-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(350px, 100%), 1fr));
 }

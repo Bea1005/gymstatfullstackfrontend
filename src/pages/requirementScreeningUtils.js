@@ -112,12 +112,14 @@ export const getSportScopedRequirements = (requirements, sport) => {
   return { ...requirements, ...scopedRequirements };
 };
 
-export const areRequirementsComplete = (requirements) => {
-  const requiredTypes = ['med', 'psa', 'insurance', 'profile', 'consent'];
-  const requiredTypesApproved = requiredTypes.every((type) => requirements?.[type]?.status === 'approved');
-  const additionalDocumentsApproved = (Array.isArray(requirements?.documents) ? requirements.documents : [])
-    .filter((document) => String(document?.requirementType || '').toLowerCase() !== 'cor')
-    .every((document) => document?.status === 'approved');
+export const areDisplayedRequirementsComplete = (requirements, columns) => {
+  const displayedDocuments = (Array.isArray(columns) ? columns : [])
+    .map((column) => getRequirementColumnEntry(requirements, column))
+    .filter(Boolean);
 
-  return requiredTypesApproved && additionalDocumentsApproved;
+  return displayedDocuments.length > 0 && displayedDocuments.every((document) => (
+    document.coachStatus === 'approved'
+    && document.hasUpload === true
+    && document.status === 'approved'
+  ));
 };
