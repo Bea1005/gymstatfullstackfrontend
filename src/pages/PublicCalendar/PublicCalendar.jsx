@@ -4,6 +4,7 @@ import NotificationToast from '../../components/NotificationToast';
 import TimeInput from '../../components/TimeInput';
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
+import PublicCalendarAuth from './PublicCalendarAuth';
 import { TIMES } from '../../constants/scheduleTimes';
 import {
   getCalendarDateString,
@@ -122,6 +123,11 @@ export default function PublicCalendar() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitInProgressRef = useRef(false);
   const [fileLoadPending, setFileLoadPending] = useState(false);
+  const [calendarUser, setCalendarUser] = useState(null);
+  const [calendarNeedsProfile, setCalendarNeedsProfile] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authModal, setAuthModal] = useState(false);
+  const pendingCalendarDateRef = useRef('');
 
   // Modal
   const [modal, setModal] = useState(false);
@@ -347,9 +353,8 @@ export default function PublicCalendar() {
     else changeMonth(year, month + 1);
   };
 
-  /* ── open modal ── */
-  const openModal = (d) => {
-    const ds = toStr(d);
+  /* ── open request modal ── */
+  const openRequestModal = (ds, user = calendarUser) => {
     if (isPastScheduleDate(ds, now) || isDateFullyOccupied(ds, approvedSchedules)) return;
     const validStartTimes = getAvailableStartTimes(ds, ds, '12:00 PM');
     const startTime = validStartTimes[0] || '08:00 AM';
@@ -360,9 +365,9 @@ export default function PublicCalendar() {
     setClickedDate(ds);
     setForm({
       eventName: '',
-      requesterName: '',
-      requesterEmail: '',
-      requesterPhone: '',
+      requesterName: user?.fullname || '',
+      requesterEmail: user?.email || '',
+      requesterPhone: user?.contactNumber || '',
       purpose: '',
       details: '',
       startDate: ds,
@@ -376,6 +381,64 @@ export default function PublicCalendar() {
     setErrors({});
     setDone(false);
     setModal(true);
+  };
+  const openRequestModalRef = useRef(openRequestModal);
+  openRequestModalRef.current = openRequestModal;
+
+  const openModal = (d) => {
+    const ds = toStr(d);
+    if (isPastScheduleDate(ds, now) || isDateFullyOccupied(ds, approvedSchedules)) return;
+    setClickedDate(ds);
+    if (!authChecked) {
+      pendingCalendarDateRef.current = ds;
+      return;
+    }
+    if (!calendarUser || calendarNeedsProfile) {
+      setAuthModal(true);
+      return;
+    }
+    openRequestModal(ds);
+  };
+
+  useEffect(() => {
+    let active = true;
+    api.getCalendarSession()
+      .then((result) => {
+        if (!active) return;
+        const user = result?.user || null;
+        setCalendarUser(user);
+        setCalendarNeedsProfile(Boolean(result?.needsProfileCompletion));
+        if (user) api.storeClientSessionMetadata(user);
+        setAuthChecked(true);
+        const pendingDate = pendingCalendarDateRef.current;
+        if (pendingDate) {
+          pendingCalendarDateRef.current = '';
+          if (user && !result?.needsProfileCompletion) {
+            openRequestModalRef.current?.(pendingDate, user);
+          } else {
+            setAuthModal(true);
+          }
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        setAuthChecked(true);
+        setNotification({ message: error.message || 'Unable to verify your sign-in. Please log in to continue.', type: 'error' });
+        const pendingDate = pendingCalendarDateRef.current;
+        if (pendingDate) {
+          pendingCalendarDateRef.current = '';
+          setAuthModal(true);
+        }
+      });
+    return () => { active = false; };
+  }, []);
+
+  const handleCalendarAuthenticated = (user) => {
+    setCalendarUser(user);
+    setCalendarNeedsProfile(false);
+    setAuthChecked(true);
+    setAuthModal(false);
+    if (clickedDate) openRequestModal(clickedDate, user);
   };
 
   /* ── form ── */
@@ -571,7 +634,7 @@ export default function PublicCalendar() {
       e.requesterEmail = 'Please enter a valid email address.';
 
     const cleanedPhone = form.requesterPhone.replace(/[\s()-]/g, '');
-    if (form.requesterPhone && !cleanedPhone.match(/^[0-9]{7,15}$/))
+    if (form.requesterPhone && !cleanedPhone.match(/^\+?[0-9]{7,15}$/))
       e.requesterPhone = 'Please enter a valid phone number (7-15 digits).';
 
     if (form.startDate && form.endDate && startMinutes !== null && endMinutes !== null) {
@@ -595,6 +658,12 @@ export default function PublicCalendar() {
   const submit = async (e) => {
     e.preventDefault();
     if (submitInProgressRef.current) return;
+    if (!calendarUser) {
+      setModal(false);
+      setAuthModal(true);
+      setNotification({ message: 'Please log in before submitting a schedule request.', type: 'error' });
+      return;
+    }
 
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
@@ -625,7 +694,6 @@ export default function PublicCalendar() {
         file: requestFile,
       };
 
-      // Use the API function from api.js (PUBLIC endpoint - no auth needed)
       const response = await api.createScheduleRequest(requestData);
 
       const newRequest = {
@@ -653,6 +721,17 @@ export default function PublicCalendar() {
       }, 3000);
     } catch (error) {
       console.error('❌ Request submission failed:', error);
+      if (error?.status === 401 || (
+        error?.status === 403
+        && /authenticated account|email verification is required|verify your email/i.test(error?.message || '')
+      )) {
+        setCalendarUser(null);
+        setCalendarNeedsProfile(false);
+        setModal(false);
+        setAuthModal(true);
+        setNotification({ message: 'Your sign-in has expired. Log in again to continue this request.', type: 'error' });
+        return;
+      }
       const msg = error?.message || String(error) || 'Failed to submit request. Please try again.';
       setNotification({ message: msg, type: 'error' });
     } finally {
@@ -838,9 +917,8 @@ export default function PublicCalendar() {
                     <input
                       type="text"
                       className={`pcm-input${errors.requesterName ? ' pcm-input--err' : ''}`}
-                      placeholder="Your name"
+                      readOnly
                       value={form.requesterName}
-                      onChange={e => set('requesterName', e.target.value)}
                     />
                     {errors.requesterName && <span className="pcm-err">{errors.requesterName}</span>}
                   </div>
@@ -849,9 +927,8 @@ export default function PublicCalendar() {
                     <input
                       type="email"
                       className={`pcm-input${errors.requesterEmail ? ' pcm-input--err' : ''}`}
-                      placeholder="you@example.com"
+                      readOnly
                       value={form.requesterEmail}
-                      onChange={e => set('requesterEmail', e.target.value)}
                     />
                     {errors.requesterEmail && <span className="pcm-err">{errors.requesterEmail}</span>}
                     <span className="pcm-client-type" aria-live="polite">
@@ -866,9 +943,8 @@ export default function PublicCalendar() {
                     <input
                       type="tel"
                       className={`pcm-input${errors.requesterPhone ? ' pcm-input--err' : ''}`}
-                      placeholder="e.g., 0917 123 4567"
+                      readOnly
                       value={form.requesterPhone}
-                      onChange={e => set('requesterPhone', e.target.value)}
                     />
                     {errors.requesterPhone && <span className="pcm-err">{errors.requesterPhone}</span>}
                   </div>
@@ -1027,6 +1103,16 @@ export default function PublicCalendar() {
             )}
           </div>
         </div>
+      )}
+      {authModal && (
+        <PublicCalendarAuth
+          selectedDate={clickedDate}
+          initialUser={calendarUser}
+          needsProfileCompletion={calendarNeedsProfile}
+          onClose={() => setAuthModal(false)}
+          onAuthenticated={handleCalendarAuthenticated}
+          onNotify={(type, message) => setNotification({ message, type })}
+        />
       )}
       <NotificationToast
         message={notification.message}

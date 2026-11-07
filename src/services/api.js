@@ -2,7 +2,7 @@
 // Development uses the Vite proxy; production uses Vercel's same-origin API rewrite.
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/+$/, '');
 const API_URL = import.meta.env.PROD ? '/api' : configuredApiUrl;
-const AUTH_ROLES = new Set(['student', 'coach', 'admin', 'screener']);
+const AUTH_ROLES = new Set(['student', 'coach', 'admin', 'screener', 'calendar']);
 const csrfTokenMemory = new Map();
 let csrfRecoveryPromise = null;
 const configuredTimeout = Number(import.meta.env.VITE_API_TIMEOUT_MS);
@@ -42,7 +42,16 @@ const getPortalRole = () => {
   }
 
   const routeRole = window.location?.pathname.match(/^\/(admin|student|coach|screener)(?:\/|$)/)?.[1];
-  return AUTH_ROLES.has(routeRole) ? routeRole : '';
+  if (AUTH_ROLES.has(routeRole)) return routeRole;
+  if (window.location?.pathname === '/calendar') {
+    try {
+      const localRole = String(window.localStorage.getItem('role') || '').trim().toLowerCase();
+      if (AUTH_ROLES.has(localRole)) return localRole;
+    } catch (error) {
+      console.warn('[AUTH] Unable to read the saved calendar session context', { name: error?.name });
+    }
+  }
+  return '';
 };
 
 const fetchWithTimeout = async (url, options = {}) => {
@@ -164,6 +173,7 @@ let sessionExpiryRedirectStarted = false;
 
 const clearExpiredSessionAndRedirect = () => {
   clearClientSession();
+  if (typeof window !== 'undefined' && window.location.pathname === '/calendar') return;
   if (typeof window !== 'undefined'
     && window.location.pathname !== '/login'
     && !sessionExpiryRedirectStarted) {
@@ -266,11 +276,16 @@ const PUBLIC_GET_ENDPOINTS = [
 const isPublicEndpoint = (endpoint, method = 'GET') => {
   const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
-  if (normalizedEndpoint === '/schedule-requests' && method === 'POST') {
+  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/login/verify' || normalizedEndpoint === '/login/resend' || normalizedEndpoint === '/register' || normalizedEndpoint === '/register/verify' || normalizedEndpoint === '/register/resend' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
     return true;
   }
-
-  if ((normalizedEndpoint === '/forgot-password' || normalizedEndpoint.startsWith('/forgot-password/') || normalizedEndpoint === '/login' || normalizedEndpoint === '/login/verify' || normalizedEndpoint === '/login/resend' || normalizedEndpoint === '/register' || normalizedEndpoint === '/register/verify' || normalizedEndpoint === '/register/resend' || normalizedEndpoint === '/refresh' || normalizedEndpoint === '/logout') && method === 'POST') {
+  if (method === 'POST' && [
+    '/calendar-auth/register',
+    '/calendar-auth/register/verify',
+    '/calendar-auth/register/resend',
+    '/calendar-auth/login',
+    '/calendar-auth/google',
+  ].includes(normalizedEndpoint)) {
     return true;
   }
 
@@ -330,7 +345,8 @@ const apiRequest = async (endpoint, options = {}) => {
     });
 
     const canRefreshAfterUnauthorized = isSafeMethod(requestOptions.method)
-      || isAdminRequirementMutation(endpoint, requestOptions.method);
+      || isAdminRequirementMutation(endpoint, requestOptions.method)
+      || (endpoint === '/schedule-requests' && requestOptions.method === 'POST');
     if (response.status === 401 && !isPublic && !requestOptions.skipRefresh && canRefreshAfterUnauthorized) {
       console.warn('[AUTH] Protected request returned 401', { endpoint });
       try {
@@ -480,6 +496,67 @@ export const resendRegistrationOtp = async (email) => {
     body: JSON.stringify({ email }),
   });
 };
+
+export const registerCalendarAccount = async (userData) => apiRequest('/calendar-auth/register', {
+  method: 'POST',
+  body: JSON.stringify(userData),
+});
+
+export const verifyCalendarRegistration = async (email, otp) => apiRequest('/calendar-auth/register/verify', {
+  method: 'POST',
+  body: JSON.stringify({ email, otp }),
+}).then((result) => {
+  if (result?.success && result.user) storeClientSessionMetadata(result.user);
+  return result;
+});
+
+export const resendCalendarVerification = async (email) => apiRequest('/calendar-auth/register/resend', {
+  method: 'POST',
+  body: JSON.stringify({ email }),
+});
+
+export const loginCalendarAccount = async (email, password) => apiRequest('/calendar-auth/login', {
+  method: 'POST',
+  body: JSON.stringify({ email, password }),
+}).then((result) => {
+  if (result?.success && result.user) storeClientSessionMetadata(result.user);
+  return result;
+});
+
+export const loginCalendarWithGoogle = async (credential) => apiRequest('/calendar-auth/google', {
+  method: 'POST',
+  body: JSON.stringify({ credential }),
+}).then((result) => {
+  if (result?.success && result.user) storeClientSessionMetadata(result.user);
+  return result;
+});
+
+export const getCalendarSession = async () => {
+  const role = getPortalRole();
+  const headers = role ? { 'X-Portal-Role': role } : {};
+  const response = await fetchWithTimeout(`${API_URL}/calendar-auth/session`, {
+    method: 'GET',
+    credentials: 'include',
+    cache: 'no-store',
+    headers,
+  });
+  if (response.status === 401 || response.status === 403) return null;
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.success) {
+    throw createApiError(result.message || 'Unable to verify your calendar session.', 'CALENDAR_SESSION_FAILED', {
+      status: response.status,
+    });
+  }
+  return result;
+};
+
+export const completeCalendarProfile = async (fullname, phoneNumber) => apiRequest('/calendar-auth/profile', {
+  method: 'POST',
+  body: JSON.stringify({ fullname, phoneNumber }),
+}).then((result) => {
+  if (result?.success && result.user) storeClientSessionMetadata(result.user);
+  return result;
+});
 
 export const verifyLoginOtp = async (id, otp) => {
   return apiRequest('/login/verify', {
@@ -1268,7 +1345,7 @@ export const deleteCoachAthlete = async (athleteId) => {
 
 // ========== SCHEDULE REQUEST ENDPOINTS ==========
 
-// Create a new schedule request (PUBLIC - no auth required)
+// Create a new schedule request (authenticated calendar users only)
 export const createScheduleRequest = async (requestData) => {
   const formData = new FormData();
   const scalarFields = [
