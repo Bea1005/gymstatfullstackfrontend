@@ -389,8 +389,12 @@ const apiRequest = async (endpoint, options = {}) => {
       const serverMessage = typeof data === 'object' && data !== null
         ? data.message || data.error
         : '';
+      const isStudentIdAvailabilityCheck = endpoint === '/register/check-id'
+        || endpoint.startsWith('/register/check-id?');
       throw createApiError(serverMessage || (response.status >= 500
-        ? 'The service is temporarily unavailable. Please try again.'
+        ? isStudentIdAvailabilityCheck
+          ? 'Student ID verification is temporarily unavailable. Please try again.'
+          : 'The service is temporarily unavailable. Please try again.'
         : `Request failed (${response.status}). Please check your information and try again.`), 'API_ERROR', {
         status: response.status,
         responseData: typeof data === 'object' && data !== null ? data : undefined,

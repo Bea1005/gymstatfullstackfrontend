@@ -29,9 +29,13 @@ const DUMMY_EMAIL_PREFIXES = new Set([
   "test", "dummy", "demo", "sample", "placeholder", "guest", "fake", "invalid",
   "noreply", "no-reply", "asdf", "qwerty", "lorem", "ipsum"
 ]);
-const GMAIL_EMAIL_PATTERN = /^[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?@gmail\.com$/i;
+const REGISTRATION_EMAIL_PATTERN = new RegExp(
+  "^(?=.{1,254}$)(?=.{1,64}@)[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$"
+);
 const STUDENT_ID_PATTERN = /^23[BGST]\d{4}$/;
-const DUPLICATE_STUDENT_ID_MESSAGE = "This ID number has already been used. Please use a different ID number.";
+const INVALID_STUDENT_ID_MESSAGE = "Invalid Student ID format.";
+const EMPTY_STUDENT_ID_MESSAGE = "Please enter your Student ID.";
+const DUPLICATE_STUDENT_ID_MESSAGE = "This Student ID is already registered.";
 
 const normalizeNamePart = (value) => String(value || "").trim().replace(/\s+/g, " ");
 const validateNamePart = (value, label, { required = false, maxLength = 100 } = {}) => {
@@ -76,42 +80,23 @@ const validateEmailAddress = (value) => {
   const email = String(value || "").trim();
 
   if (!email) {
-    return "Please enter your Gmail address.";
+    return "Please enter your email address.";
   }
 
-  if (email.includes(" ")) {
-    return "Email address cannot contain spaces.";
+  if (!REGISTRATION_EMAIL_PATTERN.test(email)) {
+    return "Please enter a valid email address.";
   }
 
-  const atCount = (email.match(/@/g) || []).length;
-  if (atCount !== 1) {
-    return "Please enter a valid Gmail address in the format name@gmail.com.";
-  }
-
-  const [localPart, domain] = email.split("@");
-  if (!localPart || !domain) {
-    return "Please enter a valid Gmail address in the format name@gmail.com.";
-  }
-
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9._%+-]*[A-Za-z0-9])?$/.test(localPart)) {
-    return "The Gmail username is invalid. Use letters, numbers, periods, underscores, hyphens, or plus signs only.";
-  }
-
-  if (domain.toLowerCase() !== "gmail.com") {
-    return "Use a valid Gmail address ending in @gmail.com. Other extensions such as @gmail.com.ph are not accepted.";
-  }
-
-  if (!GMAIL_EMAIL_PATTERN.test(email)) {
-    return "Please enter a valid Gmail address in the format name@gmail.com.";
-  }
-
+  const [localPart, domain] = email.toLowerCase().split("@");
   if (DISPOSABLE_EMAIL_DOMAINS.has(domain.toLowerCase())) {
-    return "Please use a real Gmail address that you regularly access.";
+    return "Please use an email address that you regularly access.";
   }
 
-  const normalizedLocalPart = localPart.replace(/[._+-]+/g, "").toLowerCase();
-  if (normalizedLocalPart && [...DUMMY_EMAIL_PREFIXES].some((prefix) => normalizedLocalPart === prefix || normalizedLocalPart.startsWith(prefix))) {
-    return "Please use a real Gmail address that you regularly access.";
+  if (domain !== "marsu.edu.ph") {
+    const normalizedLocalPart = localPart.replace(/[._+-]+/g, "");
+    if (normalizedLocalPart && [...DUMMY_EMAIL_PREFIXES].some((prefix) => normalizedLocalPart === prefix || normalizedLocalPart.startsWith(prefix))) {
+      return "Please use an email address that you regularly access.";
+    }
   }
 
   return null;
@@ -121,7 +106,7 @@ const validateRegistrationId = (value) => {
   const trimmedValue = String(value || "").trim();
 
   if (!trimmedValue) {
-    return "Please enter your ID number.";
+    return EMPTY_STUDENT_ID_MESSAGE;
   }
 
   if (/^\d{4}-\d{4}$/.test(trimmedValue)) {
@@ -129,7 +114,7 @@ const validateRegistrationId = (value) => {
   }
 
   if (!STUDENT_ID_PATTERN.test(trimmedValue)) {
-    return "ID Number format is invalid.";
+    return INVALID_STUDENT_ID_MESSAGE;
   }
 
   return null;
@@ -139,6 +124,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { notify } = useNotifications();
   const registrationInFlightRef = useRef(false);
+  const studentIdCheckInFlightRef = useRef(false);
   const registrationPendingRef = useRef(false);
 
   const [form, setForm] = useState({
@@ -236,7 +222,7 @@ export default function RegisterPage() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (registrationInFlightRef.current) return;
+    if (registrationInFlightRef.current || studentIdCheckInFlightRef.current) return;
 
     const nextIdentityErrors = Object.fromEntries(
       ["firstName", "middleInitial", "lastName", "suffix", "contactNumber"]
@@ -265,7 +251,7 @@ export default function RegisterPage() {
     const trimmedId = form.id.trim();
 
     if (!trimmedEmail || !form.password || !confirmPassword || !trimmedId) {
-      notify("warning", "Missing Information", "Please fill in all required fields.");
+      notify("warning", "Student ID Required", EMPTY_STUDENT_ID_MESSAGE);
       return;
     }
 
@@ -286,38 +272,45 @@ export default function RegisterPage() {
       ? validateRegistrationId(trimmedId)
       : null;
     if (idValidationError) {
-      notify("warning", "Invalid ID Number", "ID Number format is invalid.");
+      notify("warning", "Student ID", idValidationError);
       return;
-    }
-
-    if (registrationRole === "student") {
-      setCheckingStudentId(true);
-      try {
-        const availability = await checkStudentIdAvailability(trimmedId);
-        if (availability?.success !== true) {
-          // Server error — warn and let registration proceed; backend will reject duplicates
-          console.warn("ID availability check returned non-success:", availability?.message);
-        } else if (availability.available === false) {
-          notify("warning", "ID Number Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
-          return;
-        } else if (availability.available === true) {
-          notify("success", "ID Number Available", "This ID Number is available.");
-        }
-        // available === null means the check was inconclusive; let registration proceed
-      } catch (error) {
-        console.warn(
-          "Unable to pre-check student ID availability; registration will validate the ID:",
-          error
-        );
-      } finally {
-        setCheckingStudentId(false);
-      }
     }
 
     const passwordValidationError = validatePassword(form.password);
     if (passwordValidationError) {
       notify("warning", "Invalid Password", passwordValidationError);
       return;
+    }
+
+    if (registrationRole === "student") {
+      studentIdCheckInFlightRef.current = true;
+      setCheckingStudentId(true);
+      try {
+        const availability = await checkStudentIdAvailability(trimmedId);
+        if (availability?.success !== true || typeof availability.available !== "boolean") {
+          throw new Error("Student ID availability could not be verified.");
+        }
+        if (availability.available === false) {
+          notify("warning", "Student ID Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
+          return;
+        }
+        notify("success", "Student ID Available", "Continue with registration.");
+      } catch (error) {
+        console.warn("Unable to verify student ID availability:", error);
+        if (error.status === 400) {
+          notify("warning", "Student ID", error.message || INVALID_STUDENT_ID_MESSAGE);
+        } else {
+          notify(
+            "warning",
+            "Student ID Verification Unavailable",
+            "Student ID verification is temporarily unavailable. Please try again."
+          );
+        }
+        return;
+      } finally {
+        studentIdCheckInFlightRef.current = false;
+        setCheckingStudentId(false);
+      }
     }
 
     await submitRegistration();
@@ -328,7 +321,7 @@ export default function RegisterPage() {
     registrationInFlightRef.current = true;
     setLoading(true);
     try {
-      const email = form.email.trim().toLowerCase();
+      const email = form.email.trim();
       const data = registrationPendingRef.current
         ? await resendRegistrationOtp(email)
         : await registerUser({
@@ -368,11 +361,11 @@ export default function RegisterPage() {
     } catch (err) {
       console.error("Register error:", err);
       if (err.status === 409 && /id/i.test(err.message || "")) {
-        notify("warning", "ID Number Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
+        notify("warning", "Student ID Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
         return;
       }
-      if (registrationRole === "student" && /student id must be 7 characters/i.test(err.message || "")) {
-        notify("warning", "Invalid ID Number", "ID Number format is invalid.");
+      if (registrationRole === "student" && /student id/i.test(err.message || "")) {
+        notify("warning", "Student ID", INVALID_STUDENT_ID_MESSAGE);
         return;
       }
       if (err.responseData?.verificationRequired) {
@@ -579,7 +572,7 @@ export default function RegisterPage() {
                 onBlur={() => {
                   setEmailError(validateEmailAddress(form.email));
                 }}
-                placeholder="name@gmail.com"
+                placeholder="name@marsu.edu.ph or name@gmail.com"
                 autoComplete="off"
                 aria-invalid={Boolean(emailError)}
                 required
