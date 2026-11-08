@@ -54,13 +54,16 @@ export default function PublicCalendarAuth({
     let active = true;
     const renderGoogleButton = () => {
       if (!active || !window.google?.accounts?.id || !googleButtonRef.current) return false;
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: async ({ credential }) => {
-          if (!credential) {
-            setError('Google did not return an identity credential.');
-            return;
-          }
+      // Guard against duplicate initialization — GIS logs a warning if initialize()
+      // is called more than once with the same client_id in the same page load.
+      if (!window.__gymstatGoogleInitialized) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async ({ credential }) => {
+            if (!credential) {
+              setError('Google did not return an identity credential.');
+              return;
+            }
           setLoading(true);
           setError('');
           try {
@@ -81,6 +84,8 @@ export default function PublicCalendarAuth({
         auto_select: false,
         cancel_on_tap_outside: true,
       });
+        window.__gymstatGoogleInitialized = true;
+      }
       googleButtonRef.current.replaceChildren();
       window.google.accounts.id.renderButton(googleButtonRef.current, {
         type: 'standard',

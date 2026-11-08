@@ -259,6 +259,71 @@ export default function LoginPage() {
     }
   };
 
+  const PHILIPPINE_MOBILE_PATTERN = /^(09[0-9]{9}|[+]639[0-9]{9})$/;
+
+  const handleForgotPhoneSubmit = async (e) => {
+    e.preventDefault();
+    const phone = forgotPhone.trim();
+    if (!PHILIPPINE_MOBILE_PATTERN.test(phone)) {
+      setForgotValidationError("Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).");
+      return;
+    }
+    setForgotValidationError("");
+    setForgotLoading(true);
+    try {
+      await requestPasswordResetBySms(phone);
+      const masked = phone.slice(0, 4) + "****" + phone.slice(-3);
+      setForgotMaskedPhone(masked);
+      setForgotStep("sms-otp");
+      setOtpSecondsLeft(300);
+      setResendSecondsLeft(60);
+      setForgotOtp("");
+    } catch (error) {
+      notify("error", "Unable to send OTP", error.message || "Please try again later.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleSmsOtpSubmit = async (e) => {
+    e.preventDefault();
+    if (!/^[0-9]{6}$/.test(forgotOtp)) {
+      setForgotValidationError("Enter the 6-digit OTP sent to your mobile number.");
+      return;
+    }
+    setForgotValidationError("");
+    setForgotLoading(true);
+    try {
+      const verification = await verifyPasswordResetSmsOtp(forgotPhone.trim(), forgotOtp);
+      if (!verification.resetToken) {
+        throw new Error("Unable to complete verification. Please request a new code.");
+      }
+      setForgotResetToken(verification.resetToken);
+      if (verification.email) setForgotEmail(verification.email);
+      setForgotStep("password");
+    } catch (error) {
+      notify("error", "Verification failed", error.message || "The OTP is invalid or expired.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResendSmsOtp = async () => {
+    if (resendSecondsLeft > 0 || forgotLoading) return;
+    setForgotLoading(true);
+    try {
+      await requestPasswordResetBySms(forgotPhone.trim());
+      setOtpSecondsLeft(300);
+      setResendSecondsLeft(60);
+      setForgotOtp("");
+      setForgotValidationError("");
+    } catch (error) {
+      notify("error", "Unable to resend OTP", error.message || "Please try again later.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   return (
     <div className="login-root">
       <button type="button" className="auth-back-btn" onClick={() => navigate('/landingpage', { replace: true })} aria-label="Go back">
@@ -402,7 +467,7 @@ export default function LoginPage() {
                   ✉ Reset via Registered Email
                 </button>
                 <button type="button" className="forgot-submit-btn" style={{width:"100%",background:"#444",marginBottom:4}} onClick={() => { setForgotRecoveryMethod("sms"); setForgotStep("phone"); }}>
-                  📱 Reset via Phone Number (SMS)
+                  <Icon name="phone" size={16} style={{marginRight:6}} />Send code via SMS
                 </button>
                 <div className="forgot-modal-actions" style={{marginTop:8}}>
                   <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
@@ -435,7 +500,7 @@ export default function LoginPage() {
                 {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
                 <div className="forgot-modal-actions">
                   <button type="button" className="forgot-cancel-btn" onClick={() => setForgotStep("method")}>Back</button>
-                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send OTP"}</button>
+                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send code via SMS"}</button>
                 </div>
               </form>
             )}

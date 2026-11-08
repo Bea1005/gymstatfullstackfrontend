@@ -1391,6 +1391,7 @@ export const getPublicCalendarScheduleRequests = async (startDate, endDate) => {
   const params = new URLSearchParams({ startDate, endDate });
   return apiRequest(`/schedule-requests/public-calendar?${params}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
@@ -1445,6 +1446,7 @@ export const getSchedules = async (filters = {}) => {
 export const getSchedulesByDateRange = async (startDate, endDate) => {
   return apiRequest(`/schedules/date-range?startDate=${startDate}&endDate=${endDate}`, {
     method: 'GET',
+    timeoutMs: 30000,
   });
 };
 
