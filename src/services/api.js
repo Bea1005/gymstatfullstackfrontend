@@ -465,6 +465,11 @@ export const register = async (userData) => {
     method: 'POST',
     body: JSON.stringify({
       fullname: userData.fullname,
+      firstName: userData.firstName,
+      middleInitial: userData.middleInitial || '',
+      lastName: userData.lastName,
+      suffix: userData.suffix || '',
+      contactNumber: userData.contactNumber,
       email: userData.email,
       password: userData.password,
       department: userData.department || "",

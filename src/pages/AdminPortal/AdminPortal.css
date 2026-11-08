@@ -1388,7 +1388,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 .db-analytics__trends-header {
   display: flex;
@@ -1462,7 +1462,9 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
   overflow: hidden;
 }
 .db-analytics__heading {
@@ -1619,15 +1621,18 @@
 }
 .db-analytics__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  align-items: stretch;
+  gap: 14px;
 }
 .db-analytics__trend-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  align-items: stretch;
+  gap: 14px;
 }
 .db-analytics-trend {
+  min-width: 0;
   min-width: 0;
   padding: 18px;
   border: 1px solid #eee7e2;
@@ -1697,6 +1702,7 @@
 }
 .db-analytics-card {
   min-width: 0;
+  height: 100%;
   padding: 20px;
   border: 1px solid #eee7e2;
   border-radius: 16px;

@@ -19,12 +19,7 @@ import "./RegisterPage.css";
 
 import gymBackground from "../../assets/GYMSTAT BG.jpg";
 
-const FULL_NAME_PATTERN = /^[\p{L}\p{M}]+(?:[\s'’.-][\p{L}\p{M}]+)*$/u;
-const DUMMY_FULL_NAME_VALUES = new Set([
-  "test", "user", "admin", "guest", "student", "coach", "example", "sample",
-  "placeholder", "dummy", "demo", "fake", "null", "undefined", "n/a", "na",
-  "asdf", "qwerty", "lorem", "ipsum", "foo", "bar"
-]);
+const NAME_COMPONENT_PATTERN = /^[\p{L}\p{M}]+(?:[\s'’.-][\p{L}\p{M}]+)*\.?$/u;
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "mailinator.com", "guerrillamail.com", "dispostable.com", "temp-mail.org",
   "10minutemail.com", "throwawaymail.com", "yopmail.com", "yomail.info",
@@ -38,42 +33,43 @@ const GMAIL_EMAIL_PATTERN = /^[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?@gmail\.com$/i;
 const STUDENT_ID_PATTERN = /^23[BGST]\d{4}$/;
 const DUPLICATE_STUDENT_ID_MESSAGE = "This ID number has already been used. Please use a different ID number.";
 
-const validateFullName = (value) => {
+const normalizeNamePart = (value) => String(value || "").trim().replace(/\s+/g, " ");
+const validateNamePart = (value, label, { required = false, maxLength = 100 } = {}) => {
+  const normalizedValue = normalizeNamePart(value);
+  if (!normalizedValue) return required ? `Please enter your ${label}.` : "";
+  if (
+    normalizedValue.length > maxLength
+    || !NAME_COMPONENT_PATTERN.test(normalizedValue)
+  ) {
+    return `Enter a valid ${label.toLowerCase()} using letters, spaces, hyphens, apostrophes, or periods.`;
+  }
+  return "";
+};
+const normalizePhilippineContactNumber = (value) => {
   const trimmedValue = String(value || "").trim();
-  if (!trimmedValue || trimmedValue.length < 2) {
-    return "Please enter your full name.";
+  if (/^09\d{9}$/.test(trimmedValue)) return `+63${trimmedValue.slice(1)}`;
+  if (/^\+639\d{9}$/.test(trimmedValue)) return trimmedValue;
+  return "";
+};
+const validateRegistrationField = (field, value) => {
+  if (field === "contactNumber") {
+    if (!String(value || "").trim()) return "Please enter your Contact Number.";
+    return normalizePhilippineContactNumber(value)
+      ? ""
+      : "Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).";
   }
-
-  if (!/[\p{L}]/u.test(trimmedValue)) {
-    return "Full name must include letters.";
-  }
-
-  const sanitizedLetters = trimmedValue.replace(/[\s'’.-]/g, "");
-  if (sanitizedLetters.length < 2) {
-    return "Please enter a valid full name.";
-  }
-
-  if (/(.)\1{4,}/u.test(sanitizedLetters)) {
-    return "Full name contains too many repeated characters.";
-  }
-
-  const normalizedValue = trimmedValue.toLowerCase().replace(/[\s'’.-]+/g, " ").trim();
-  if (DUMMY_FULL_NAME_VALUES.has(normalizedValue)) {
-    return "Please enter a realistic full name instead of a placeholder or dummy value.";
-  }
-
-  const lettersOnly = sanitizedLetters.replace(/[^\p{L}]/gu, "");
-  const vowelCount = (lettersOnly.match(/[AEIOUaeiou]/g) || []).length;
-  const consonantRatio = lettersOnly.length ? (lettersOnly.length - vowelCount) / lettersOnly.length : 0;
-  if (lettersOnly.length >= 10 && consonantRatio >= 0.7 && !/\s/.test(trimmedValue)) {
-    return "Please enter a realistic full name. Random character sequences are not allowed.";
-  }
-
-  if (!FULL_NAME_PATTERN.test(trimmedValue)) {
-    return "Please enter a valid full name using letters and common name punctuation.";
-  }
-
-  return null;
+  const options = field === "middleInitial"
+    ? { maxLength: 8 }
+    : field === "suffix"
+      ? { maxLength: 16 }
+      : { required: true };
+  const label = {
+    firstName: "First Name",
+    middleInitial: "Middle Initial",
+    lastName: "Last Name",
+    suffix: "Suffix",
+  }[field];
+  return validateNamePart(value, label, options);
 };
 
 const validateEmailAddress = (value) => {
@@ -146,7 +142,11 @@ export default function RegisterPage() {
   const registrationPendingRef = useRef(false);
 
   const [form, setForm] = useState({
-    fullname: "",
+    firstName: "",
+    middleInitial: "",
+    lastName: "",
+    suffix: "",
+    contactNumber: "",
     email: "",
     password: "",
     department: "",
@@ -161,6 +161,7 @@ export default function RegisterPage() {
   const [registrationSuccessPopup, setRegistrationSuccessPopup] = useState(false);
   const [registrationSuccessMessage, setRegistrationSuccessMessage] = useState("Registration Successful!");
   const [emailError, setEmailError] = useState("");
+  const [identityErrors, setIdentityErrors] = useState({});
   const [verificationStep, setVerificationStep] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
   const [verificationCodeSent, setVerificationCodeSent] = useState(true);
@@ -207,6 +208,13 @@ export default function RegisterPage() {
 
   const set = (key) => (e) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const setIdentityField = (field) => (event) => {
+    const { value } = event.target;
+    setForm((previous) => ({ ...previous, [field]: value }));
+    setIdentityErrors((previous) => previous[field]
+      ? { ...previous, [field]: validateRegistrationField(field, value) }
+      : previous);
+  };
 
   // Password validation function
   const validatePassword = (password) => {
@@ -230,6 +238,13 @@ export default function RegisterPage() {
     e.preventDefault();
     if (registrationInFlightRef.current) return;
 
+    const nextIdentityErrors = Object.fromEntries(
+      ["firstName", "middleInitial", "lastName", "suffix", "contactNumber"]
+        .map((field) => [field, validateRegistrationField(field, form[field])])
+    );
+    setIdentityErrors(nextIdentityErrors);
+    if (Object.values(nextIdentityErrors).some(Boolean)) return;
+
     if (!form.department.trim() || form.department === "Select Department") {
       setDepartmentError("Please select department.");
       return;
@@ -246,18 +261,11 @@ export default function RegisterPage() {
       return;
     }
 
-    const trimmedFullName = form.fullname.trim();
     const trimmedEmail = form.email.trim();
     const trimmedId = form.id.trim();
 
-    if (!trimmedFullName || !trimmedEmail || !form.password || !confirmPassword || !trimmedId) {
+    if (!trimmedEmail || !form.password || !confirmPassword || !trimmedId) {
       notify("warning", "Missing Information", "Please fill in all required fields.");
-      return;
-    }
-
-    const fullNameValidationError = validateFullName(trimmedFullName);
-    if (fullNameValidationError) {
-      notify("warning", "Invalid Full Name", fullNameValidationError);
       return;
     }
 
@@ -286,19 +294,21 @@ export default function RegisterPage() {
       setCheckingStudentId(true);
       try {
         const availability = await checkStudentIdAvailability(trimmedId);
-        if (availability?.success !== true || typeof availability.available !== "boolean") {
-          throw new Error("The ID availability service returned an invalid response.");
-        }
-        if (!availability?.available) {
+        if (availability?.success !== true) {
+          // Server error — warn and let registration proceed; backend will reject duplicates
+          console.warn("ID availability check returned non-success:", availability?.message);
+        } else if (availability.available === false) {
           notify("warning", "ID Number Already Used", DUPLICATE_STUDENT_ID_MESSAGE);
           return;
+        } else if (availability.available === true) {
+          notify("success", "ID Number Available", "This ID Number is available.");
         }
-        notify("success", "ID Number Available", "This ID Number is available.");
+        // available === null means the check was inconclusive; let registration proceed
       } catch (error) {
-        console.error("Unable to verify student ID availability:", error);
-        const availabilityError = "Unable to verify this ID number right now. Please try again.";
-        notify("error", "ID Number Verification Failed", availabilityError);
-        return;
+        console.warn(
+          "Unable to pre-check student ID availability; registration will validate the ID:",
+          error
+        );
       } finally {
         setCheckingStudentId(false);
       }
@@ -323,7 +333,17 @@ export default function RegisterPage() {
         ? await resendRegistrationOtp(email)
         : await registerUser({
           ...form,
-          fullname: form.fullname.trim(),
+          firstName: normalizeNamePart(form.firstName),
+          middleInitial: normalizeNamePart(form.middleInitial),
+          lastName: normalizeNamePart(form.lastName),
+          suffix: normalizeNamePart(form.suffix),
+          fullname: [
+            normalizeNamePart(form.firstName),
+            normalizeNamePart(form.middleInitial),
+            normalizeNamePart(form.lastName),
+            normalizeNamePart(form.suffix),
+          ].filter(Boolean).join(" "),
+          contactNumber: normalizePhilippineContactNumber(form.contactNumber),
           email,
           id: form.id.trim(),
           role: registrationRole
@@ -501,17 +521,49 @@ export default function RegisterPage() {
             </form>
           ) : (
           <form onSubmit={handleRegister} className="login-form">
-            <div className="login-field">
-              <label>Full Name</label>
-              <input
-                type="text"
-                className="login-input"
-                value={form.fullname}
-                onChange={set("fullname")}
-                placeholder="Enter your full name"
-                required
-              />
-            </div>
+            {[
+              { field: "firstName", label: "First Name", required: true, placeholder: "Enter your first name", maxLength: 100 },
+              { field: "middleInitial", label: "Middle Initial", required: false, placeholder: "Optional", maxLength: 8 },
+              { field: "lastName", label: "Last Name", required: true, placeholder: "Enter your last name", maxLength: 100 },
+              { field: "suffix", label: "Suffix", required: false, placeholder: "e.g., Jr., Sr., II", maxLength: 16 },
+              { field: "contactNumber", label: "Contact Number", required: true, placeholder: "09XXXXXXXXX or +639XXXXXXXXX", maxLength: 13 },
+            ].map(({ field, label, required, placeholder, maxLength }) => (
+              <div className="login-field" key={field}>
+                <label htmlFor={`registration-${field}`}>{label}{required ? " (Required)" : " (Optional)"}</label>
+                <input
+                  id={`registration-${field}`}
+                  name={field}
+                  type={field === "contactNumber" ? "tel" : "text"}
+                  className={`login-input ${identityErrors[field] ? "input-error" : ""}`}
+                  value={form[field]}
+                  onChange={setIdentityField(field)}
+                  onBlur={() => setIdentityErrors((previous) => ({
+                    ...previous,
+                    [field]: validateRegistrationField(field, form[field]),
+                  }))}
+                  placeholder={placeholder}
+                  maxLength={maxLength}
+                  autoComplete={field === "contactNumber"
+                    ? "tel"
+                    : field === "firstName"
+                      ? "given-name"
+                      : field === "middleInitial"
+                        ? "additional-name"
+                        : field === "lastName"
+                          ? "family-name"
+                          : "honorific-suffix"}
+                  inputMode={field === "contactNumber" ? "tel" : undefined}
+                  aria-invalid={Boolean(identityErrors[field])}
+                  aria-describedby={identityErrors[field] ? `registration-${field}-error` : undefined}
+                  required={required}
+                />
+                {identityErrors[field] && (
+                  <p id={`registration-${field}-error`} className="password-match-error" role="alert">
+                    {identityErrors[field]}
+                  </p>
+                )}
+              </div>
+            ))}
 
             <div className="login-field">
               <label>Email</label>
