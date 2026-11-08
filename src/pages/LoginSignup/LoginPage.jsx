@@ -28,6 +28,7 @@ export default function LoginPage() {
   const [forgotRecoveryMethod, setForgotRecoveryMethod] = useState("email");
   const [forgotPhone, setForgotPhone] = useState("");
   const [forgotMaskedPhone, setForgotMaskedPhone] = useState("");
+  const [forgotSmsError, setForgotSmsError] = useState("");
   const [forgotPasswordValue, setForgotPasswordValue] = useState("");
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState("");
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
@@ -156,6 +157,7 @@ export default function LoginPage() {
     setForgotRecoveryMethod("email");
     setForgotPhone("");
     setForgotMaskedPhone("");
+    setForgotSmsError("");
     setForgotPasswordValue("");
     setForgotConfirmPassword("");
     setForgotValidationError("");
@@ -269,6 +271,7 @@ export default function LoginPage() {
       return;
     }
     setForgotValidationError("");
+    setForgotSmsError("");
     setForgotLoading(true);
     try {
       await requestPasswordResetBySms(phone);
@@ -279,7 +282,17 @@ export default function LoginPage() {
       setResendSecondsLeft(60);
       setForgotOtp("");
     } catch (error) {
-      notify("error", "Unable to send OTP", error.message || "Please try again later.");
+      if (error.status === 503) {
+        const deliveryIssue = error.responseData?.deliveryIssue;
+        const message = deliveryIssue === "SMS_PROVIDER_NOT_CONFIGURED"
+          ? "SMS recovery is not configured on the server. Use email recovery or ask an administrator to configure the SMS provider."
+          : error.message && !/unexpected server error|temporarily unavailable/i.test(error.message)
+            ? error.message
+            : "The SMS provider could not send a code. Use email recovery or try again later.";
+        setForgotSmsError(message);
+      } else {
+        notify("error", "Unable to send OTP", error.message || "Please try again later.");
+      }
     } finally {
       setForgotLoading(false);
     }
@@ -498,6 +511,21 @@ export default function LoginPage() {
                   <input type="tel" value={forgotPhone} onChange={(e) => setForgotPhone(e.target.value)} placeholder="09XXXXXXXXX or +639XXXXXXXXX" autoComplete="tel" />
                 </label>
                 {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
+                {forgotSmsError && (
+                  <div className="forgot-sms-error" role="alert">
+                    <p className="forgot-validation-error">{forgotSmsError}</p>
+                    <button
+                      type="button"
+                      className="forgot-resend-btn"
+                      onClick={() => {
+                        setForgotSmsError("");
+                        setForgotStep("email");
+                      }}
+                    >
+                      Continue with email recovery
+                    </button>
+                  </div>
+                )}
                 <div className="forgot-modal-actions">
                   <button type="button" className="forgot-cancel-btn" onClick={() => setForgotStep("method")}>Back</button>
                   <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send code via SMS"}</button>

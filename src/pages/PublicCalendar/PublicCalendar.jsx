@@ -723,13 +723,18 @@ export default function PublicCalendar() {
       console.error('❌ Request submission failed:', error);
       if (error?.status === 401 || (
         error?.status === 403
-        && /authenticated account|email verification is required|verify your email/i.test(error?.message || '')
+        && /authenticated account|email verification is required|verify your email|complete your profile/i.test(error?.message || '')
       )) {
         setCalendarUser(null);
-        setCalendarNeedsProfile(false);
+        setCalendarNeedsProfile(/complete your profile/i.test(error?.message || ''));
         setModal(false);
         setAuthModal(true);
-        setNotification({ message: 'Your sign-in has expired. Log in again to continue this request.', type: 'error' });
+        setNotification({
+          message: /complete your profile/i.test(error?.message || '')
+            ? error.message
+            : 'Your sign-in has expired. Log in again to continue this request.',
+          type: 'error',
+        });
         return;
       }
       const msg = error?.message || String(error) || 'Failed to submit request. Please try again.';

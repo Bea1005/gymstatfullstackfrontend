@@ -54,8 +54,7 @@ export default function PublicCalendarAuth({
     let active = true;
     const renderGoogleButton = () => {
       if (!active || !window.google?.accounts?.id || !googleButtonRef.current) return false;
-      // Guard against duplicate initialization — GIS logs a warning if initialize()
-      // is called more than once with the same client_id in the same page load.
+      // Only call initialize() once per page load to prevent the duplicate-init warning.
       if (!window.__gymstatGoogleInitialized) {
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
@@ -64,26 +63,26 @@ export default function PublicCalendarAuth({
               setError('Google did not return an identity credential.');
               return;
             }
-          setLoading(true);
-          setError('');
-          try {
-            const result = await loginCalendarWithGoogle(credential);
-            if (result.needsProfileCompletion) {
-              setProfileFullname(result.user?.fullname || '');
-              setProfilePhone(result.user?.contactNumber || '');
-              setScreen('profile');
-              return;
+            setLoading(true);
+            setError('');
+            try {
+              const result = await loginCalendarWithGoogle(credential);
+              if (result.needsProfileCompletion) {
+                setProfileFullname(result.user?.fullname || '');
+                setProfilePhone(result.user?.contactNumber || '');
+                setScreen('profile');
+                return;
+              }
+              onAuthenticatedRef.current(result.user);
+            } catch (authError) {
+              setError(authError.message || 'Google sign-in failed. Please try again.');
+            } finally {
+              setLoading(false);
             }
-            onAuthenticatedRef.current(result.user);
-          } catch (authError) {
-            setError(authError.message || 'Google sign-in failed. Please try again.');
-          } finally {
-            setLoading(false);
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      });
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
         window.__gymstatGoogleInitialized = true;
       }
       googleButtonRef.current.replaceChildren();

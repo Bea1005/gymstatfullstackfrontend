@@ -763,8 +763,12 @@ export const getBorrowingStats = async () => {
 };
 
 // Get Admin Dashboard stats (counts + upcoming schedules)
-export const getAdminDashboard = async () => {
-  return apiRequest('/admin/dashboard', {
+export const getAdminDashboard = async (analyticsFilters = {}) => {
+  const query = new URLSearchParams();
+  if (analyticsFilters.period) query.set('period', analyticsFilters.period);
+  if (analyticsFilters.date) query.set('date', analyticsFilters.date);
+  const queryString = query.toString();
+  return apiRequest(`/admin/dashboard${queryString ? `?${queryString}` : ''}`, {
     method: 'GET',
     timeoutMs: 30000,
   });
@@ -1391,7 +1395,6 @@ export const getPublicCalendarScheduleRequests = async (startDate, endDate) => {
   const params = new URLSearchParams({ startDate, endDate });
   return apiRequest(`/schedule-requests/public-calendar?${params}`, {
     method: 'GET',
-    timeoutMs: 30000,
   });
 };
 
@@ -1446,7 +1449,6 @@ export const getSchedules = async (filters = {}) => {
 export const getSchedulesByDateRange = async (startDate, endDate) => {
   return apiRequest(`/schedules/date-range?startDate=${startDate}&endDate=${endDate}`, {
     method: 'GET',
-    timeoutMs: 30000,
   });
 };
 
