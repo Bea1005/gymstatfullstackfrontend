@@ -25,7 +25,6 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotOtp, setForgotOtp] = useState("");
   const [forgotResetToken, setForgotResetToken] = useState("");
-  const [forgotRecoveryMethod, setForgotRecoveryMethod] = useState("email");
   const [forgotPhone, setForgotPhone] = useState("");
   const [forgotMaskedPhone, setForgotMaskedPhone] = useState("");
   const [forgotSmsError, setForgotSmsError] = useState("");
@@ -154,7 +153,6 @@ export default function LoginPage() {
     setForgotEmail("");
     setForgotOtp("");
     setForgotResetToken("");
-    setForgotRecoveryMethod("email");
     setForgotPhone("");
     setForgotMaskedPhone("");
     setForgotSmsError("");
@@ -433,7 +431,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="login-forgot-btn"
-                onClick={() => { setForgotStep("method"); setShowForgotModal(true); }}
+                onClick={() => { setForgotStep("email"); setShowForgotModal(true); }}
               >
                 Forgot Password?
               </button>
@@ -467,26 +465,11 @@ export default function LoginPage() {
         <div className="forgot-modal-backdrop" onClick={handleForgotClose}>
           <div className="forgot-modal" onClick={(e) => e.stopPropagation()}>
             <div className="forgot-modal-header">
-              <h3>{forgotStep === "success" ? "Password Updated" : forgotStep === "method" ? "Forgot Password?" : "Reset Password"}</h3>
+              <h3>{forgotStep === "success" ? "Password Updated" : forgotStep === "email" ? "Forgot Password?" : "Reset Password"}</h3>
               <button type="button" className="forgot-modal-close" onClick={handleForgotClose} aria-label="Close password reset">
                 <Icon name="close" />
               </button>
             </div>
-
-            {forgotStep === "method" && (
-              <div className="forgot-modal-form">
-                <p className="forgot-modal-description">Choose how you want to reset your password.</p>
-                <button type="button" className="forgot-submit-btn" style={{width:"100%",marginBottom:10}} onClick={() => { setForgotRecoveryMethod("email"); setForgotStep("email"); }}>
-                  ✉ Reset via Registered Email
-                </button>
-                <button type="button" className="forgot-submit-btn" style={{width:"100%",background:"#444",marginBottom:4}} onClick={() => { setForgotRecoveryMethod("sms"); setForgotStep("phone"); }}>
-                  <Icon name="phone" size={16} style={{marginRight:6}} />Send code via SMS
-                </button>
-                <div className="forgot-modal-actions" style={{marginTop:8}}>
-                  <button type="button" className="forgot-cancel-btn" onClick={handleForgotClose}>Cancel</button>
-                </div>
-              </div>
-            )}
 
             {forgotStep === "email" && (
               <form onSubmit={handleForgotEmailSubmit} className="forgot-modal-form">
@@ -527,8 +510,7 @@ export default function LoginPage() {
                   </div>
                 )}
                 <div className="forgot-modal-actions">
-                  <button type="button" className="forgot-cancel-btn" onClick={() => setForgotStep("method")}>Back</button>
-                  <button type="submit" className="forgot-submit-btn" disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send code via SMS"}</button>
+                  <button type="button" className="forgot-cancel-btn" onClick={() => setForgotStep("email")}>Back</button>
                 </div>
               </form>
             )}
