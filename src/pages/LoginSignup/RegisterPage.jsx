@@ -20,6 +20,11 @@ import "./RegisterPage.css";
 import gymBackground from "../../assets/GYMSTAT BG.jpg";
 
 const NAME_COMPONENT_PATTERN = /^[\p{L}\p{M}]+(?:[\s'’.-][\p{L}\p{M}]+)*\.?$/u;
+const sortByDisplayName = (options) => [...options].sort((first, second) => {
+  const firstName = typeof first === "string" ? first : first.name;
+  const secondName = typeof second === "string" ? second : second.name;
+  return firstName.localeCompare(secondName, undefined, { sensitivity: "base" });
+});
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "mailinator.com", "guerrillamail.com", "dispostable.com", "temp-mail.org",
   "10minutemail.com", "throwawaymail.com", "yopmail.com", "yomail.info",
@@ -32,8 +37,11 @@ const DUMMY_EMAIL_PREFIXES = new Set([
 const REGISTRATION_EMAIL_PATTERN = new RegExp(
   "^(?=.{1,254}$)(?=.{1,64}@)[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$"
 );
-const STUDENT_ID_PATTERN = /^23[BGST]\d{4}$/;
-const INVALID_STUDENT_ID_MESSAGE = "Invalid Student ID format.";
+const STUDENT_ID_PATTERN = /^(\d{2})[BGST]\d{4}$/;
+const FIRST_VALID_STUDENT_ID_YEAR = 2023;
+const getInvalidStudentIdMessage = (currentYear = new Date().getFullYear()) => (
+  `Enter a valid Student ID in the format YYB####, YYG####, YYS####, or YYT####, using a year from ${FIRST_VALID_STUDENT_ID_YEAR} through ${currentYear}.`
+);
 const EMPTY_STUDENT_ID_MESSAGE = "Please enter your Student ID.";
 const DUPLICATE_STUDENT_ID_MESSAGE = "This Student ID is already registered.";
 
@@ -113,8 +121,16 @@ const validateRegistrationId = (value) => {
     return null;
   }
 
-  if (!STUDENT_ID_PATTERN.test(trimmedValue)) {
-    return INVALID_STUDENT_ID_MESSAGE;
+  const studentIdMatch = trimmedValue.match(STUDENT_ID_PATTERN);
+  const studentIdYear = studentIdMatch
+    ? 2000 + Number(studentIdMatch[1])
+    : 0;
+  if (
+    !studentIdMatch
+    || studentIdYear < FIRST_VALID_STUDENT_ID_YEAR
+    || studentIdYear > new Date().getFullYear()
+  ) {
+    return getInvalidStudentIdMessage();
   }
 
   return null;
@@ -163,11 +179,15 @@ export default function RegisterPage() {
   const [checkingStudentId, setCheckingStudentId] = useState(false);
 
   const registrationRole = /^\d{4}-\d{4}$/.test(form.id.trim()) ? "coach" : "student";
-  const selectedCategory = REGISTRATION_CATEGORIES.find(({ name }) => name === mainCategory);
-  const selectedSubcategory = selectedCategory?.subcategories?.find(({ name }) => name === sportSubcategory);
-  const specificOptions = mainCategory === "Sports Event"
-    ? selectedSubcategory?.sports || []
-    : selectedCategory?.events || [];
+  const sortedCategories = sortByDisplayName(REGISTRATION_CATEGORIES);
+  const selectedCategory = sortedCategories.find(({ name }) => name === mainCategory);
+  const sortedSubcategories = sortByDisplayName(selectedCategory?.subcategories || []);
+  const selectedSubcategory = sortedSubcategories.find(({ name }) => name === sportSubcategory);
+  const specificOptions = sortByDisplayName(
+    mainCategory === "Sports Event"
+      ? selectedSubcategory?.sports || []
+      : selectedCategory?.events || []
+  );
 
   useEffect(() => {
     if (resendSecondsLeft <= 0) return undefined;
@@ -298,7 +318,7 @@ export default function RegisterPage() {
       } catch (error) {
         console.warn("Unable to verify student ID availability:", error);
         if (error.status === 400) {
-          notify("warning", "Student ID", error.message || INVALID_STUDENT_ID_MESSAGE);
+          notify("warning", "Student ID", error.message || getInvalidStudentIdMessage());
         } else {
           notify(
             "warning",
@@ -365,7 +385,7 @@ export default function RegisterPage() {
         return;
       }
       if (registrationRole === "student" && /student id/i.test(err.message || "")) {
-        notify("warning", "Student ID", INVALID_STUDENT_ID_MESSAGE);
+        notify("warning", "Student ID", getInvalidStudentIdMessage());
         return;
       }
       if (err.responseData?.verificationRequired) {
@@ -522,7 +542,7 @@ export default function RegisterPage() {
               { field: "contactNumber", label: "Contact Number", required: true, placeholder: "09XXXXXXXXX or +639XXXXXXXXX", maxLength: 13 },
             ].map(({ field, label, required, placeholder, maxLength }) => (
               <div className="login-field" key={field}>
-                <label htmlFor={`registration-${field}`}>{label}{required ? " (Required)" : " (Optional)"}</label>
+                <label htmlFor={`registration-${field}`}>{label}{required ? "" : ""}</label>
                 <input
                   id={`registration-${field}`}
                   name={field}
@@ -665,7 +685,7 @@ export default function RegisterPage() {
                 className="login-input"
                 value={form.id}
                 onChange={set("id")}
-                placeholder="e.g., 23B1509"
+                placeholder={`e.g., ${String(new Date().getFullYear()).slice(-2)}B1509`}
                 required
               />
             </div>
@@ -704,7 +724,7 @@ export default function RegisterPage() {
                 required
               >
                 <option value="">Select Category</option>
-                {REGISTRATION_CATEGORIES.map(({ name }) => (
+                {sortedCategories.map(({ name }) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
@@ -725,7 +745,7 @@ export default function RegisterPage() {
                   required
                 >
                   <option value="">Select Sports Subcategory</option>
-                  {selectedCategory.subcategories.map(({ name }) => (
+                  {sortedSubcategories.map(({ name }) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>

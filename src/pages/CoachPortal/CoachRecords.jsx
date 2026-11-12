@@ -26,6 +26,31 @@ import { getMissingCoachUploadLabels } from './coachStudentUploadStatus';
 import './CoachPortal.css';
 
 const CAMPUS_OPTIONS = ['', 'Boac Main', 'Santa Cruz', 'Gasan', 'Torrijos'];
+const normalizeGallerySport = (value) => String(value ?? '')
+  .normalize('NFKC')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, '');
+const getCoachAssignedSports = (coach = {}) => {
+  const sports = [
+    ...(Array.isArray(coach.assignedSports) ? coach.assignedSports : []),
+    coach.sport || coach.mainSport,
+  ];
+  const seenSports = new Set();
+  return sports.reduce((assignedSports, sport) => {
+    const label = String(sport || '').replace(/\s+/g, ' ').trim();
+    const normalized = normalizeGallerySport(label);
+    if (normalized && label && !seenSports.has(normalized)) {
+      seenSports.add(normalized);
+      assignedSports.push(label);
+    }
+    return assignedSports;
+  }, []);
+};
+const findAssignedSport = (sports, requested) => sports.find((sport) => (
+  normalizeGallerySport(sport) === normalizeGallerySport(requested)
+));
 
 // Both header logos now use the real uploaded assets — see imports above.
 
@@ -137,6 +162,7 @@ export default function CoachRecord() {
     position: 'Coach',
     photo: placeholderImg,
   });
+  const [assignedSports, setAssignedSports] = useState([]);
 
   const [eventMeta, setEventMeta] = useState({
     title: 'STRASUC OLYMPICS 2025',
@@ -170,7 +196,18 @@ export default function CoachRecord() {
   const [editingDirector, setEditingDirector] = useState(false);
   const [showSportDropdown, setShowSportDropdown] = useState(false);
   const [sportCategorySearch, setSportCategorySearch] = useState('');
-  const filteredSportOptions = filterCoachCategoryOptions(sportCategorySearch);
+  const matchingSportOptions = new Set(
+    filterCoachCategoryOptions(sportCategorySearch).map(normalizeGallerySport)
+  );
+  const normalizedSearch = normalizeGallerySport(sportCategorySearch);
+  const filteredSportOptions = assignedSports
+    .map(getCoachGalleryCategoryLabel)
+    .filter((sport, index, options) => (
+      options.findIndex((option) => normalizeGallerySport(option) === normalizeGallerySport(sport)) === index
+    ))
+    .filter((sport) => !normalizedSearch
+      || matchingSportOptions.has(normalizeGallerySport(sport))
+      || normalizeGallerySport(sport).includes(normalizedSearch));
   const sortedSportOptionGroups = groupAndSortCoachCategoryOptions(filteredSportOptions);
 
   const closeSportCategoryModal = () => {
@@ -422,7 +459,7 @@ export default function CoachRecord() {
 
       const request = (async () => {
         try {
-          const requirementState = await api.getCoachStudentRequirements(studentId);
+          const requirementState = await api.getCoachStudentRequirements(studentId, sport);
           if (!Array.isArray(requirementState?.publishedRequirements)
             || !Array.isArray(requirementState?.uploads)) {
             throw new Error('Invalid student requirement response');
@@ -504,10 +541,15 @@ export default function CoachRecord() {
       if (requestedSport) setCategoryLoading(true);
       else setLoading(true);
 
-      const profileData = await api.getCoachProfile().catch(() => null);
-      const selectedSport = String(
-        requestedSport || activeSportRef.current || profileData?.mainSport || ''
-      ).trim();
+      const profileData = await api.getCoachProfile();
+      const currentAssignedSports = getCoachAssignedSports(profileData || {});
+      setAssignedSports(currentAssignedSports);
+      const selectedSport = findAssignedSport(
+        currentAssignedSports,
+        requestedSport || activeSportRef.current
+      ) || findAssignedSport(currentAssignedSports, profileData?.mainSport)
+        || currentAssignedSports[0]
+        || '';
       activeSportRef.current = selectedSport;
       setCoachProfile((prev) => ({
         ...prev,
@@ -598,11 +640,42 @@ export default function CoachRecord() {
       lastRefreshAt = Date.now();
 
       try {
-        const latestAthletes = await api.getCoachAthletes(coachProfile.mainSport).catch(() => []);
+        const latestProfile = await api.getCoachProfile();
+        const latestAssignedSports = getCoachAssignedSports(latestProfile);
+        setAssignedSports(latestAssignedSports);
+        const selectedSport = findAssignedSport(
+          latestAssignedSports,
+          activeSportRef.current || coachProfile.mainSport
+        ) || findAssignedSport(latestAssignedSports, latestProfile?.mainSport)
+          || latestAssignedSports[0]
+          || '';
+
+        if (selectedSport !== activeSportRef.current) {
+          activeSportRef.current = selectedSport;
+          setShowSportDropdown(false);
+          setAthletes([]);
+          setStudentDirectorySearch('');
+          setStudentSearchResults([]);
+          setIsAddingAthlete(false);
+          setEditingAthlete(null);
+          await fetchCoachData(selectedSport);
+          return;
+        }
+        if (!selectedSport) {
+          setCoachProfile((previous) => ({ ...previous, mainSport: '' }));
+          setAthletes([]);
+          setStudentDirectorySearch('');
+          setStudentSearchResults([]);
+          setIsAddingAthlete(false);
+          setEditingAthlete(null);
+          return;
+        }
+
+        const latestAthletes = await api.getCoachAthletes(selectedSport).catch(() => []);
         if (cancelled || !Array.isArray(latestAthletes)) return;
 
-        const normalizedLatestAthletes = normalizeCoachAthletes(latestAthletes, coachProfile.mainSport);
-        await hydrateAthletePhotos(coachProfile.mainSport, normalizedLatestAthletes);
+        const normalizedLatestAthletes = normalizeCoachAthletes(latestAthletes, selectedSport);
+        await hydrateAthletePhotos(selectedSport, normalizedLatestAthletes);
         const latestAthletesById = new Map(normalizedLatestAthletes
           .map((athlete) => [String(athlete.userId || athlete.id), athlete]));
 
@@ -620,6 +693,11 @@ export default function CoachRecord() {
             status: latestAthlete.status,
           };
         }));
+      } catch (error) {
+        console.error('Failed to refresh Coach sport assignments:', error);
+        if (!cancelled) {
+          setToast({ message: 'Unable to refresh your assigned sports. Please try again.', type: 'error' });
+        }
       } finally {
         refreshInFlight = false;
       }
@@ -634,6 +712,8 @@ export default function CoachRecord() {
       window.removeEventListener('focus', refreshAthleteStatuses);
       document.removeEventListener('visibilitychange', refreshAthleteStatuses);
     };
+    // The effect is intentionally tied to the selected sport; fetchCoachData refreshes the same profile.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coachProfile.mainSport]);
 
   // ---------------- File upload ----------------
@@ -1006,7 +1086,7 @@ export default function CoachRecord() {
     try {
       const { type, id } = removeTarget;
       if (type === 'athlete') {
-        await api.deleteCoachAthlete(id);
+        await api.deleteCoachAthlete(id, coachProfile.mainSport);
         const nextAthletes = athletes.filter((athlete) => String(athlete.id) !== String(id));
         athleteCacheRef.current.set(coachProfile.mainSport, nextAthletes);
         setAthletes(nextAthletes);
@@ -1078,7 +1158,7 @@ export default function CoachRecord() {
         if (selectedFile) profileUpdates.photo = photoUrl;
         if (Object.keys(profileUpdates).length > 0) {
           try {
-            await api.updateCoachAthlete(editingAthlete.id, profileUpdates);
+            await api.updateCoachAthlete(editingAthlete.id, profileUpdates, coachProfile.mainSport);
           } catch (profileError) {
             await fetchCoachData(activeSportRef.current);
             setToast({
@@ -1328,6 +1408,9 @@ export default function CoachRecord() {
   };
 
   const handleSelectSport = async (sport) => {
+    const assignedSport = findAssignedSport(assignedSports, sport);
+    if (!assignedSport) return;
+    sport = assignedSport;
     activeSportRef.current = sport;
     studentSearchRequestRef.current += 1;
     setCoachProfile((prev) => ({ ...prev, mainSport: sport }));
@@ -1597,14 +1680,18 @@ export default function CoachRecord() {
             <button
               className="info-value sport-category-select"
               type="button"
+              disabled={assignedSports.length < 2}
               onClick={() => {
+                if (assignedSports.length < 2) return;
                 setSportCategorySearch('');
                 setShowSportDropdown((show) => !show);
               }}
-              aria-haspopup="dialog"
-              aria-expanded={showSportDropdown}
+              aria-haspopup={assignedSports.length > 1 ? 'dialog' : undefined}
+              aria-expanded={assignedSports.length > 1 ? showSportDropdown : undefined}
             >
-              {getCoachGalleryCategoryLabel(coachProfile.mainSport) || 'Select Sport Category'}
+              {assignedSports.length
+                ? getCoachGalleryCategoryLabel(coachProfile.mainSport) || 'Select Sport Category'
+                : 'No sport has been assigned to your account.'}
             </button>
           </div>
           <div className="form-info-right">Date of Screening: (please refer to the STRASUC Olympics Manual)</div>
@@ -1672,7 +1759,7 @@ export default function CoachRecord() {
 
       {/* ================= MODALS ================= */}
 
-      {showSportDropdown && (
+      {showSportDropdown && assignedSports.length > 1 && (
         <div className="coach-modal-overlay" onClick={closeSportCategoryModal}>
           <div className="coach-modal-card coach-category-modal" onClick={(event) => event.stopPropagation()}>
             <div className="coach-modal-header">
@@ -1724,7 +1811,7 @@ export default function CoachRecord() {
                   )}
                 </>
               ) : (
-                <p className="coach-category-search-empty">No matching categories or events found</p>
+                <p className="coach-category-search-empty">No matching assigned sports found</p>
               )}
             </div>
           </div>

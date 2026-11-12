@@ -1308,8 +1308,8 @@ export const updateCoachRecordDirector = async (director) => (
   })
 );
 
-export const getCoachStudentRequirements = async (studentId) => (
-  apiRequest(`/coach/athletes/${encodeURIComponent(studentId)}/requirements`, { method: 'GET' })
+export const getCoachStudentRequirements = async (studentId, sport) => (
+  apiRequest(`/coach/athletes/${encodeURIComponent(studentId)}/requirements?sport=${encodeURIComponent(sport || '')}`, { method: 'GET' })
 );
 
 export const getCoachStudentDirectory = async (sport) => {
@@ -1329,8 +1329,8 @@ export const searchCoachStudents = async (q, sport) => {
   return apiRequest('/coach/student-search?' + params, { method: 'GET' });
 };
 
-export const updateCoachAthlete = async (athleteId, athleteData) => {
-  return apiRequest(`/coach/athletes/${athleteId}`, {
+export const updateCoachAthlete = async (athleteId, athleteData, sport) => {
+  return apiRequest(`/coach/athletes/${encodeURIComponent(athleteId)}?sport=${encodeURIComponent(sport || '')}`, {
     method: 'PUT',
     body: JSON.stringify(athleteData),
   });
@@ -1350,8 +1350,8 @@ export const createCoachAthlete = async (athleteData) => {
   });
 };
 
-export const deleteCoachAthlete = async (athleteId) => {
-  return apiRequest(`/coach/athletes/${athleteId}`, {
+export const deleteCoachAthlete = async (athleteId, sport) => {
+  return apiRequest(`/coach/athletes/${encodeURIComponent(athleteId)}?sport=${encodeURIComponent(sport || '')}`, {
     method: 'DELETE',
   });
 };

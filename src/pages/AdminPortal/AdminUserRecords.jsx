@@ -1,7 +1,7 @@
 import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { getAdminStudents, getAdminScreeners, getNextAdminScreenerId, createUser, sendScreenerAuthorization, updateUserArchiveStatus, archiveUsers } from '../../services/api';
+import { getAdminStudents, getAdminScreeners, getNextAdminScreenerId, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { isPasswordValid, PASSWORD_POLICY_MESSAGE } from '../../constants/passwordPolicy';
 import Icon from '../../components/Icon';
@@ -159,7 +159,6 @@ export default function AdminUserRecords() {
   const [confirmDialog,  setConfirmDialog]  = useState({ open: false, message: '', action: null });
   const reportInProgressRef = useRef(false);
   const screenerCreationInProgressRef = useRef(false);
-  const [authEmailStatus, setAuthEmailStatus] = useState(null);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
   const closeToast = () => setToast({ message: '', type: 'success' });
@@ -307,20 +306,12 @@ export default function AdminUserRecords() {
       void fetchNextScreenerId();
       setScrForm({ email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
       setScrError('');
-      setAuthEmailStatus({ email, status: 'sending', message: '' });
-      try {
-        const mongoId = result && result.user && result.user._id ? result.user._id : (result && result._id ? result._id : (newScreener._id || newScreener.id));
-        await sendScreenerAuthorization(mongoId);
-        setAuthEmailStatus({ email, status: 'sent', message: 'Authorization email sent to ' + email + '. The screener must click OK, I Agree in their email to activate the account.' });
-        showToast('Screener account created. Authorization email sent to ' + email + '.', 'success');
-      } catch (emailErr) {
-        setAuthEmailStatus({ email, status: 'failed', message: (emailErr && emailErr.message) || 'Account created, but the authorization email could not be sent.' });
-        showToast('Screener account created, but the authorization email failed.', 'warning');
-      }
+      showToast('Screener account created successfully.', 'success');
     } catch (error) {
       console.error('Error creating screener:', error);
-      setScrError(error.message);
-      showToast(error.message || 'Failed to create screener', 'error');
+      const message = error?.message || 'Failed to create Screener account. Please try again.';
+      setScrError(message);
+      showToast(message, 'error');
     } finally {
       screenerCreationInProgressRef.current = false;
       setCreatingScreener(false);
@@ -779,13 +770,6 @@ export default function AdminUserRecords() {
               </div>
               {scrError && <p className="ur-reg-error">{scrError}</p>}
               <div className="ur-reg-row ur-reg-row--center">
-              {authEmailStatus && (
-                <div className={"ur-auth-email-status ur-auth-email-status--" + authEmailStatus.status} role="status">
-                  {authEmailStatus.status === "sending" && <span>Sending authorization email...</span>}
-                  {authEmailStatus.status === "sent" && <span>&#10003; {authEmailStatus.message}</span>}
-                  {authEmailStatus.status === "failed" && <span>&#9888; {authEmailStatus.message}</span>}
-                </div>
-              )}
                 <button type="submit" className="ur-reg-submit" disabled={creatingScreener}>{creatingScreener ? "Registering..." : "Register"}</button>
               </div>
             </form>
