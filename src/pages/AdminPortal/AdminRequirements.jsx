@@ -18,6 +18,25 @@ const parseRequirementScope = (sport) => String(sport || '')
   .map((value) => value.trim())
   .filter(Boolean);
 
+const countWords = (value) => {
+  const trimmedValue = String(value ?? '').trim();
+  return trimmedValue ? trimmedValue.split(/\s+/).length : 0;
+};
+
+const getCustomRequirementWordCountError = ({ title, description }) => {
+  const titleWordCount = countWords(title);
+  if (titleWordCount < 2 || titleWordCount > 8) {
+    return `Custom requirement title must contain 2-8 words. You entered ${titleWordCount}.`;
+  }
+
+  const descriptionWordCount = countWords(description);
+  if (descriptionWordCount < 5 || descriptionWordCount > 200) {
+    return `Custom requirement description must contain 5-200 words. You entered ${descriptionWordCount}.`;
+  }
+
+  return '';
+};
+
 const formatPublishedRequirement = (requirement) => ({
   id: requirement._id,
   title: requirement.title,
@@ -74,6 +93,8 @@ const AdminRequirements = () => {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [activeRequirementsTab, setActiveRequirementsTab] = useState('upload');
   const [showArchivedRequirements, setShowArchivedRequirements] = useState(false);
+  const customRequirementTitleWordCount = countWords(customRequirementForm.title);
+  const customRequirementDescriptionWordCount = countWords(customRequirementForm.description);
 
   const handleRequirementsTabKeyDown = (event) => {
     const nextTab = {
@@ -273,8 +294,9 @@ const AdminRequirements = () => {
     const description = customRequirementForm.description.trim();
     const instructions = customRequirementForm.instructions.trim();
     const scopeItems = [...new Set(customRequirementForm.scopeItems)];
-    if (!title) {
-      showToast('Enter a requirement name.', 'error');
+    const wordCountError = getCustomRequirementWordCountError({ title, description });
+    if (wordCountError) {
+      showToast(wordCountError, 'error');
       return;
     }
     if (customRequirementForm.targetStudents === 'sport-specific' && scopeItems.length === 0) {
@@ -359,6 +381,12 @@ const AdminRequirements = () => {
 
   const publishCustomRequirementDraft = async (requirement) => {
     if (!requirement?._id || publishingCustomRequirementId) return;
+    const wordCountError = getCustomRequirementWordCountError(requirement);
+    if (wordCountError) {
+      showToast(wordCountError, 'error');
+      return;
+    }
+
     try {
       setPublishingCustomRequirementId(requirement._id);
       const response = await publishRequirement(requirement._id);
@@ -406,6 +434,17 @@ const AdminRequirements = () => {
     const requirementId = String(requirement._id || requirement.id);
     if (!requirementId || restoringRequirementIdsRef.current.has(requirementId)) return;
 
+    const isCustomRequirement = requirement.type === 'other'
+      && !requirement.file?.filename
+      && !requirement.file?.path;
+    if (isCustomRequirement) {
+      const wordCountError = getCustomRequirementWordCountError(requirement);
+      if (wordCountError) {
+        showToast(wordCountError, 'error');
+        return;
+      }
+    }
+
     restoringRequirementIdsRef.current.add(requirementId);
     setRestoringRequirementIds((current) => [...current, requirementId]);
 
@@ -420,9 +459,6 @@ const AdminRequirements = () => {
 
       const restoredRequirement = response.data;
       const restoredId = String(restoredRequirement._id || restoredRequirement.id || requirementId);
-      const isCustomRequirement = restoredRequirement.type === 'other'
-        && !restoredRequirement.file?.filename
-        && !restoredRequirement.file?.path;
 
       setArchivedRequirements((current) => current.filter(
         (item) => String(item._id || item.id) !== restoredId
@@ -714,8 +750,13 @@ const AdminRequirements = () => {
                   title: event.target.value
                 }))}
                 placeholder="e.g., Updated Medical Clearance"
+                aria-invalid={customRequirementTitleWordCount < 2 || customRequirementTitleWordCount > 8}
+                aria-describedby="custom-requirement-title-word-count"
                 required
               />
+              <p id="custom-requirement-title-word-count" className="requirement-word-count" aria-live="polite">
+                {customRequirementTitleWordCount} words (2-8 required)
+              </p>
             </div>
             <div className="input-field-group">
               <label htmlFor="custom-requirement-description">Details</label>
@@ -730,7 +771,12 @@ const AdminRequirements = () => {
                   description: event.target.value
                 }))}
                 placeholder="Describe what students need to submit."
+                aria-invalid={customRequirementDescriptionWordCount < 5 || customRequirementDescriptionWordCount > 200}
+                aria-describedby="custom-requirement-description-word-count"
               />
+              <p id="custom-requirement-description-word-count" className="requirement-word-count" aria-live="polite">
+                {customRequirementDescriptionWordCount} words (5-200 required)
+              </p>
             </div>
             <div className="input-field-group">
               <label htmlFor="custom-requirement-instructions">Submission Instructions</label>

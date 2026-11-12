@@ -908,6 +908,98 @@
   }
 }
 
+@media (max-width: 1100px) {
+  .strasuc-doc-wrapper .strasuc-form-page {
+    --cell-label-h: 32px;
+    --cell-photo-h: clamp(144px, 18vw, 180px);
+    --cell-info-h: 34px;
+  }
+
+  .strasuc-doc-wrapper .form-grid-box > .form-grid-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+    align-items: stretch;
+    gap: clamp(6px, 1vw, 10px);
+    padding: clamp(6px, 1vw, 10px);
+    min-width: 0;
+  }
+
+  .strasuc-doc-wrapper .form-grid-box > .form-grid-row > .grid-logo-col {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 42px repeat(4, minmax(0, 1fr));
+    width: 100%;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: var(--form-border-thin) solid var(--form-black);
+  }
+
+  .strasuc-doc-wrapper .grid-logo-col .logo-photo-block {
+    height: auto;
+    min-height: 42px;
+    padding: 3px;
+    border-bottom: 0;
+  }
+
+  .strasuc-doc-wrapper .grid-logo-col .logo-photo-block img {
+    width: 100%;
+    max-height: 40px;
+  }
+
+  .strasuc-doc-wrapper .grid-logo-col .row-label-cell {
+    height: auto;
+    min-height: 42px;
+    justify-content: center;
+    padding: 4px;
+    border-bottom: 0;
+    font-size: clamp(7px, 1vw, 10px);
+    line-height: 1.15;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .strasuc-doc-wrapper .form-grid-box > .form-grid-row > .grid-col {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    flex: none;
+    border: var(--form-border-thin) solid var(--form-black);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .strasuc-doc-wrapper .form-grid-box .grid-col > .col-photo img {
+    margin-bottom: 0;
+  }
+
+  .strasuc-doc-wrapper .form-grid-box .grid-col > .col-info-row {
+    padding: 3px;
+    font-size: clamp(9px, 1vw, 11px);
+  }
+
+  .strasuc-doc-wrapper .staff-grid-row > .grid-freeform-col {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .strasuc-doc-wrapper .staff-grid-row > .grid-placeholder-col {
+    width: auto;
+    min-width: 0;
+    min-height: clamp(144px, 18vw, 180px);
+    flex: none;
+  }
+
+  .strasuc-doc-wrapper .staff-grid-row > .grid-placeholder-col .cell-x {
+    font-size: clamp(48px, 8vw, 72px);
+  }
+
+  .strasuc-doc-wrapper .staff-grid-row > .grid-col.staff-add-col {
+    min-width: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .main-content.coach-main-content {
     padding: 16px 10px 24px;
@@ -919,6 +1011,9 @@
 
   .strasuc-form-page {
     padding: 22px 14px 26px;
+    --cell-label-h: 30px;
+    --cell-photo-h: clamp(128px, 34vw, 156px);
+    --cell-info-h: 33px;
   }
 
   .form-header-logo-left,
@@ -948,6 +1043,84 @@
 
   .form-info-category {
     margin-left: 0;
+  }
+
+  .strasuc-doc-wrapper .form-toolbar {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .strasuc-doc-wrapper .form-toolbar-left,
+  .strasuc-doc-wrapper .form-toolbar-right {
+    width: 100%;
+  }
+
+  .strasuc-doc-wrapper .form-toolbar-right {
+    flex-wrap: wrap;
+    justify-content: stretch;
+    gap: 8px;
+  }
+
+  .strasuc-doc-wrapper .form-toolbar button.toolbar-btn {
+    flex: 1 1 120px;
+    min-height: 40px;
+    white-space: normal;
+  }
+
+  .strasuc-doc-wrapper .form-info-left {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .strasuc-doc-wrapper .form-info-left > .info-label[style] {
+    margin-left: 0 !important;
+  }
+
+  .strasuc-doc-wrapper .form-info-left .info-value {
+    min-width: 0;
+    width: 100%;
+    text-align: left;
+  }
+
+  .strasuc-doc-wrapper .form-info-left .sport-category-select {
+    min-height: 40px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .strasuc-doc-wrapper .form-info-right {
+    text-align: left;
+  }
+}
+
+@media (max-width: 420px) {
+  .strasuc-doc-wrapper .strasuc-form-page {
+    padding-right: 10px;
+    padding-left: 10px;
+    --cell-photo-h: clamp(118px, 34vw, 142px);
+    --cell-info-h: 32px;
+  }
+
+  .strasuc-doc-wrapper .form-grid-box > .form-grid-row > .grid-logo-col {
+    grid-template-columns: 38px repeat(4, minmax(0, 1fr));
+  }
+
+  .strasuc-doc-wrapper .form-grid-box > .form-grid-row {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .strasuc-doc-wrapper .grid-logo-col .logo-photo-block {
+    min-height: 38px;
+  }
+
+  .strasuc-doc-wrapper .grid-logo-col .row-label-cell {
+    min-height: 38px;
+    padding: 2px;
+    font-size: 7px;
   }
 }
 

@@ -893,6 +893,12 @@
   font-size: 15px;
   
 }
+#admin-requirements-student-panel .requirement-word-count {
+  margin: 6px 0 0;
+  color: #666;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .requirement-sport-picker {
   position: relative;
   color: #222;
