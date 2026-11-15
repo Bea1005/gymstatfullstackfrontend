@@ -23,18 +23,36 @@ const countWords = (value) => {
   return trimmedValue ? trimmedValue.split(/\s+/).length : 0;
 };
 
+const getWordCountValidationMessage = (wordCount, minimum, maximum) => {
+  if (wordCount < minimum) {
+    return `At least ${minimum} words are required.`;
+  }
+  if (wordCount > maximum) {
+    return `No more than ${maximum} words are allowed.`;
+  }
+  return '';
+};
+
 const getCustomRequirementWordCountError = ({ title, description }) => {
   const titleWordCount = countWords(title);
-  if (titleWordCount < 2 || titleWordCount > 8) {
-    return `Custom requirement title must contain 2-8 words. You entered ${titleWordCount}.`;
+  const titleValidationMessage = getWordCountValidationMessage(titleWordCount, 2, 20);
+  if (titleValidationMessage) {
+    return `Custom requirement title: ${titleValidationMessage} You entered ${titleWordCount}.`;
   }
 
   const descriptionWordCount = countWords(description);
-  if (descriptionWordCount < 5 || descriptionWordCount > 200) {
-    return `Custom requirement description must contain 5-200 words. You entered ${descriptionWordCount}.`;
+  const descriptionValidationMessage = getWordCountValidationMessage(descriptionWordCount, 5, 200);
+  if (descriptionValidationMessage) {
+    return `Custom requirement description: ${descriptionValidationMessage} You entered ${descriptionWordCount}.`;
   }
 
   return '';
+};
+
+const formatWordCount = (wordCount, minimum, maximum) => {
+  const wordLabel = wordCount === 1 ? 'word' : 'words';
+  const validationMessage = getWordCountValidationMessage(wordCount, minimum, maximum);
+  return `${wordCount} ${wordLabel} (${minimum}-${maximum} allowed)${validationMessage ? `. ${validationMessage}` : ''}`;
 };
 
 const formatPublishedRequirement = (requirement) => ({
@@ -750,12 +768,12 @@ const AdminRequirements = () => {
                   title: event.target.value
                 }))}
                 placeholder="e.g., Updated Medical Clearance"
-                aria-invalid={customRequirementTitleWordCount < 2 || customRequirementTitleWordCount > 8}
+                aria-invalid={customRequirementTitleWordCount < 2 || customRequirementTitleWordCount > 20}
                 aria-describedby="custom-requirement-title-word-count"
                 required
               />
               <p id="custom-requirement-title-word-count" className="requirement-word-count" aria-live="polite">
-                {customRequirementTitleWordCount} words (2-8 required)
+                {formatWordCount(customRequirementTitleWordCount, 2, 20)}
               </p>
             </div>
             <div className="input-field-group">
@@ -775,7 +793,7 @@ const AdminRequirements = () => {
                 aria-describedby="custom-requirement-description-word-count"
               />
               <p id="custom-requirement-description-word-count" className="requirement-word-count" aria-live="polite">
-                {customRequirementDescriptionWordCount} words (5-200 required)
+                {formatWordCount(customRequirementDescriptionWordCount, 5, 200)}
               </p>
             </div>
             <div className="input-field-group">
