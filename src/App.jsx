@@ -27,6 +27,7 @@ const AdminSchedules = lazy(() => import("./pages/AdminPortal/AdminSchedules"));
 const AdminEquipments = lazy(() => import("./pages/AdminPortal/AdminEquipments"));
 const AdminBorrowing = lazy(() => import("./pages/AdminPortal/AdminBorrowing"));
 const AdminSettings = lazy(() => import("./pages/AdminPortal/AdminSettings"));
+const AdminAuditLog = lazy(() => import("./pages/AdminPortal/AdminAuditLog"));
 
 // Coach Portal Pages
 const CoachLayout = lazy(() => import("./pages/CoachPortal/CoachLayout"));
@@ -84,6 +85,7 @@ function App() {
           <Route path="equipments" element={<AdminEquipments />} />
           <Route path="borrowing" element={<AdminBorrowing />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="audit-log" element={<AdminAuditLog />} />
         </Route>
 
         {/* Coach Portal Routes */}

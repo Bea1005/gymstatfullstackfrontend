@@ -538,7 +538,15 @@ const AdminDashboard = () => {
 
 const ANALYTICS_COLORS = ['#7b1e1e', '#d2a500', '#a94b4b', '#e3bd46', '#542020', '#c87955', '#8b7b62', '#d88989'];
 
-const getAnalyticsTotal = (items) => items.reduce((total, item) => total + (Number(item.count) || 0), 0);
+const getFiniteAnalyticsCount = (value) => {
+  const count = Number(value);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+};
+
+const getAnalyticsTotal = (items) => items.reduce(
+  (total, item) => total + getFiniteAnalyticsCount(item.count),
+  0
+);
 
 const isDepartmentUnavailable = (department) => (
   ['department unavailable', 'department not provided'].includes(String(department || '').trim().toLowerCase())
@@ -548,10 +556,13 @@ const getAnalyticsLeader = (items, labelKey) => {
   const eligibleItems = labelKey === 'department'
     ? items.filter((item) => !isDepartmentUnavailable(item.department))
     : items;
-  const topCount = eligibleItems.reduce((highest, item) => Math.max(highest, Number(item.count) || 0), 0);
+  const topCount = eligibleItems.reduce(
+    (highest, item) => Math.max(highest, getFiniteAnalyticsCount(item.count)),
+    0
+  );
   if (!topCount) return '—';
   return eligibleItems
-    .filter((item) => Number(item.count) === topCount)
+    .filter((item) => getFiniteAnalyticsCount(item.count) === topCount)
     .map((item) => String(item[labelKey] || 'Not specified'))
     .join(', ');
 };
@@ -561,7 +572,7 @@ const getAnalyticsLeaderCount = (items, labelKey) => {
     ? items.filter((item) => !isDepartmentUnavailable(item.department))
     : items;
   return eligibleItems.reduce(
-  (highest, item) => Math.max(highest, Number(item.count) || 0),
+  (highest, item) => Math.max(highest, getFiniteAnalyticsCount(item.count)),
   0
   );
 };
@@ -587,15 +598,18 @@ const AnalyticsChart = ({
   const leaderItems = labelKey === 'department'
     ? items.filter((item) => !isDepartmentUnavailable(item.department))
     : items;
-  const topCount = leaderItems.reduce((highest, item) => Math.max(highest, Number(item.count) || 0), 0);
+  const topCount = leaderItems.reduce(
+    (highest, item) => Math.max(highest, getFiniteAnalyticsCount(item.count)),
+    0
+  );
   const total = getAnalyticsTotal(items);
   const chartItems = items.map((item, index) => {
-    const count = Number(item.count) || 0;
+    const count = getFiniteAnalyticsCount(item.count);
     return {
       label: String(item[labelKey] || 'Not specified'),
       count,
-      detailCount: detailKey ? Number(item[detailKey]) || 0 : null,
-      percent: total > 0 ? (count / total) * 100 : 0,
+      detailCount: detailKey ? getFiniteAnalyticsCount(item[detailKey]) : null,
+      percent: Number.isFinite(total) && total > 0 ? (count / total) * 100 : 0,
       color: !isDepartmentUnavailable(item.department)
         && count === topCount
         && topCount > 0
@@ -651,7 +665,7 @@ const AnalyticsChart = ({
             >
               <circle className="db-analytics-pie__track" cx="60" cy="60" r="44" />
               {chartItems.reduce((segments, item) => {
-                if (item.percent <= 0) return segments;
+                if (!Number.isFinite(item.percent) || item.percent <= 0) return segments;
                 const offset = segments.reduce((sum, segment) => sum + segment.percent, 0);
                 segments.push(
                   <circle
@@ -663,7 +677,7 @@ const AnalyticsChart = ({
                     pathLength="100"
                     stroke={item.color}
                     strokeDasharray={`${item.percent} ${100 - item.percent}`}
-                    strokeDashoffset={-offset}
+                    strokeDashoffset={Number.isFinite(offset) ? -offset : 0}
                     transform="rotate(-90 60 60)"
                   >
                     <title>{`${item.label}: ${item.count.toLocaleString()} (${item.percent.toFixed(1)}%)${detailKey ? `, ${item.detailCount.toLocaleString()} ${detailLabel}` : ''}`}</title>

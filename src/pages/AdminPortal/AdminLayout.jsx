@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import logoImage from '../../assets/logo.png';
 import Icon from '../../components/Icon';
@@ -70,15 +70,15 @@ const AdminLayout = () => {
   const [animatingNotification, setAnimatingNotification] = useState(null);
   const { authReady, authError } = usePortalSession(['admin'], 'Admin');
 
-  const refreshNotificationState = () => {
+  const refreshNotificationState = useCallback(() => {
     setNotificationState({
       dashboard: hasUnreadAdminNotification('dashboard'),
       schedules: hasUnreadAdminNotification('schedules'),
       requirements: hasUnreadAdminNotification('requirements'),
     });
-  };
+  }, []);
 
-  const markNotificationRead = (key) => {
+  const markNotificationRead = useCallback((key) => {
     if (!key || !hasUnreadAdminNotification(key)) return;
 
     const readAt = key === 'schedules'
@@ -89,9 +89,11 @@ const AdminLayout = () => {
 
     setNotificationReadStamp(key, readAt);
     refreshNotificationState();
-  };
+  }, [refreshNotificationState]);
 
   useEffect(() => {
+    // Reconcile persisted notifications when the Admin shell first mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshNotificationState();
 
     const syncNotificationState = () => refreshNotificationState();
@@ -115,16 +117,9 @@ const AdminLayout = () => {
       window.removeEventListener('gymstat-schedule-updated', syncNotificationState);
       window.removeEventListener('gymstat-requirement-updated', syncNotificationState);
     };
-  }, []);
+  }, [refreshNotificationState]);
 
-  useEffect(() => {
-    const currentItem = navItems.find((item) => item.path === location.pathname);
-    if (currentItem?.notificationKey) {
-      markNotificationRead(currentItem.notificationKey);
-    }
-  }, [location.pathname]);
-
-  const navItems = [
+  const navItems = useMemo(() => [
     { name: 'Dashboard', path: '/admin/dashboard', notificationKey: 'dashboard', icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -176,11 +171,23 @@ const AdminLayout = () => {
     { name: 'Borrowing', path: '/admin/borrowing', icon: (
       <Icon name="userCircle" />
     ) },
+    { name: 'Audit Log', path: '/admin/audit-log', icon: (
+      <Icon name="clipboard" />
+    ) },
     // ✅ FIXED: Settings menu item with imported setting image
     { name: 'Settings', path: '/admin/settings', icon: (
       <Icon name="settings" />
     ) },
-  ];
+  ], []);
+
+  useEffect(() => {
+    const currentItem = navItems.find((item) => item.path === location.pathname);
+    if (currentItem?.notificationKey) {
+      // Entering a notification page marks that item as read.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      markNotificationRead(currentItem.notificationKey);
+    }
+  }, [location.pathname, markNotificationRead, navItems]);
 
   const handleNavigationClick = (item) => {
     closeMobileMenu();

@@ -783,6 +783,29 @@ export const getAdminDashboard = async (analyticsFilters = {}) => {
   });
 };
 
+const buildAuditLogQuery = (filters = {}) => {
+  const query = new URLSearchParams();
+  for (const key of ['search', 'role', 'action', 'module', 'result', 'startDate', 'endDate', 'page', 'pageSize']) {
+    if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+      query.set(key, String(filters[key]));
+    }
+  }
+  return query.toString();
+};
+
+export const getAdminAuditLogs = async (filters = {}) => {
+  const query = buildAuditLogQuery(filters);
+  return apiRequest(`/admin/audit-logs${query ? `?${query}` : ''}`, {
+    method: 'GET',
+  });
+};
+
+export const exportAdminAuditLogs = async (filters = {}) => {
+  const query = buildAuditLogQuery(filters);
+  const endpoint = `/admin/audit-logs/export${query ? `?${query}` : ''}`;
+  return downloadFileToBrowser(endpoint, 'gymstat-audit-log.csv');
+};
+
 // ========== USER MANAGEMENT ENDPOINTS (Admin) ==========
 // Get all users by role
 export const getAllUsers = async (role = null) => {
