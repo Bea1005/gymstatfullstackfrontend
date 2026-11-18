@@ -1114,8 +1114,7 @@ export default function CoachRecord() {
     athleteSaveInProgressRef.current = true;
     try {
       setIsSaving(true);
-      const photoUrl = selectedFile ? imagePreview : editForm.photo;
-      const athleteData = { ...editForm, photo: photoUrl };
+      const athleteData = { ...editForm };
 
       if (isAddingAthlete) {
         if (!editForm.studentId) {
@@ -1135,7 +1134,8 @@ export default function CoachRecord() {
       } else if (editingAthlete) {
         const { status, ...profileData } = athleteData;
         const savedStatus = normalizeAthleteStatus(status);
-        await api.updateCoachAthleteStatus(editingAthlete.id, savedStatus);
+        const selectedSport = activeSportRef.current || coachProfile.mainSport;
+        await api.updateCoachAthleteStatus(editingAthlete.id, savedStatus, selectedSport);
         const persistedAthletes = await api.getCoachAthletes(activeSportRef.current);
         const persistedAthlete = Array.isArray(persistedAthletes)
           ? persistedAthletes.find((athlete) => String(athlete._id || athlete.studentId || athlete.id) === String(editingAthlete.id))
@@ -1155,10 +1155,14 @@ export default function CoachRecord() {
             profileUpdates[field] = profileData[field];
           }
         });
-        if (selectedFile) profileUpdates.photo = photoUrl;
-        if (Object.keys(profileUpdates).length > 0) {
+        if (Object.keys(profileUpdates).length > 0 || selectedFile) {
           try {
-            await api.updateCoachAthlete(editingAthlete.id, profileUpdates, coachProfile.mainSport);
+            await api.updateCoachAthlete(
+              editingAthlete.id,
+              profileUpdates,
+              selectedSport,
+              selectedFile
+            );
           } catch (profileError) {
             await fetchCoachData(activeSportRef.current);
             setToast({

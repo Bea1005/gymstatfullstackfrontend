@@ -1329,15 +1329,24 @@ export const searchCoachStudents = async (q, sport) => {
   return apiRequest('/coach/student-search?' + params, { method: 'GET' });
 };
 
-export const updateCoachAthlete = async (athleteId, athleteData, sport) => {
+export const updateCoachAthlete = async (athleteId, athleteData, sport, profilePhotoFile) => {
+  let body = JSON.stringify(athleteData);
+  if (profilePhotoFile) {
+    body = new FormData();
+    Object.entries(athleteData).forEach(([field, value]) => {
+      if (value !== undefined && value !== null) body.append(field, String(value));
+    });
+    body.append('profilePhoto', profilePhotoFile);
+  }
+
   return apiRequest(`/coach/athletes/${encodeURIComponent(athleteId)}?sport=${encodeURIComponent(sport || '')}`, {
     method: 'PUT',
-    body: JSON.stringify(athleteData),
+    body,
   });
 };
 
-export const updateCoachAthleteStatus = async (athleteId, athleteStatus) => {
-  return apiRequest(`/coach/athletes/${athleteId}`, {
+export const updateCoachAthleteStatus = async (athleteId, athleteStatus, sport) => {
+  return apiRequest(`/coach/athletes/${encodeURIComponent(athleteId)}?sport=${encodeURIComponent(sport || '')}`, {
     method: 'PUT',
     body: JSON.stringify({ athleteStatus }),
   });

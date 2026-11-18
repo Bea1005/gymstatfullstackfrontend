@@ -185,7 +185,7 @@ export default function LoginPage() {
       setOtpSecondsLeft(600);
       setResendSecondsLeft(60);
     } catch (error) {
-      notify("error", "Unable to send code", error.message || "Please try again later.");
+      setForgotValidationError(error.message || "Unable to send code. Please try again later.");
     } finally {
       setForgotLoading(false);
     }
@@ -476,7 +476,7 @@ export default function LoginPage() {
                 <p className="forgot-modal-description">Enter your registered email. If an account is associated with it, we will send a verification code.</p>
                 <label className="forgot-modal-field">
                   <span>Registered Email</span>
-                  <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="Enter your registered email" autoComplete="email" />
+                  <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="Enter your registered email" autoComplete="off" />
                 </label>
                 {forgotValidationError && <p className="forgot-validation-error">{forgotValidationError}</p>}
                 <div className="forgot-modal-actions">
@@ -536,7 +536,7 @@ export default function LoginPage() {
 
             {forgotStep === "otp" && (
               <form onSubmit={handleOtpSubmit} className="forgot-modal-form">
-                <p className="forgot-modal-description">Enter the verification code sent to your email.</p>
+                <p className="forgot-modal-description">If an account is associated with this email, a verification code will be sent. If you don't receive one, confirm that you entered your registered email.</p>
                 <label className="forgot-modal-field">
                   <span>Verification Code</span>
                   <input className="forgot-otp-input" inputMode="numeric" maxLength={6} value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} onPaste={(e) => { e.preventDefault(); setForgotOtp(e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); }} placeholder="6-digit code" autoComplete="one-time-code" />

@@ -536,13 +536,13 @@ export default function RegisterPage() {
           <form onSubmit={handleRegister} className="login-form">
             {[
               { field: "firstName", label: "First Name", required: true, placeholder: "Enter your first name", maxLength: 100 },
-              { field: "middleInitial", label: "Middle Initial", required: false, placeholder: "Optional", maxLength: 8 },
+              { field: "middleInitial", label: "Middle Initial", required: false, placeholder: "Enter your middle initial", maxLength: 8 },
               { field: "lastName", label: "Last Name", required: true, placeholder: "Enter your last name", maxLength: 100 },
               { field: "suffix", label: "Suffix", required: false, placeholder: "e.g., Jr., Sr., II", maxLength: 16 },
               { field: "contactNumber", label: "Contact Number", required: true, placeholder: "09XXXXXXXXX or +639XXXXXXXXX", maxLength: 13 },
             ].map(({ field, label, required, placeholder, maxLength }) => (
               <div className="login-field" key={field}>
-                <label htmlFor={`registration-${field}`}>{label}{required ? "" : ""}</label>
+                <label htmlFor={`registration-${field}`}>{label}{required ? " " : " (Optional)"}</label>
                 <input
                   id={`registration-${field}`}
                   name={field}
