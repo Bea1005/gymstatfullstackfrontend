@@ -27,6 +27,24 @@ const MODULE_OPTIONS = [
   'Equipment', 'Borrowing', 'Public Calendar', 'Student Portal', 'GYMSTAT',
 ];
 
+const ROLE_LABELS = {
+  admin: 'Admin',
+  coach: 'Coach',
+  screener: 'Screener',
+  student: 'Student-Athlete',
+  'student-athlete': 'Student-Athlete',
+  studentathlete: 'Student-Athlete',
+  calendar: 'Public Calendar',
+  pending: 'Pending account',
+};
+
+const formatRole = (role) => {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  return ROLE_LABELS[normalizedRole] || (normalizedRole
+    ? normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1)
+    : 'Unknown');
+};
+
 const formatDateTime = (value) => {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return 'Unknown time';
@@ -247,10 +265,10 @@ const AdminAuditLog = () => {
                 <tr key={record._id}>
                   <td className="audit-date-cell">{formatDateTime(record.timestamp)}</td>
                   <td>
-                    <strong>{record.actorName || 'Unknown user'}</strong>
+                    <strong>{record.actorName || record.identifier || 'Unknown user'}</strong>
                     {record.userId && <small>{record.userId}</small>}
                   </td>
-                  <td><span className="audit-role-badge">{record.role || 'Unknown'}</span></td>
+                  <td><span className="audit-role-badge">{formatRole(record.role)}</span></td>
                   <td>
                     <strong>{String(record.action || 'ACTIVITY').replace(/_/g, ' ')}</strong>
                     <small>{record.module || 'GYMSTAT'}</small>
@@ -317,9 +335,9 @@ const AdminAuditLog = () => {
             </header>
             <dl>
               <div><dt>Date and time</dt><dd>{formatDateTime(selectedRecord.timestamp)}</dd></div>
-              <div><dt>User</dt><dd>{selectedRecord.actorName || selectedRecord.identifier || 'Pending account'}</dd></div>
-              <div><dt>User ID</dt><dd>{selectedRecord.userId || '-'}</dd></div>
-              <div><dt>Role</dt><dd>{selectedRecord.role || 'Unknown'}</dd></div>
+              <div><dt>User</dt><dd>{selectedRecord.actorName || selectedRecord.identifier || 'Unknown user'}</dd></div>
+              <div><dt>User ID</dt><dd>{selectedRecord.userId || selectedRecord.identifier || '-'}</dd></div>
+              <div><dt>Role</dt><dd>{formatRole(selectedRecord.role)}</dd></div>
               <div><dt>Module</dt><dd>{selectedRecord.module || 'GYMSTAT'}</dd></div>
               <div><dt>Affected record</dt><dd>{selectedRecord.affectedRecord || '—'}</dd></div>
               <div><dt>Status</dt><dd>{selectedRecord.result === 'SUCCESS' ? 'Success' : `Failed${selectedRecord.httpStatus ? ` (HTTP ${selectedRecord.httpStatus})` : ''}`}</dd></div>
