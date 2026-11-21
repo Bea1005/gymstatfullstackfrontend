@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SplashScreen from "./pages/SplashScreen/SplashScreen";
 import LandingPage from "./pages/SplashScreen/LandingPage";
+import AboutPage from "./pages/SplashScreen/AboutPage";
 import LoginPage from "./pages/LoginSignup/LoginPage";
 import RegisterPage from "./pages/LoginSignup/RegisterPage";
 import ScreenerConfirmPage from "./pages/LoginSignup/ScreenerConfirmPage";
@@ -52,6 +53,7 @@ function App() {
         {/* Public Routes */}
         <Route path="/" element={<SplashScreen />} />
         <Route path="/landingpage" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/terms-of-service" element={<LandingPolicyPage policy="terms" />} />
         <Route path="/privacy-policy" element={<LandingPolicyPage policy="privacy" />} />
         {/* role selection removed - onboarding now goes to login */}

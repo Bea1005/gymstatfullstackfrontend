@@ -60,6 +60,14 @@ const LandingPage = () => {
             >
               Calendar
             </button>
+            <button
+              className="landing-nav-link landing-nav-about"
+              onClick={() => navigateFromMenu('/about')}
+              title="Learn about the University Gymnasium and Sports Unit"
+            >
+            
+              About
+            </button>
           </nav>
 
           {/* CTA Button */}
