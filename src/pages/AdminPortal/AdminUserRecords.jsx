@@ -1,7 +1,7 @@
 import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { getAdminStudents, getAdminScreeners, getNextAdminScreenerId, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
+import { getAdminStudents, getAdminCoaches, getAdminScreeners, getNextAdminScreenerId, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { isPasswordValid, PASSWORD_POLICY_MESSAGE } from '../../constants/passwordPolicy';
 import Icon from '../../components/Icon';
@@ -75,6 +75,34 @@ const normalizeUserRow = (user) => {
   };
 };
 
+const normalizeCoachRow = (user) => {
+  const raw = user || {};
+  const sportValues = [
+    ...(Array.isArray(raw.sports) ? raw.sports : raw.sports ? [raw.sports] : []),
+    ...(Array.isArray(raw.assignedSports) ? raw.assignedSports : raw.assignedSports ? [raw.assignedSports] : []),
+    raw.sport,
+  ];
+  const sports = [...new Map(
+    sportValues
+      .map((value) => (
+        typeof value === 'string'
+          ? value
+          : value?.name || value?.label || value?.value || value?.sport || ''
+      ))
+      .flatMap((value) => String(value || '').split(','))
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((value) => [value.toLowerCase(), value])
+  ).values()];
+  const normalized = normalizeUserRow(raw);
+
+  return {
+    ...normalized,
+    sport: sports.join(', '),
+    sports
+  };
+};
+
 const parseUserListResponse = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.users)) return data.users;
@@ -134,7 +162,7 @@ const StatusBadge = ({ status }) => {
 };
 
 export default function AdminUserRecords() {
-  // 'student' | 'screener'
+  // 'student' | 'coach' | 'screener'
   const [tab, setTab] = useState('student');
 
   /* ── Student state ── */
@@ -143,6 +171,12 @@ export default function AdminUserRecords() {
   const [studentDept,    setStudentDept]    = useState('All');
   const [studentAccountStatus, setStudentAccountStatus] = useState('active');
   const [selStudents,    setSelStudents]    = useState([]);
+
+  /* ── Coach state ── */
+  const [coaches, setCoaches] = useState([]);
+  const [coachesLoading, setCoachesLoading] = useState(false);
+  const [coachSearch, setCoachSearch] = useState('');
+  const [coachDept, setCoachDept] = useState('All');
 
   /* ── Screener state ── */
   const [screeners,      setScreeners]      = useState([]);
@@ -202,6 +236,23 @@ export default function AdminUserRecords() {
     }
   };
 
+  const fetchCoaches = async () => {
+    setCoachesLoading(true);
+    try {
+      const data = await getAdminCoaches('active');
+      const coachesData = parseUserListResponse(data)
+        .filter((user) => String(user?.role || '').trim().toLowerCase() === 'coach')
+        .map(normalizeCoachRow);
+      setCoaches(coachesData);
+    } catch (error) {
+      console.error('Error fetching coaches:', error);
+      showToast('Failed to load coaches', 'error');
+      setCoaches([]);
+    } finally {
+      setCoachesLoading(false);
+    }
+  };
+
   const fetchNextScreenerId = async () => {
     try {
       const response = await getNextAdminScreenerId();
@@ -217,6 +268,7 @@ export default function AdminUserRecords() {
   };
 
   const fetchStudentsEvent = useEffectEvent(fetchStudents);
+  const fetchCoachesEvent = useEffectEvent(fetchCoaches);
   const fetchScreenersEvent = useEffectEvent(fetchScreeners);
   const fetchNextScreenerIdEvent = useEffectEvent(fetchNextScreenerId);
 
@@ -226,12 +278,17 @@ export default function AdminUserRecords() {
     fetchNextScreenerIdEvent();
   }, [studentAccountStatus, screenerAccountStatus]);
 
+  useEffect(() => {
+    if (tab === 'coach') fetchCoachesEvent();
+  }, [tab]);
+
   /* ── Generic checkbox helpers ── */
   const toggle    = (id, setter) => setter(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const toggleAll = (rows, sel, setter) => setter(sel.length === rows.length ? [] : rows.map(r => r.id));
 
   /* ── Filtered lists ── */
   const studentSearchText = String(studentSearch ?? '').trim().toLowerCase();
+  const coachSearchText = String(coachSearch ?? '').trim().toLowerCase();
   const screenerSearchText = String(screenerSearch ?? '').trim().toLowerCase();
 
   const filtStudents = sortUsersBySurname(students.filter(s => {
@@ -249,6 +306,15 @@ export default function AdminUserRecords() {
 
     return (screenerDept === 'All' || s.dept === screenerDept)
       && (name.includes(screenerSearchText) || email.includes(screenerSearchText));
+  }));
+
+  const filtCoaches = sortUsersBySurname(coaches.filter((coach) => {
+    const name = String(coach?.name ?? '').toLowerCase();
+    const email = String(coach?.email ?? '').toLowerCase();
+    const sports = String(coach?.sport ?? '').toLowerCase();
+
+    return (coachDept === 'All' || coach.dept === coachDept)
+      && (name.includes(coachSearchText) || email.includes(coachSearchText) || sports.includes(coachSearchText));
   }));
   /* ── Register screener ── */
   const registerScreener = async (e) => {
@@ -325,19 +391,31 @@ export default function AdminUserRecords() {
 
     try {
       const isStudentTab = tab === 'student';
-      const role = isStudentTab ? 'student' : 'screener';
-      const accountStatus = isStudentTab ? studentAccountStatus : screenerAccountStatus;
+      const isCoachTab = tab === 'coach';
+      const role = tab;
+      const reportTitle = isStudentTab
+        ? 'STUDENT-ATHLETE USER RECORDS'
+        : isCoachTab
+          ? 'COACH USER RECORDS'
+          : 'SCREENER USER RECORDS';
+      const accountStatus = isStudentTab
+        ? studentAccountStatus
+        : isCoachTab
+          ? 'active'
+          : screenerAccountStatus;
       const response = isStudentTab
         ? await getAdminStudents(accountStatus)
-        : await getAdminScreeners(accountStatus);
+        : isCoachTab
+          ? await getAdminCoaches(accountStatus)
+          : await getAdminScreeners(accountStatus);
       const records = parseUserListResponse(response)
         .filter((user) => (
           String(user?.role || '').trim().toLowerCase() === role
           && (user?.accountStatus === 'archived' ? 'archived' : 'active') === accountStatus
         ))
-        .map(normalizeUserRow);
-      const department = isStudentTab ? studentDept : screenerDept;
-      const currentSearch = isStudentTab ? studentSearch : screenerSearch;
+        .map((user) => (isCoachTab ? normalizeCoachRow(user) : normalizeUserRow(user)));
+      const department = isStudentTab ? studentDept : isCoachTab ? coachDept : screenerDept;
+      const currentSearch = isStudentTab ? studentSearch : isCoachTab ? coachSearch : screenerSearch;
       const search = String(currentSearch ?? '').trim().toLowerCase();
       let reportUsers = records.filter((user) => {
         const name = String(user?.name ?? '').toLowerCase();
@@ -345,7 +423,7 @@ export default function AdminUserRecords() {
         const sport = String(user?.sport ?? '').toLowerCase();
 
         return (department === 'All' || user.dept === department)
-          && (name.includes(search) || email.includes(search) || (isStudentTab && sport.includes(search)));
+          && (name.includes(search) || email.includes(search) || ((isStudentTab || isCoachTab) && sport.includes(search)));
       });
 
       reportUsers = sortUsersBySurname(reportUsers);
@@ -369,7 +447,15 @@ export default function AdminUserRecords() {
           { label: 'DEPARTMENT', width: 1.3, value: (user) => user.dept },
           { label: 'EMAIL ADDRESS', width: 2.6, value: (user) => user.email },
         ]
-        : [
+        : isCoachTab
+          ? [
+            { label: 'NAME', width: 1.7, value: (user) => user.name },
+            { label: 'STATUS', width: 0.8, value: (user) => user.status },
+            { label: 'SPORTS', width: 1.4, value: (user) => user.sport },
+            { label: 'DEPARTMENT', width: 1.2, value: (user) => user.dept },
+            { label: 'EMAIL ADDRESS', width: 2.4, value: (user) => user.email },
+          ]
+          : [
           { label: 'NAME', width: 2, value: (user) => user.name },
           { label: 'EMAIL ADDRESS', width: 3, value: (user) => user.email },
           { label: 'DEPARTMENT', width: 1.5, value: (user) => user.dept },
@@ -387,7 +473,7 @@ export default function AdminUserRecords() {
           doc.setFontSize(13);
           doc.text('USER RECORDS REPORT', margin, 1.08);
           doc.setFontSize(9);
-          doc.text(isStudentTab ? 'STUDENT-ATHLETE USER RECORDS' : 'SCREENER USER RECORDS', margin, 1.32);
+          doc.text(reportTitle, margin, 1.32);
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(90, 90, 90);
           doc.setFontSize(8);
@@ -403,7 +489,7 @@ export default function AdminUserRecords() {
           doc.text('GYMSTAT  |  USER RECORDS REPORT', margin, 0.34);
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(8);
-          doc.text(isStudentTab ? 'STUDENT-ATHLETE USER RECORDS' : 'SCREENER USER RECORDS', margin, 0.5);
+          doc.text(reportTitle, margin, 0.5);
           doc.setDrawColor(255, 220, 0);
           doc.setLineWidth(0.02);
           doc.line(margin, 0.58, pageWidth - margin, 0.58);
@@ -600,15 +686,23 @@ export default function AdminUserRecords() {
   };
 
   /* ── Current search value for the input ── */
-  const searchVal = tab === 'student' ? studentSearch : screenerSearch;
-  const setSearch = tab === 'student' ? setStudentSearch : setScreenerSearch;
+  const searchVal = tab === 'student'
+    ? studentSearch
+    : tab === 'coach'
+      ? coachSearch
+      : screenerSearch;
+  const setSearch = tab === 'student'
+    ? setStudentSearch
+    : tab === 'coach'
+      ? setCoachSearch
+      : setScreenerSearch;
 
   return (
     <div className="ur-root">
 
       {/* ── Page header ── */}
       <div className="ur-header">
-        <h1 className="ur-title">Registered Student-Athletes,<br />Screeners List</h1>
+        <h1 className="ur-title">Registered Student-Athletes,<br />Coaches &amp; Screeners List</h1>
         <div className="ur-header-actions">
           <div className="ur-search-box">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2">
@@ -616,7 +710,7 @@ export default function AdminUserRecords() {
             </svg>
             <input
               className="ur-search-input"
-              placeholder={tab === 'student' ? 'Search Students…' : 'Search Screeners…'}
+              placeholder={tab === 'student' ? 'Search Students…' : tab === 'coach' ? 'Search Coaches…' : 'Search Screeners…'}
               value={searchVal}
               onChange={e => setSearch(e.target.value)}
             />
@@ -635,6 +729,7 @@ export default function AdminUserRecords() {
       {/* ── Tab switcher ── */}
       <div className="ur-tabs">
         <button className={`ur-tab${tab === 'student'  ? ' ur-tab--active' : ''}`} onClick={() => setTab('student')}>Student-Athlete</button>
+        <button className={`ur-tab${tab === 'coach' ? ' ur-tab--active' : ''}`} onClick={() => setTab('coach')}>Coaches</button>
         <button className={`ur-tab${tab === 'screener' ? ' ur-tab--active' : ''}`} onClick={() => setTab('screener')}>Screener</button>
       </div>
 
@@ -694,6 +789,65 @@ export default function AdminUserRecords() {
                   </tr>
                 ))}
                 {filtStudents.length === 0 && <tr><td colSpan="7" className="ur-empty">No students found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ COACH TAB ══════════ */}
+      {tab === 'coach' && (
+        <div className="ur-section">
+          <div className="ur-table-topbar">
+            <div className="ur-table-topbar__left">
+              <span className="ur-section-label">Coaches</span>
+              <span className="ur-count-badge">{filtCoaches.length} users</span>
+            </div>
+            <div className="ur-table-topbar__right">
+              <select className="ur-dept-filter" value={coachDept} onChange={(event) => setCoachDept(event.target.value)}>
+                <option value="All">Department</option>
+                {DEPARTMENT_OPTIONS.map((department) => <option key={department} value={department}>{department}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="ur-table-wrap">
+            <table className="ur-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Sports</th>
+                  <th>Department</th>
+                  <th>Email address</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coachesLoading ? (
+                  <tr><td colSpan="5" className="ur-empty">Loading coaches...</td></tr>
+                ) : (
+                  filtCoaches.map((coach) => (
+                    <tr key={coach.id}>
+                      <td>
+                        <div className="ur-name-cell">
+                          <Avatar name={coach.name} />
+                          <div>
+                            <div className="ur-name">{coach.name || '—'}</div>
+                            {coach.username
+                              ? <div className="ur-username">@{coach.username}</div>
+                              : coach.id && <div className="ur-username">ID: {coach.id}</div>}
+                          </div>
+                        </div>
+                      </td>
+                      <td><StatusBadge status={coach.status} /></td>
+                      <td className="ur-sport">{coach.sport || '—'}</td>
+                      <td className="ur-dept-tag">{coach.dept || '—'}</td>
+                      <td className="ur-email">{coach.email || '—'}</td>
+                    </tr>
+                  ))
+                )}
+                {!coachesLoading && filtCoaches.length === 0 && (
+                  <tr><td colSpan="5" className="ur-empty">No coaches found.</td></tr>
+                )}
               </tbody>
             </table>
           </div>

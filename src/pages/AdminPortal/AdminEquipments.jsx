@@ -69,11 +69,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
     if (uniqueIds.length === 0) {
       return '—';
     }
-    if (uniqueIds.length === 1) {
-      return uniqueIds[0];
-    }
-
-    return uniqueIds.join(', ');
+    return uniqueIds[0];
   };
 
   const mapEquipmentToUiShape = (equipment) => {
@@ -719,7 +715,7 @@ export default function AdminEquipments({ onUpdateInventory }) {
                 ) : generatedReferenceIds.length > 0 ? (
                   <span className="eq-reference-id-values">{generatedReferenceIds.join(', ')}</span>
                 ) : (
-                  <span>Select equipment type and quantity</span>
+                  <span></span>
                 )}
               </div>
             </div>

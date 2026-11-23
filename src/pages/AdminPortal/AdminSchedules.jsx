@@ -6,10 +6,12 @@ import * as api from '../../services/api';
 import Icon from '../../components/Icon';
 import { TIMES } from '../../constants/scheduleTimes';
 import {
+  getUpcomingApprovedSchedules,
   getCalendarDateString,
   isDateFullyOccupied,
   isPastScheduleDate,
   isPastScheduleTime,
+  sortSchedulesByCreatedAt,
 } from '../../utils/scheduleAvailability';
 import './AdminPortal.css';
 
@@ -316,8 +318,16 @@ const AdminSchedules = () => {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 30_000);
-    return () => window.clearInterval(timer);
+    const refreshNow = () => setNow(new Date());
+    const timer = window.setInterval(refreshNow, 30_000);
+    window.addEventListener('focus', refreshNow);
+    document.addEventListener('visibilitychange', refreshNow);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshNow);
+      document.removeEventListener('visibilitychange', refreshNow);
+    };
   }, []);
 
   useEffect(() => {
@@ -1252,14 +1262,9 @@ const AdminSchedules = () => {
     );
   }
 
-  const sortedReservations = [...reservations].sort((a, b) => {
-    const dateOrder = String(b.startDate || '').localeCompare(String(a.startDate || ''));
-    if (dateOrder !== 0) return dateOrder;
-
-    const aStartTime = parseScheduleTime(a.startTime)?.minutes ?? Number.POSITIVE_INFINITY;
-    const bStartTime = parseScheduleTime(b.startTime)?.minutes ?? Number.POSITIVE_INFINITY;
-    return aStartTime - bStartTime;
-  });
+  const sortedReservations = sortSchedulesByCreatedAt(
+    getUpcomingApprovedSchedules(reservations, now)
+  );
   const pendingRequestCount = scheduleRequests.filter(
     (request) => String(request?.status || '').toLowerCase() === 'pending'
   ).length;
@@ -1332,7 +1337,7 @@ const AdminSchedules = () => {
         <div className="yellow-table-wrapper">
           <div className="list-header">
             <h3 className="table-title">Upcoming Schedules</h3>
-            <span className="count-badge">{reservations.length} Schedules Found</span>
+            <span className="count-badge">{sortedReservations.length} Schedules Found</span>
           </div>
           <div className="table-responsive">
             <table className="admin-schedule-table">

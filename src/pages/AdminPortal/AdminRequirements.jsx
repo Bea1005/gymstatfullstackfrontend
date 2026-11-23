@@ -4,6 +4,7 @@ import NotificationToast from '../../components/NotificationToast';
 import ConfirmModal from '../../components/ConfirmModal';
 import Icon from '../../components/Icon';
 import { REGISTRATION_CATEGORIES } from '../../constants/registrationCategories';
+import { useNotifications } from '../../components/useNotifications';
 import './AdminPortal.css';
 
 const REGISTRATION_SCOPE_GROUPS = REGISTRATION_CATEGORIES.map(({ name, events = [], subcategories = [] }) => ({
@@ -78,6 +79,7 @@ const formatPublishedRequirement = (requirement) => ({
 
 const AdminRequirements = () => {
   const createEntryId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+  const { notify } = useNotifications();
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const showToast = (message, type = 'success') => setToast({ message, type });
   const closeToast = () => setToast({ message: '', type: 'success' });
@@ -104,6 +106,7 @@ const AdminRequirements = () => {
   const [restoringRequirementIds, setRestoringRequirementIds] = useState([]);
   const savingCustomRequirementRef = useRef(false);
   const restoringRequirementIdsRef = useRef(new Set());
+  const customRequirementFormRef = useRef(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const downloadInProgressRef = useRef(false);
   const uploadInProgressRef = useRef(false);
@@ -149,15 +152,16 @@ const AdminRequirements = () => {
           requirement.type === 'other'
           && !requirement.file?.filename
           && !requirement.file?.path
+          && requirement.status !== 'archived'
         ))
         .map((requirement) => ({
           ...requirement,
           id: requirement._id,
-          isArchived: requirement.status === 'archived' || requirement.isActive === false
+          isArchived: false
         })));
       setArchivedRequirements([...new Map(
         requirements
-            .filter((requirement) => requirement.status === 'archived' && requirement.publishedAt)
+            .filter((requirement) => requirement.status === 'archived')
           .map((requirement) => [String(requirement._id || requirement.id), requirement])
       ).values()]);
     } catch (error) {
@@ -302,6 +306,10 @@ const AdminRequirements = () => {
         ? parseRequirementScope(requirement.sport)
         : []
     });
+    window.requestAnimationFrame(() => {
+      customRequirementFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('custom-requirement-title')?.focus();
+    });
   };
 
   const handleSaveCustomRequirement = async (event) => {
@@ -315,10 +323,13 @@ const AdminRequirements = () => {
     const wordCountError = getCustomRequirementWordCountError({ title, description });
     if (wordCountError) {
       showToast(wordCountError, 'error');
+      notify('error', 'Validation Error', wordCountError);
       return;
     }
     if (customRequirementForm.targetStudents === 'sport-specific' && scopeItems.length === 0) {
-      showToast('Select at least one sport or event, or choose All Sports and Events.', 'error');
+      const message = 'Select at least one sport or event, or choose All Sports and Events.';
+      showToast(message, 'error');
+      notify('error', 'Validation Error', message);
       return;
     }
 
@@ -363,6 +374,7 @@ const AdminRequirements = () => {
             : requirement
         )));
         showToast(`Requirement "${title}" updated.`, 'success');
+        notify('success', 'Requirement Updated', `Requirement "${title}" was saved successfully.`);
       } else {
         const createResponse = await createRequirement(requirementData);
         if (!createResponse?.success) {
@@ -390,7 +402,9 @@ const AdminRequirements = () => {
         showToast('Requirement was saved as a draft. Publish it from the requirements list when ready.', 'error');
         return;
       }
-      showToast(error.message || 'Unable to save custom requirement.', 'error');
+      const message = error.message || 'Unable to save custom requirement.';
+      showToast(message, 'error');
+      notify('error', 'Save Failed', `${message} Your changes are still in the form.`);
     } finally {
       savingCustomRequirementRef.current = false;
       setSavingCustomRequirement(false);
@@ -430,10 +444,21 @@ const AdminRequirements = () => {
         status: 'archived',
         isActive: false
       });
-      if (response?.success === false) {
-        throw new Error(response.message || 'Failed to archive requirement.');
+      if (!response?.success || !response.data) {
+        throw new Error(response?.message || 'Failed to archive requirement.');
       }
-      showToast(`Requirement "${customRequirementToArchive.title}" archived.`, 'success');
+      const archivedRequirement = response.data;
+      const archivedId = String(archivedRequirement._id || archivedRequirement.id);
+      setCustomRequirements((current) => current.filter(
+        (requirement) => String(requirement._id || requirement.id) !== archivedId
+      ));
+      setArchivedRequirements((current) => [
+        ...current.filter((requirement) => String(requirement._id || requirement.id) !== archivedId),
+        archivedRequirement
+      ]);
+      setShowArchivedRequirements(true);
+      showToast(`Requirement "${archivedRequirement.title}" archived.`, 'success');
+      notify('success', 'Requirement Archived', `Requirement "${archivedRequirement.title}" was archived successfully.`);
       setCustomRequirementToArchive(null);
       if (editingCustomRequirement?._id === customRequirementToArchive._id) {
         resetCustomRequirementForm();
@@ -442,7 +467,9 @@ const AdminRequirements = () => {
       broadcastRequirementUpdate();
     } catch (error) {
       console.error('Failed to archive custom requirement:', error);
-      showToast(error.message || 'Unable to archive custom requirement.', 'error');
+      const message = error.message || 'Unable to archive custom requirement.';
+      showToast(message, 'error');
+      notify('error', 'Archive Failed', message);
     } finally {
       setArchivingCustomRequirement(false);
     }
@@ -753,7 +780,7 @@ const AdminRequirements = () => {
           <p>Create requirements students can submit from their Upload New tab.</p>
         </div>
 
-        <form className="admin-upload-form" onSubmit={handleSaveCustomRequirement}>
+        <form ref={customRequirementFormRef} className="admin-upload-form" onSubmit={handleSaveCustomRequirement}>
           <div className="requirement-entry-card">
             <div className="input-field-group">
               <label htmlFor="custom-requirement-title">Requirement Name</label>
@@ -777,13 +804,14 @@ const AdminRequirements = () => {
               </p>
             </div>
             <div className="input-field-group">
-              <label htmlFor="custom-requirement-description">Details</label>
+              <label htmlFor="custom-requirement-description">Details *</label>
               <textarea
                 id="custom-requirement-description"
                 className="modern-text-input"
                 rows={3}
                 maxLength={1000}
                 value={customRequirementForm.description}
+                required
                 onChange={(event) => setCustomRequirementForm((current) => ({
                   ...current,
                   description: event.target.value
@@ -927,7 +955,7 @@ const AdminRequirements = () => {
                 onClick={resetCustomRequirementForm}
                 disabled={savingCustomRequirement}
               >
-                Cancel Edit
+                Cancel
               </button>
             )}
           </div>
@@ -974,6 +1002,7 @@ const AdminRequirements = () => {
                       type="button"
                       className="requirement-action-btn requirement-action-btn--secondary requirement-box-action requirement-box-action--edit"
                       onClick={() => handleEditCustomRequirement(requirement)}
+                      disabled={savingCustomRequirement}
                     >
                       <Icon name="pencil" size={16} />
                       Edit

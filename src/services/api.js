@@ -823,6 +823,13 @@ export const getAdminStudents = async (accountStatus = 'active') => {
   });
 };
 
+export const getAdminCoaches = async (accountStatus = 'active') => {
+  return apiRequest(`/users?role=coach&accountStatus=${accountStatus}`, {
+    method: 'GET',
+    timeoutMs: 30000,
+  });
+};
+
 // Get all screeners (admin view)
 export const getAdminScreeners = async (accountStatus = 'active') => {
   return apiRequest(`/users?role=screener&accountStatus=${accountStatus}`, {
@@ -1552,6 +1559,7 @@ export default {
   // Users (Admin)
   getAllUsers,
   getAdminStudents,
+  getAdminCoaches,
   getAdminScreeners,
   createUser,
   updateUserArchiveStatus,

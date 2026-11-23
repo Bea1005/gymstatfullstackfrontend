@@ -12,6 +12,7 @@ import {
 } from '../../constants/studentRegistrationOptions';
 import { REGISTRATION_SPORT_EVENT_OPTIONS } from '../../constants/registrationCategories';
 import {
+  buildActiveRequirementBoxColumns,
   buildRequirementColumns,
   getRequirementColumnEntry,
   getSportScopedRequirements
@@ -252,7 +253,7 @@ export const RequirementScreeningInterface = ({
   const selectedSport = sportFilter === 'All' ? '' : sportFilter;
   const selectedSportRef = useRef(selectedSport);
   selectedSportRef.current = selectedSport;
-  const requirementColumns = buildRequirementColumns(publishedRequirements, sportFilter);
+  const requirementColumns = buildActiveRequirementBoxColumns(publishedRequirements, sportFilter);
   const loadRequirements = async (silent = false) => {
     if (requirementsRequestInProgressRef.current) {
       if (activeRequestSportRef.current !== selectedSport) pendingSportReloadRef.current = true;

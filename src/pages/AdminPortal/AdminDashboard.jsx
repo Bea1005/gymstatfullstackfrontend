@@ -287,11 +287,11 @@ const AdminDashboard = () => {
             <div className="db-analytics__collapse-inner">
               <div className="db-analytics__heading">
                 <p className="db-analytics__description">
-                  Historical registrations and borrowing activity · Asia/Manila
+                  
                 </p>
                 <div className="db-analytics__filters">
                   <label className="db-analytics__filter">
-                    <span>Group by</span>
+                    
                     <select
                       value={analyticsPeriod}
                       onChange={(event) => {
@@ -309,7 +309,7 @@ const AdminDashboard = () => {
                     </select>
                   </label>
                   <label className="db-analytics__filter">
-                    <span>{getAnalyticsDateInputLabel(analyticsPeriod)}</span>
+                    <span></span>
                     <input
                       aria-label={`Select reporting ${getAnalyticsDateInputLabel(analyticsPeriod).toLowerCase()}`}
                       type={getAnalyticsDateInputType(analyticsPeriod)}
@@ -324,9 +324,9 @@ const AdminDashboard = () => {
                     />
                   </label>
                   <span className="db-analytics__range" aria-live="polite">
-                    {analytics.period ? formatAnalyticsPeriod(analytics.period) : 'Loading reporting period'}
+                    
                   </span>
-                  <span className="db-analytics__refresh">Updates every 30 seconds</span>
+                  <span className="db-analytics__refresh"></span>
                 </div>
               </div>
               {analyticsLoadState === 'loading' && (
@@ -408,6 +408,7 @@ const AdminDashboard = () => {
                       detailKey="borrowers"
                       detailLabel="unique borrowers"
                       emptyMessage="No classified borrower-type activity was found for this period."
+                      categoryColorMap={BORROWER_TYPE_COLORS}
                     />
                     <AnalyticsChart
                       title="Most Borrowed Equipment"
@@ -476,7 +477,10 @@ const AdminDashboard = () => {
               <p className="db-schedule-date">No due borrowed items</p>
             )}
             {borrowingLoadState === 'ready' && dueBorrowings.map((record) => (
-              <div className="db-due-item" key={record._id || record.id}>
+              <div
+                className={`db-due-item db-due-item--${getBorrowingStatusTone(record.status)}`}
+                key={record._id || record.id}
+              >
                 <div className="db-due-item__info">
                   <span className="db-schedule-title">{record.fullname || record.Name || 'Unknown borrower'}</span>
                   <span className="db-schedule-date">{record.equipment || 'Unknown item'}</span>
@@ -487,7 +491,9 @@ const AdminDashboard = () => {
                 </div>
                 <div className="db-due-item__status">
                   <span className="db-schedule-time">{record.endTime}</span>
-                  <span className="db-due-status">{record.status}</span>
+                  <span className={`db-due-status db-due-status--${getBorrowingStatusTone(record.status)}`}>
+                    {record.status}
+                  </span>
                 </div>
               </div>
             ))}
@@ -537,6 +543,32 @@ const AdminDashboard = () => {
 };
 
 const ANALYTICS_COLORS = ['#7b1e1e', '#d2a500', '#a94b4b', '#e3bd46', '#542020', '#c87955', '#8b7b62', '#d88989'];
+const BORROWER_TYPE_COLORS = {
+  'coach/trainer': {
+    color: '#941b0c',
+    background: '#f7eaea',
+    border: '#620A1A',
+    text: '#9450c',
+  },
+  faculty: {
+    color: '#BC3908',
+    background: '#fff8e1',
+    border: '#d4703a',
+    text: '#BC3908',
+  },
+  student: {
+    color: '#e98a15',
+    background: '#e3f2fd',
+    border: '#eac77a',
+    text: '#e98a15',
+  },
+  'others (office/agency)': {
+    color: '#e1c511',
+    background: '#f3e5f5',
+    border: '#f9e000',
+    text: '#c7be59',
+  },
+};
 
 const getFiniteAnalyticsCount = (value) => {
   const count = Number(value);
@@ -594,6 +626,7 @@ const AnalyticsChart = ({
   detailLabel,
   emptyMessage,
   horizontal = false,
+  categoryColorMap = null,
 }) => {
   const leaderItems = labelKey === 'department'
     ? items.filter((item) => !isDepartmentUnavailable(item.department))
@@ -605,16 +638,18 @@ const AnalyticsChart = ({
   const total = getAnalyticsTotal(items);
   const chartItems = items.map((item, index) => {
     const count = getFiniteAnalyticsCount(item.count);
+    const categoryStyle = categoryColorMap?.[String(item[labelKey] || '').trim().toLowerCase()] || null;
     return {
       label: String(item[labelKey] || 'Not specified'),
       count,
       detailCount: detailKey ? getFiniteAnalyticsCount(item[detailKey]) : null,
       percent: Number.isFinite(total) && total > 0 ? (count / total) * 100 : 0,
-      color: !isDepartmentUnavailable(item.department)
+      categoryStyle,
+      color: categoryStyle?.color || (!isDepartmentUnavailable(item.department)
         && count === topCount
         && topCount > 0
         ? '#d2a500'
-        : ANALYTICS_COLORS[index % ANALYTICS_COLORS.length],
+        : ANALYTICS_COLORS[index % ANALYTICS_COLORS.length]),
       isTop: !isDepartmentUnavailable(item.department) && count === topCount && topCount > 0,
     };
   });
@@ -635,7 +670,18 @@ const AnalyticsChart = ({
                 title={`${item.label}: ${item.count.toLocaleString()} (${item.percent.toFixed(1)}%)${detailKey ? `, ${item.detailCount.toLocaleString()} ${detailLabel}` : ''}`}
               >
                 <div className="db-analytics-bar__meta">
-                  <span className="db-analytics-bar__label" title={item.label}>{item.label}</span>
+                  <span
+                    className={`db-analytics-bar__label${item.categoryStyle ? ' db-borrower-type-badge' : ''}`}
+                    title={item.label}
+                    style={item.categoryStyle ? {
+                      color: item.categoryStyle.text,
+                      '--borrower-type-color': item.categoryStyle.color,
+                      '--borrower-type-background': item.categoryStyle.background,
+                      '--borrower-type-border': item.categoryStyle.border,
+                    } : undefined}
+                  >
+                    {item.label}
+                  </span>
                   <span className="db-analytics-bar__value">{item.count.toLocaleString()}</span>
                 </div>
                 <div className="db-analytics-bar__track" aria-hidden="true">
@@ -692,7 +738,17 @@ const AnalyticsChart = ({
               {chartItems.map((item, index) => (
                 <li key={`${item.label}-${index}`} title={`${item.label}: ${item.count.toLocaleString()} (${item.percent.toFixed(1)}%)`}>
                   <span className="db-analytics-pie__swatch" style={{ backgroundColor: item.color }} />
-                  <span className="db-analytics-pie__legend-label">{item.label}</span>
+                  <span
+                    className={`db-analytics-pie__legend-label${item.categoryStyle ? ' db-borrower-type-badge' : ''}`}
+                    style={item.categoryStyle ? {
+                      color: item.categoryStyle.text,
+                      '--borrower-type-color': item.categoryStyle.color,
+                      '--borrower-type-background': item.categoryStyle.background,
+                      '--borrower-type-border': item.categoryStyle.border,
+                    } : undefined}
+                  >
+                    {item.label}
+                  </span>
                   <strong>
                     {item.percent.toFixed(1)}%
                     {detailKey && ` · ${item.detailCount.toLocaleString()} ${detailLabel}`}
@@ -796,6 +852,14 @@ const getBorrowingErrorState = (error) => {
   if (error?.status === 404) return 'route-error';
   if (error?.status >= 500) return 'server-error';
   return 'error';
+};
+
+const getBorrowingStatusTone = (status) => {
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  if (normalizedStatus === 'overdue') return 'overdue';
+  if (normalizedStatus === 'returned' || normalizedStatus === 'completed') return 'returned';
+  if (normalizedStatus === 'out' || normalizedStatus === 'out now') return 'out';
+  return 'default';
 };
 
 const getAnalyticsRequestError = (error) => {

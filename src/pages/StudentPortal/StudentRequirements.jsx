@@ -62,6 +62,7 @@ export default function StudentRequirements() {
   const [submissions, setSubmissions] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [fileActionLoading, setFileActionLoading] = useState(false);
   const fileActionInProgressRef = useRef(false);
   const uploadInProgressRef = useRef(false);
   const importInProgressRef = useRef(false);
@@ -412,7 +413,9 @@ export default function StudentRequirements() {
     setPreviewModal(null);
   };
 
-  const handleViewSubmission = async (submission) => {
+  const handleViewSubmission = async (submission, event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
     if (!submission?._id) {
       notify('error', 'Preview Failed', 'This submission does not have a valid file record.');
       return;
@@ -420,7 +423,7 @@ export default function StudentRequirements() {
     if (fileActionInProgressRef.current) return;
     fileActionInProgressRef.current = true;
     try {
-      setLoading(true);
+      setFileActionLoading(true);
       const previewData = await api.viewRequirement(
         submission._id,
         submission.fileName || 'uploaded-file',
@@ -437,7 +440,7 @@ export default function StudentRequirements() {
       notify('error', 'Preview Failed', err.message || 'Unable to open this file right now.');
     } finally {
       fileActionInProgressRef.current = false;
-      setLoading(false);
+      setFileActionLoading(false);
     }
   };
 
@@ -449,7 +452,7 @@ export default function StudentRequirements() {
     if (fileActionInProgressRef.current) return;
     fileActionInProgressRef.current = true;
     try {
-      setLoading(true);
+      setFileActionLoading(true);
       await api.downloadRequirement(
         submission._id,
         submission.fileName || 'uploaded-file',
@@ -460,7 +463,7 @@ export default function StudentRequirements() {
       notify('error', 'Download Failed', err.message || 'Unable to download this file right now.');
     } finally {
       fileActionInProgressRef.current = false;
-      setLoading(false);
+      setFileActionLoading(false);
     }
   };
 
@@ -548,8 +551,8 @@ export default function StudentRequirements() {
               )}
               <div className="requirement-preview-actions">
                 <button className="requirement-preview-cancel" onClick={closePreviewModal}>Cancel</button>
-                <button className="requirement-preview-download" onClick={() => handleDownloadSubmission(previewModal.submission)} disabled={loading}>
-                  {loading ? 'Downloading...' : 'Download'}
+                <button className="requirement-preview-download" onClick={() => handleDownloadSubmission(previewModal.submission)} disabled={fileActionLoading}>
+                  {fileActionLoading ? 'Downloading...' : 'Download'}
                 </button>
               </div>
             </div>
@@ -720,8 +723,8 @@ export default function StudentRequirements() {
                                 <button
                                   type="button"
                                   className="submit-single-btn"
-                                  onClick={() => handleViewSubmission(submission)}
-                                  disabled={loading}
+                                  onClick={(event) => handleViewSubmission(submission, event)}
+                                  disabled={loading || fileActionLoading}
                                   aria-label={`View ${submission.fileName || 'uploaded document'}`}
                                 >
                                   <Icon name="eye" size={16} /> View
@@ -730,7 +733,7 @@ export default function StudentRequirements() {
                                   type="button"
                                   className="student-requirement-download-btn"
                                   onClick={() => handleDownloadSubmission(submission)}
-                                  disabled={loading}
+                                  disabled={loading || fileActionLoading}
                                   aria-label={`Download ${submission.fileName || 'uploaded document'}`}
                                   title="Download document"
                                 >
@@ -803,14 +806,14 @@ export default function StudentRequirements() {
                             <td className="student-requirements-table-cell">{formatUploadDateTime(submission.uploadDate || submission.uploadedAt || submission.createdAt)}</td>
                             <td className="student-requirements-table-cell">
                               <div className="import-records-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <button type="button" className="submit-single-btn" onClick={() => handleViewSubmission(submission)} disabled={loading} aria-label={`View ${submission.fileName || 'uploaded document'}`}>
+                                <button type="button" className="submit-single-btn" onClick={(event) => handleViewSubmission(submission, event)} disabled={loading || fileActionLoading} aria-label={`View ${submission.fileName || 'uploaded document'}`}>
                                   <Icon name="eye" size={16} /> View
                                 </button>
                                 <button
                                   type="button"
                                   className="student-requirement-download-btn"
                                   onClick={() => handleDownloadSubmission(submission)}
-                                  disabled={loading}
+                                  disabled={loading || fileActionLoading}
                                   aria-label={`Download ${submission.fileName || 'uploaded document'}`}
                                   title="Download document"
                                 >
@@ -908,8 +911,8 @@ export default function StudentRequirements() {
                               <button
                                 type="button"
                                 className="submit-single-btn"
-                                onClick={() => handleViewSubmission(submission)}
-                                disabled={loading || uploading}
+                                onClick={(event) => handleViewSubmission(submission, event)}
+                                disabled={loading || uploading || fileActionLoading}
                                 aria-label={`View ${savedFileName}`}
                               >
                                 <Icon name="eye" size={16} /> View
@@ -918,7 +921,7 @@ export default function StudentRequirements() {
                                 type="button"
                                 className="student-requirement-download-btn"
                                 onClick={() => handleDownloadSubmission(submission)}
-                                disabled={loading || uploading}
+                                disabled={loading || uploading || fileActionLoading}
                                 aria-label={`Download ${savedFileName}`}
                                 title="Download document"
                               >

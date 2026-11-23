@@ -1,4 +1,4 @@
-import { TIMES } from '../constants/scheduleTimes';
+import { TIMES } from '../constants/scheduleTimes.js';
 
 const CALENDAR_TIME_ZONE = 'Asia/Manila';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -97,3 +97,53 @@ export const isDateFullyOccupied = (dateString, schedules, excludeScheduleId = n
   }
   return false;
 };
+
+export const getUpcomingApprovedSchedules = (schedules, now = new Date(), daysAhead = 14) => {
+  const todayOrdinal = dateOrdinal(getCalendarDateString(now));
+  const rangeEndOrdinal = todayOrdinal === null
+    ? null
+    : todayOrdinal + Math.max(0, Math.floor(Number(daysAhead) || 0));
+  if (rangeEndOrdinal === null) return [];
+
+  return (Array.isArray(schedules) ? schedules : []).filter((schedule) => {
+    const status = String(schedule?.status || '').trim().toLowerCase();
+    // Approved requests are stored as active schedule records.
+    if (!['approved', 'active'].includes(status)) return false;
+
+    const startDate = schedule?.startDate;
+    const endDate = schedule?.endDate || startDate;
+    const startOrdinal = dateOrdinal(startDate);
+    const endOrdinal = dateOrdinal(endDate);
+    if (
+      startOrdinal === null
+      || endOrdinal === null
+      || endOrdinal < startOrdinal
+      || endOrdinal < todayOrdinal
+      || startOrdinal > rangeEndOrdinal
+    ) {
+      return false;
+    }
+
+    return endOrdinal !== todayOrdinal || !isPastScheduleTime(endDate, schedule?.endTime, now);
+  });
+};
+
+export const sortSchedulesByCreatedAt = (schedules) => (
+  (Array.isArray(schedules) ? schedules : [])
+    .map((schedule, index) => ({
+      schedule,
+      index,
+      timestamp: Date.parse(schedule?.createdAt || ''),
+    }))
+    .sort((first, second) => {
+      const firstHasTimestamp = Number.isFinite(first.timestamp);
+      const secondHasTimestamp = Number.isFinite(second.timestamp);
+      if (firstHasTimestamp && secondHasTimestamp) {
+        return first.timestamp - second.timestamp || first.index - second.index;
+      }
+      if (firstHasTimestamp) return -1;
+      if (secondHasTimestamp) return 1;
+      return first.index - second.index;
+    })
+    .map(({ schedule }) => schedule)
+);

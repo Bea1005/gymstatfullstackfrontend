@@ -1371,13 +1371,20 @@
 .db-schedule-date  { font-size: 12px; color: #888; }
 .db-schedule-time  { font-size: 12px; font-weight: 700; color: #7b1e1e; white-space: nowrap; }
 .db-due-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
-.db-due-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f3f3f3; }
+.db-due-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 11px 0 11px 9px; border-left: 3px solid transparent; border-bottom: 1px solid #f3f3f3; }
 .db-due-item:last-child { border-bottom: none; }
+.db-due-item--out { border-left-color: #d2a500; }
+.db-due-item--overdue { border-left-color: #b71c1c; }
+.db-due-item--returned { border-left-color: #2e7d32; }
 .db-due-item__info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .db-due-item__info span { overflow-wrap: anywhere; }
 .db-due-item__status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .db-due-reference { font-size: 11px; color: #777; overflow-wrap: anywhere; }
-.db-due-status { font-size: 11px; font-weight: 700; color: #7b1e1e; }
+.db-due-status { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.db-due-status--default { background: #f5f0ec; border-color: #e4d8d1; color: #5a0000; }
+.db-due-status--out { background: #fff8e1; border-color: #e3bd46; color: #5a0000; }
+.db-due-status--overdue { background: #ffebee; border-color: #ef9a9a; color: #b71c1c; }
+.db-due-status--returned { background: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; }
 .db-view-all {
   margin-top: 16px; background: none; border: none;
   color: #7b1e1e; font-size: 13px; font-weight: 700;
@@ -1799,6 +1806,28 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.db-borrower-type-badge {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--borrower-type-border);
+  border-radius: 999px;
+  background: var(--borrower-type-background);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.db-borrower-type-badge::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--borrower-type-color);
+  content: "";
 }
 .db-analytics-pie {
   display: grid;
@@ -3995,5 +4024,548 @@ textarea:focus-visible,
   .schedule-document-preview-header {
     min-height: 50px;
     padding: 6px 8px;
+  }
+}
+
+/* ==================================================
+   DASHBOARD & USER RECORDS — responsive alignment
+   Page-scoped overrides matching Admin Schedules.
+================================================== */
+.db-root,
+.ur-root {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 20px 40px;
+  overflow-x: hidden;
+}
+
+.db-banner,
+.db-stats,
+.db-analytics,
+.db-panels,
+.ur-header,
+.ur-tabs,
+.ur-section,
+.ur-register-card,
+.ur-table-topbar,
+.ur-table-wrap {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.ur-tabs {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.db-banner {
+  max-width: none;
+}
+
+.db-analytics__heading,
+.db-analytics__collapse-inner,
+.db-analytics-summary,
+.db-analytics__grid,
+.db-analytics__trend-grid,
+.db-panels {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.db-analytics__filters {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.db-analytics__filter,
+.db-analytics__filter select,
+.db-analytics__filter input {
+  min-width: 0;
+}
+
+.db-analytics__grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.db-analytics__trend-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+.db-panels {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.db-panel,
+.db-analytics-card,
+.db-analytics-trend,
+.db-analytics-summary__card {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.db-activity-item,
+.db-due-item,
+.db-schedule-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ur-header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.ur-header-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ur-search-box {
+  width: min(260px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.ur-table-topbar {
+  align-items: center;
+  overflow: visible;
+}
+
+.ur-table-topbar__left,
+.ur-table-topbar__right {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ur-table-topbar__right {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ur-dept-filter {
+  max-width: 100%;
+}
+
+.ur-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.ur-table {
+  width: max(100%, 640px);
+  max-width: none;
+  table-layout: auto;
+}
+
+.ur-name-cell,
+.ur-name,
+.ur-username,
+.ur-email,
+.ur-dept-tag,
+.ur-sport {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ur-register-card,
+.ur-reg-form,
+.ur-reg-row,
+.ur-reg-group {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.ur-register-card {
+  max-width: 100%;
+}
+
+@media (max-width: 1280px) and (min-width: 1025px) {
+  .db-root,
+  .ur-root {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .db-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-analytics__heading {
+    align-items: flex-start;
+  }
+
+  .ur-header-actions {
+    width: auto;
+  }
+
+  .ur-table-topbar {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 1024px) {
+  .db-root,
+  .ur-root {
+    padding: 16px 0;
+  }
+
+  .db-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-banner {
+    min-height: 140px;
+  }
+
+  .ur-header {
+    align-items: stretch;
+  }
+
+  .ur-header-actions {
+    width: 100%;
+  }
+
+  .ur-search-box {
+    flex: 1 1 220px;
+  }
+
+  .ur-table-topbar {
+    align-items: stretch;
+  }
+
+  .ur-table-topbar__right {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .db-banner {
+    min-height: 120px;
+    padding: 24px 22px;
+  }
+
+  .db-banner__title {
+    font-size: clamp(32px, 9vw, 44px);
+  }
+
+  .db-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .db-analytics__heading,
+  .db-analytics__filters {
+    width: 100%;
+  }
+
+  .db-analytics__filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-analytics__filter select,
+  .db-analytics__filter input {
+    width: 100%;
+  }
+
+  .db-analytics__range {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+  }
+
+  .ur-header-actions,
+  .ur-search-box,
+  .ur-download-btn {
+    width: 100%;
+  }
+
+  .ur-tabs {
+    max-width: 100%;
+  }
+
+  .ur-tab {
+    flex: 1 1 0;
+  }
+
+  .ur-table-topbar__left,
+  .ur-table-topbar__right {
+    width: 100%;
+  }
+
+  .ur-table-topbar__right {
+    justify-content: flex-start;
+  }
+
+  .ur-dept-filter {
+    flex: 1 1 180px;
+  }
+
+  .ur-reg-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .db-root,
+  .ur-root {
+    padding: 16px 0;
+    gap: 16px;
+  }
+
+  .db-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .db-stat-card {
+    min-width: 0;
+  }
+
+  .db-analytics__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .db-analytics-pie {
+    grid-template-columns: minmax(80px, 96px) minmax(0, 1fr);
+  }
+
+  .ur-tabs {
+    padding: 4px;
+  }
+
+  .ur-tab {
+    min-width: 0;
+    padding: 10px 8px;
+  }
+
+  .ur-table-topbar {
+    padding: 12px;
+  }
+
+  .ur-academic-label {
+    width: 100%;
+  }
+
+  .ur-reg-group--pw {
+    width: 100%;
+  }
+}
+
+/* ==================================================
+   EQUIPMENT & BORROWING — responsive alignment
+   Page-scoped overrides matching the Admin Schedules
+   shell without changing other Admin Portal pages.
+================================================== */
+.eq-root,
+.bw-root {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 20px 40px;
+  overflow-x: hidden;
+}
+
+.eq-page-header,
+.bw-page-header {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.eq-stats,
+.bw-stats,
+.eq-register-card,
+.bw-form-card,
+.eq-list-card,
+.bw-records-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.eq-reg-row {
+  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 0.8fr) minmax(100px, 0.55fr) minmax(180px, 1fr);
+}
+
+.eq-list-header,
+.bw-records-header {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.eq-search-box,
+.bw-search-box,
+.bw-records-controls {
+  min-width: 0;
+}
+
+.eq-table-wrap,
+.bw-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.eq-table,
+.bw-table {
+  width: max(100%, 720px);
+  table-layout: auto;
+}
+
+.bw-table {
+  width: max(100%, 900px);
+}
+
+.eq-modal-content {
+  width: min(320px, calc(100vw - 28px));
+  box-sizing: border-box;
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+}
+
+.bw-borrower-modal-backdrop,
+.eq-modal-overlay {
+  box-sizing: border-box;
+}
+
+@media (max-width: 1280px) and (min-width: 1025px) {
+  .eq-root,
+  .bw-root {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .eq-reg-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .eq-page-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .bw-page-header {
+    flex-wrap: wrap;
+  }
+
+  .bw-records-header {
+    align-items: flex-start;
+  }
+
+  .bw-records-controls {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 1024px) {
+  .eq-root,
+  .bw-root {
+    padding: 16px 0;
+  }
+
+  .eq-reg-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .eq-page-header,
+  .bw-page-header {
+    flex-wrap: wrap;
+  }
+
+  .eq-list-header,
+  .bw-records-header {
+    padding: 16px;
+  }
+
+  .eq-search-box,
+  .bw-search-box {
+    flex: 1 1 240px;
+  }
+}
+
+@media (max-width: 760px) {
+  .eq-reg-row,
+  .bw-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .eq-page-header,
+  .bw-page-header {
+    align-items: stretch;
+  }
+
+  .eq-download-report-btn,
+  .bw-template-download {
+    width: 100%;
+  }
+
+  .eq-search-box,
+  .bw-search-box,
+  .bw-records-controls {
+    width: 100%;
+  }
+
+  .eq-table,
+  .bw-table {
+    table-layout: fixed;
+  }
+}
+
+@media (max-width: 640px) {
+  .eq-root,
+  .bw-root {
+    padding: 16px 0;
+    gap: 16px;
+  }
+
+  .eq-register-card,
+  .bw-form-card {
+    padding: 18px;
+  }
+
+  .eq-stats,
+  .bw-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .eq-stat-card,
+  .bw-stat-card {
+    min-width: 0;
+  }
+
+  .eq-stat-label,
+  .bw-stat-label {
+    overflow-wrap: anywhere;
+  }
+
+  .eq-table th,
+  .eq-table td,
+  .bw-table th,
+  .bw-table td {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 420px) {
+  .eq-stats,
+  .bw-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .eq-modal-content {
+    padding: 20px;
   }
 }

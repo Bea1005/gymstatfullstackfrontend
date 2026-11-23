@@ -56,6 +56,18 @@ export const buildRequirementColumns = (publishedRequirements, sport = 'All') =>
   return Array.from(columnsById.values());
 };
 
+export const buildActiveRequirementBoxColumns = (publishedRequirements, sport = 'All') => (
+  buildRequirementColumns(
+    (Array.isArray(publishedRequirements) ? publishedRequirements : [])
+      .filter((requirement) => (
+        String(requirement?.type || '').trim().toLocaleLowerCase() === 'other'
+        && !requirement.file?.filename
+        && !requirement.file?.path
+      )),
+    sport
+  )
+);
+
 export const getRequirementColumnEntry = (requirements, column) => {
   const documents = Array.isArray(requirements?.documents) ? requirements.documents : [];
   const matchingDocuments = documents.filter((document) => {

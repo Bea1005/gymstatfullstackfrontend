@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import * as api from '../../services/api';
 import { useNotifications } from '../../components/useNotifications';
 import Icon from '../../components/Icon';
@@ -32,76 +32,25 @@ const getRequirementLabel = (requirement) => {
   return labels[requirement.requirementType] || requirement.fileName || 'Requirement document';
 };
 
-const AnnouncementDetailModal = ({ announcement, onClose }) => {
-  if (!announcement) return null;
-
-  const getIconForAnnouncement = (title) => {
-    if (!title) return 'megaphone';
-    if (title.includes('Sport Event')) return 'trophy';
-    if (title.includes('Athlete Records')) return 'barChart';
-    if (title.includes('Sports Clearance')) return 'checkCircle';
-    if (title.includes('Medical Evaluation')) return 'stethoscope';
-    if (title.includes('Records Verification')) return 'search';
-    if (title.includes('Requirement')) return 'clipboard';
-    return 'megaphone';
-  };
-
-  const getStatusStyle = (type) => {
-    switch (type) {
-      case 'requirement':
-        return { backgroundColor: '#fee2e2', color: '#991b1b' };
-      case 'event':
-      case 'training':
-        return { backgroundColor: '#dbeafe', color: '#1e40af' };
-      default:
-        return { backgroundColor: '#fef3c7', color: '#92400e' };
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="announcement-detail-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="header-icon"><Icon name={getIconForAnnouncement(announcement.title)} /></div>
-          <h2>{announcement.title || 'Announcement'}</h2>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close announcement details">
-            <Icon name="close" />
-          </button>
-        </div>
-        <div className="detail-modal-body">
-          <div className="detail-status">
-            <span
-              className="detail-status-badge"
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '9999px',
-                fontSize: '0.875rem',
-                fontWeight: '700',
-                textTransform: 'uppercase',
-                ...getStatusStyle(announcement.type)
-              }}
-            >
-              {announcement.type || 'general'}
-            </span>
-            <span className="detail-date">
-              <Icon name="calendar" size={16} />
-              Posted: {announcement.date ? new Date(announcement.date).toLocaleDateString() : 'Recently'}
-            </span>
-          </div>
-          <div className="detail-description">
-            <p>{announcement.description || 'No description available'}</p>
-          </div>
-          <div className="detail-actions">
-            <button className="detail-close-btn" onClick={onClose}>Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+const isRequirementNotification = (notification) => notification?.notificationSource === 'requirement';
+const isRejectedRequirementNotification = (notification) => (
+  isRequirementNotification(notification)
+  && String(notification.status || '').toLowerCase() === 'rejected'
+);
+const getNotificationTitle = (notification) => (
+  isRequirementNotification(notification)
+    ? `${getRequirementLabel(notification)} - ${isRejectedRequirementNotification(notification) ? 'Returned' : 'Approved'}`
+    : notification?.title || 'Announcement'
+);
+const formatNotificationDateTime = (value) => {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' });
 };
 
 export default function StudentNotifications() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { notify } = useNotifications();
   const [requirements, setRequirements] = useState([]);
@@ -111,8 +60,10 @@ export default function StudentNotifications() {
   const [category, setCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+  const [selectedNotification, setSelectedNotification] = useState(null);
   const markingNotificationIds = useRef(new Set());
+  const notificationPanelRef = useRef(null);
+  const notificationListScrollTopRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -184,17 +135,59 @@ export default function StudentNotifications() {
   );
   const visibleNotifications = filterStudentNotifications(notifications, category);
   const unreadCount = getUnreadStudentNotificationCount(notifications);
+  const selectedIsRequirement = isRequirementNotification(selectedNotification);
+  const selectedIsRejected = isRejectedRequirementNotification(selectedNotification);
+  const selectedTitle = selectedNotification ? getNotificationTitle(selectedNotification) : '';
+  const selectedRequirementId = selectedNotification?.customRequirementId
+    || selectedNotification?.relatedRequirementId?._id
+    || selectedNotification?.relatedRequirementId?.id
+    || selectedNotification?.relatedRequirementId;
+  const linkedRequirement = selectedRequirementId
+    ? publishedRequirements.find((requirement) => (
+      String(requirement._id || requirement.id) === String(selectedRequirementId)
+    ))
+    : null;
+  const selectedMessage = selectedNotification
+    ? selectedIsRequirement
+      ? selectedNotification.remarks
+        || selectedNotification.feedback
+        || `Your ${getRequirementLabel(selectedNotification).toLowerCase()} was ${selectedIsRejected ? 'returned for correction' : 'approved'}.`
+      : selectedNotification.description || selectedNotification.message || 'No additional details are available.'
+    : '';
 
   const handleNotifications = () => {
-    setNotificationsOpen((open) => !open);
+    if (notificationsOpen) {
+      setSelectedNotification(null);
+      setNotificationsOpen(false);
+      return;
+    }
+
+    setNotificationsOpen(true);
+  };
+
+  const handleCloseNotifications = () => {
+    setSelectedNotification(null);
+    setNotificationsOpen(false);
+  };
+
+  const handleBackToNotifications = () => {
+    setSelectedNotification(null);
+    window.requestAnimationFrame(() => {
+      if (notificationPanelRef.current) {
+        notificationPanelRef.current.scrollTop = notificationListScrollTopRef.current;
+      }
+    });
   };
 
   const handleNotificationClick = async (notification) => {
     if (markingNotificationIds.current.has(notification.notificationId)) return;
 
     markingNotificationIds.current.add(notification.notificationId);
+    notificationListScrollTopRef.current = notificationPanelRef.current?.scrollTop || 0;
     try {
-      if (notification.notificationSource === 'requirement') {
+      let detailNotification = { ...notification };
+
+      if (isRequirementNotification(notification)) {
         if (notification.notificationUnread) {
           await api.markStudentRequirementNotificationRead(
             notification._id || notification.id,
@@ -206,13 +199,13 @@ export default function StudentNotifications() {
               ? { ...requirement, notificationReadAt: readAt }
               : requirement
           )));
+          detailNotification = {
+            ...detailNotification,
+            notificationReadAt: readAt,
+            notificationUnread: false,
+          };
         }
-        setNotificationsOpen(false);
-        navigate('/student/requirements');
-        return;
-      }
-
-      if (notification.notificationUnread) {
+      } else if (notification.notificationUnread) {
         const announcementId = notification._id || notification.id;
         await api.markStudentAnnouncementRead(announcementId);
         setAnnouncements((current) => current.map((announcement) => (
@@ -220,10 +213,14 @@ export default function StudentNotifications() {
             ? { ...announcement, isRead: true }
             : announcement
         )));
+        detailNotification = {
+          ...detailNotification,
+          isRead: true,
+          notificationUnread: false,
+        };
       }
 
-      setNotificationsOpen(false);
-      setSelectedAnnouncement({ ...notification, isRead: true, notificationUnread: false });
+      setSelectedNotification(detailNotification);
     } catch (error) {
       console.error('Failed to mark student notification as read:', error);
       notify('error', 'Notification Update Failed', error.message || 'Unable to mark this notification as read.');
@@ -254,75 +251,166 @@ export default function StudentNotifications() {
               {unreadCount > 0 && <span className="sh-notification-badge">{unreadCount}</span>}
             </button>
             {notificationsOpen && (
-              <div className="sh-notification-panel" role="dialog" aria-label="Student notifications">
+              <div
+                className="sh-notification-panel"
+                role="dialog"
+                aria-label={selectedNotification ? 'Notification details' : 'Student notifications'}
+                ref={notificationPanelRef}
+              >
                 <div className="sh-notification-panel__header">
-                  <strong>Notifications</strong>
-                  <button type="button" onClick={() => setNotificationsOpen(false)} aria-label="Close notifications">
+                  <strong>{selectedNotification ? 'Notification details' : 'Notifications'}</strong>
+                  <button type="button" onClick={handleCloseNotifications} aria-label="Close notifications">
                     <Icon name="close" size={16} />
                   </button>
                 </div>
-                <label className="sh-notification-filter">
-                  <span>Filter notifications</span>
-                  <select value={category} onChange={(event) => setCategory(event.target.value)}>
-                    <option value="all">All Notifications</option>
-                    <option value="document">Document Updates</option>
-                    <option value="requirement">Requirement Updates</option>
-                  </select>
-                </label>
-                {loadError && <p className="sh-notification-error" role="alert">{loadError}</p>}
-                {loading ? (
-                  <p className="sh-notification-empty">Loading notifications...</p>
-                ) : visibleNotifications.length === 0 ? (
-                  <p className="sh-notification-empty">
-                    {notifications.length === 0 ? 'No notifications.' : 'No notifications in this category.'}
-                  </p>
-                ) : (
-                  visibleNotifications.map((notification) => {
-                    const isRequirementSubmission = notification.notificationSource === 'requirement';
-                    const rejected = isRequirementSubmission
-                      && String(notification.status).toLowerCase() === 'rejected';
-                    const notificationTitle = isRequirementSubmission
-                      ? `${getRequirementLabel(notification)} - ${rejected ? 'Returned' : 'Approved'}`
-                      : notification.title || 'Announcement';
-                    const notificationDate = notification.notificationDate;
-
-                    return (
-                      <button
-                        type="button"
-                        className={`sh-notification-item ${notification.notificationUnread ? 'sh-notification-item--unread' : 'sh-notification-item--read'}`}
-                        key={notification.notificationId}
-                        onClick={() => handleNotificationClick(notification)}
-                      >
+                {selectedNotification ? (
+                  <div className="sh-notification-detail" key={selectedNotification.notificationId} aria-live="polite">
+                    <button
+                      type="button"
+                      className="sh-notification-back"
+                      onClick={handleBackToNotifications}
+                    >
+                      <Icon name="arrowLeft" size={16} />
+                      Back to notifications
+                    </button>
+                    <div className="sh-notification-detail__heading">
+                      <span className={`sh-notification-detail__icon ${selectedIsRejected ? 'sh-notification-detail__icon--returned' : ''}`}>
                         <Icon
-                          name={isRequirementSubmission ? (rejected ? 'xCircle' : 'checkCircle') : 'megaphone'}
-                          size={18}
+                          name={selectedIsRequirement
+                            ? (selectedIsRejected ? 'xCircle' : 'checkCircle')
+                            : 'megaphone'}
+                          size={20}
                         />
-                        <span>
-                          <strong>{notificationTitle}</strong>
-                          <small className={`sh-notification-status ${notification.notificationUnread ? 'sh-notification-status--unread' : ''}`}>
-                            {notification.notificationUnread ? 'Unread' : 'Read'}
-                          </small>
-                          {isRequirementSubmission && rejected && (notification.remarks || notification.feedback) && (
-                            <small>Reason: {notification.remarks || notification.feedback}</small>
-                          )}
-                          {!isRequirementSubmission && notification.description && (
-                            <small>{notification.description}</small>
-                          )}
-                          {notificationDate && <time>{new Date(notificationDate).toLocaleString()}</time>}
+                      </span>
+                      <div>
+                        <p className="sh-notification-detail__eyebrow">
+                          {selectedIsRequirement ? 'Document update' : 'Requirement update'}
+                        </p>
+                        <h3>{selectedTitle}</h3>
+                      </div>
+                    </div>
+                    <div className="sh-notification-detail__badges">
+                      {selectedIsRequirement && (
+                        <span className={`sh-notification-detail__status ${selectedIsRejected ? 'sh-notification-detail__status--returned' : 'sh-notification-detail__status--approved'}`}>
+                          {selectedIsRejected ? 'Returned' : 'Approved'}
                         </span>
-                      </button>
-                    );
-                  })
+                      )}
+                      <span className="sh-notification-detail__read-state">
+                        {selectedNotification.notificationUnread ? 'Unread' : 'Read'}
+                      </span>
+                    </div>
+                    <dl className="sh-notification-detail__meta">
+                      <div>
+                        <dt>Date and time</dt>
+                        <dd>{formatNotificationDateTime(selectedNotification.notificationDate)}</dd>
+                      </div>
+                      {selectedIsRequirement && (
+                        <>
+                          {selectedNotification.fileName && (
+                            <div>
+                              <dt>File</dt>
+                              <dd>{selectedNotification.fileName}</dd>
+                            </div>
+                          )}
+                          {selectedNotification.participationType && (
+                            <div>
+                              <dt>Participation</dt>
+                              <dd>{selectedNotification.participationType}</dd>
+                            </div>
+                          )}
+                          {selectedNotification.uploadDate && (
+                            <div>
+                              <dt>Submitted</dt>
+                              <dd>{formatNotificationDateTime(selectedNotification.uploadDate)}</dd>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {!selectedIsRequirement && selectedNotification.type && (
+                        <div>
+                          <dt>Category</dt>
+                          <dd>{selectedNotification.type}</dd>
+                        </div>
+                      )}
+                      {selectedNotification.sport && (
+                        <div>
+                          <dt>Sport</dt>
+                          <dd>{selectedNotification.sport}</dd>
+                        </div>
+                      )}
+                    </dl>
+                    <section className="sh-notification-detail__message">
+                      <h4>{selectedIsRequirement && selectedIsRejected ? 'Review feedback' : 'Message'}</h4>
+                      <p>{selectedMessage}</p>
+                    </section>
+                    {linkedRequirement && (linkedRequirement.title || linkedRequirement.description || linkedRequirement.instructions) && (
+                      <section className="sh-notification-detail__message">
+                        <h4>Requirement details</h4>
+                        {linkedRequirement.title && <p><strong>{linkedRequirement.title}</strong></p>}
+                        {linkedRequirement.description && <p>{linkedRequirement.description}</p>}
+                        {linkedRequirement.instructions && <p>{linkedRequirement.instructions}</p>}
+                      </section>
+                    )}
+                  </div>
+                ) : (
+                  <div className="sh-notification-view" key="notification-list">
+                    <label className="sh-notification-filter">
+                      <span>Filter notifications</span>
+                      <select value={category} onChange={(event) => setCategory(event.target.value)}>
+                        <option value="all">All Notifications</option>
+                        <option value="document">Document Updates</option>
+                        <option value="requirement">Requirement Updates</option>
+                      </select>
+                    </label>
+                    {loadError && <p className="sh-notification-error" role="alert">{loadError}</p>}
+                    {loading ? (
+                      <p className="sh-notification-empty">Loading notifications...</p>
+                    ) : visibleNotifications.length === 0 ? (
+                      <p className="sh-notification-empty">
+                        {notifications.length === 0 ? 'No notifications.' : 'No notifications in this category.'}
+                      </p>
+                    ) : (
+                      visibleNotifications.map((notification) => {
+                        const isRequirement = isRequirementNotification(notification);
+                        const rejected = isRejectedRequirementNotification(notification);
+
+                        return (
+                          <button
+                            type="button"
+                            className={`sh-notification-item ${notification.notificationUnread ? 'sh-notification-item--unread' : 'sh-notification-item--read'}`}
+                            key={notification.notificationId}
+                            onClick={() => handleNotificationClick(notification)}
+                          >
+                            <Icon
+                              name={isRequirement ? (rejected ? 'xCircle' : 'checkCircle') : 'megaphone'}
+                              size={18}
+                            />
+                            <span>
+                              <strong>{getNotificationTitle(notification)}</strong>
+                              <small className={`sh-notification-status ${notification.notificationUnread ? 'sh-notification-status--unread' : ''}`}>
+                                {notification.notificationUnread ? 'Unread' : 'Read'}
+                              </small>
+                              {isRequirement && rejected && (notification.remarks || notification.feedback) && (
+                                <small>Reason: {notification.remarks || notification.feedback}</small>
+                              )}
+                              {!isRequirement && notification.description && (
+                                <small>{notification.description}</small>
+                              )}
+                              {notification.notificationDate && (
+                                <time>{formatNotificationDateTime(notification.notificationDate)}</time>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
         </div>
       </div>
-      <AnnouncementDetailModal
-        announcement={selectedAnnouncement?.notificationSource === 'announcement' ? selectedAnnouncement : null}
-        onClose={() => setSelectedAnnouncement(null)}
-      />
     </>
   );
 }

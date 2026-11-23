@@ -12,6 +12,7 @@ import { YEAR_LEVEL_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { REGISTRATION_SPORT_EVENT_OPTIONS } from '../../constants/registrationCategories';
 import {
   areDisplayedRequirementsComplete,
+  buildActiveRequirementBoxColumns,
   buildRequirementColumns,
   getRequirementColumnEntry,
   getSportScopedRequirements
@@ -140,7 +141,7 @@ const ScreenerPage = () => {
       .filter((sport) => typeof sport === 'string' && sport.trim())
       .map((sport) => [String(sport).trim(), String(sport).trim()])
   ).values());
-  const requirementColumns = buildRequirementColumns(publishedRequirements, sportFilter);
+  const requirementColumns = buildActiveRequirementBoxColumns(publishedRequirements, sportFilter);
 
   const loadRequirements = async (silent = false) => {
     if (requirementsPollingStoppedRef.current) return;

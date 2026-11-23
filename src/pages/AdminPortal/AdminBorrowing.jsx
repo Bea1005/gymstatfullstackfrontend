@@ -14,6 +14,7 @@ import {
 } from '../../utils/borrowingDue';
 import { getUniqueBorrowerCount } from './borrowerCount';
 import { toggleEquipmentSelection, toggleEquipmentReferenceSelection } from './borrowingEquipmentSelection';
+import { getLostEquipmentCount } from './equipmentConditionCount';
 import {
   getEquipment,
   getBorrowingRecords,
@@ -337,6 +338,14 @@ export default function AdminBorrowing({ onBorrowingChange }) {
           ? { ...item, referenceConditions: updatedConditions }
           : item
       )));
+      const referenceId = record.referenceIds?.[refIndex];
+      if (referenceId) {
+        setAllEquipment((previousEquipment) => previousEquipment.map((item) => (
+          item.referenceId === referenceId
+            ? { ...item, condition: newCondition }
+            : item
+        )));
+      }
       return true;
     } catch (error) {
       console.error('Error updating condition:', error);
@@ -370,30 +379,10 @@ export default function AdminBorrowing({ onBorrowingChange }) {
     setPendingConditionChange(null);
   };
 
-  const getConditionValues = (record) => {
-    const values = [];
-
-    if (record?.condition) {
-      values.push(record.condition);
-    }
-
-    if (Array.isArray(record?.referenceConditions)) {
-      record.referenceConditions.forEach((condition) => {
-        if (condition) {
-          values.push(condition);
-        }
-      });
-    }
-
-    return values;
-  };
-
   const dueTransactions = getDueBorrowings(records).length;
   const itemsOut = records.filter((record) => ['Out', 'Out Now'].includes(record?.status)).length;
   const borrowerCount = getUniqueBorrowerCount(records);
-  const lostItems = records.reduce((count, record) => {
-    return count + getConditionValues(record).filter((condition) => condition === 'Lost').length;
-  }, 0);
+  const lostItems = getLostEquipmentCount(allEquipment);
 
   // Determine if a transaction is ongoing based on status
   const isTransactionOngoing = (record) => {
