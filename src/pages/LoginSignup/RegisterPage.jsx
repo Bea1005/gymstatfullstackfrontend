@@ -10,7 +10,7 @@ import { useNotifications } from "../../components/useNotifications";
 import AuthSuccessPopup from "../../components/AuthSuccessPopup";
 import Icon from "../../components/Icon";
 import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
-import COLLEGE_DEPARTMENT_OPTIONS from "../../../../shared/collegeDepartmentOptions.json";
+import COLLEGE_DEPARTMENT_OPTIONS from "../../constants/collegeDepartmentOptions.json";
 import {
   PREFERRED_CATEGORY_OPTIONS,
   REGISTRATION_CATEGORIES,

@@ -4,7 +4,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminCoaches, getAdminScreeners, getNextAdminScreenerId, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { isPasswordValid, PASSWORD_POLICY_MESSAGE } from '../../constants/passwordPolicy';
-import COLLEGE_DEPARTMENT_OPTIONS from '../../../../shared/collegeDepartmentOptions.json';
+import COLLEGE_DEPARTMENT_OPTIONS from '../../constants/collegeDepartmentOptions.json';
 import Icon from '../../components/Icon';
 import './AdminPortal.css';
 

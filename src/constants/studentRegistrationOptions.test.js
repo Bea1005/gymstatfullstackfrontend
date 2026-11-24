@@ -5,7 +5,7 @@ import {
   DEPARTMENT_OPTIONS,
   YEAR_LEVEL_OPTIONS,
 } from './studentRegistrationOptions.js';
-import COLLEGE_DEPARTMENT_OPTIONS from '../../../shared/collegeDepartmentOptions.json' with { type: 'json' };
+import COLLEGE_DEPARTMENT_OPTIONS from './collegeDepartmentOptions.json';
 
 test('registration option lists stay aligned with screener filters', () => {
   assert.ok(DEPARTMENT_OPTIONS.includes('Bachelor of Science in Information Technology'));
