@@ -12,6 +12,7 @@ export const DEPARTMENT_OPTIONS = [
   'Bachelor of Science in Fisheries and Aquatic Resources Management',
   'Bachelor of Science in Environmental Science',
   'Bachelor of Science in Nursing',
+  'Bachelor of Science in Midwifery',
   'Bachelor of Science in Business Administration',
   'Bachelor of Science in Business Accountancy',
   'Bachelor of Science in Tourism Management',
@@ -20,6 +21,10 @@ export const DEPARTMENT_OPTIONS = [
   'Bachelor of Elementary Education',
   'Bachelor of Secondary Education',
   'Bachelor of Science in Criminology',
+  'Bachelor of Science in Entrepreneurship',
+  'Bachelor of Science in Public Administration',
+  'Bachelor of Technology and Livelihood Education',
+  'Bachelor of Culture and Arts Education',
 ];
 
 export const YEAR_LEVEL_OPTIONS = ['I', 'II', 'III', 'IV'];

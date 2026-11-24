@@ -10,12 +10,13 @@ const normalizeRequirementType = (value) => (
     : String(value ?? '').trim().toLocaleLowerCase()
 );
 
+const normalizeSportScope = (value) => String(value ?? '')
+  .normalize('NFKC')
+  .replace(/[^\p{L}\p{N}]+/gu, '')
+  .toLocaleLowerCase();
+
 export const buildRequirementColumns = (publishedRequirements, sport = 'All') => {
   const columnsById = new Map();
-  const normalizeSportScope = (value) => String(value ?? '')
-    .normalize('NFKC')
-    .replace(/[^\p{L}\p{N}]+/gu, '')
-    .toLocaleLowerCase();
   const selectedSport = normalizeSportScope(sport);
 
   (Array.isArray(publishedRequirements) ? publishedRequirements : [])
@@ -51,6 +52,38 @@ export const buildRequirementColumns = (publishedRequirements, sport = 'All') =>
         requirementId,
         label: label || requirement.type
       });
+    });
+
+  return Array.from(columnsById.values());
+};
+
+const buildRequirementCounterColumns = (publishedRequirements, sport) => {
+  const columnsById = new Map();
+  const selectedSport = normalizeSportScope(sport);
+
+  (Array.isArray(publishedRequirements) ? publishedRequirements : [])
+    .filter((requirement) => (
+      requirement?.status === 'published'
+      && requirement.isActive !== false
+      && typeof requirement.type === 'string'
+    ))
+    .forEach((requirement) => {
+      if (sport !== 'All' && requirement.targetStudents === 'sport-specific') {
+        const assignedSports = String(requirement.sport || '')
+          .split('|')
+          .map(normalizeSportScope)
+          .filter(Boolean);
+        if (!assignedSports.includes(selectedSport)) return;
+      }
+
+      const type = requirement.type.trim().toLocaleLowerCase();
+      const requirementId = String(requirement._id || requirement.id || '').trim();
+      const id = type === 'other'
+        ? (requirementId ? `custom:${requirementId}` : '')
+        : `type:${normalizeRequirementType(type)}`;
+      if (id && !columnsById.has(id)) {
+        columnsById.set(id, { id, type, requirementId });
+      }
     });
 
   return Array.from(columnsById.values());
@@ -123,6 +156,66 @@ export const getSportScopedRequirements = (requirements, sport) => {
 
   return { ...requirements, ...scopedRequirements };
 };
+
+export const getCoachRequirementCounts = (students, publishedRequirements, sport = 'All') => {
+  const columns = buildRequirementCounterColumns(publishedRequirements, sport);
+  const selectedSport = sport === 'All' ? '' : sport;
+  const counts = { pendingRequirements: 0, verifiedRequirements: 0 };
+
+  (Array.isArray(students) ? students : []).forEach((student) => {
+    const requirements = getSportScopedRequirements(student?.requirements, selectedSport);
+    columns.forEach((column) => {
+      const entry = getRequirementColumnEntry(requirements, column);
+      if (entry?.hasUpload !== true) return;
+
+      const coachStatus = String(entry.coachStatus || '').trim().toLocaleLowerCase();
+      if (coachStatus === 'approved') counts.verifiedRequirements += 1;
+      if (coachStatus === 'pending') counts.pendingRequirements += 1;
+    });
+  });
+
+  return counts;
+};
+
+export const getScreenerRequirementCounts = (students, sport = 'All') => {
+  const athletes = new Set();
+  const requirements = new Set();
+  const counts = { totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 };
+  const selectedSport = sport === 'All' ? '' : sport;
+
+  (Array.isArray(students) ? students : []).forEach((student) => {
+    const athleteId = String(student?.id || student?._id || '').trim();
+    if (!athleteId) return;
+
+    const scopedRequirements = getSportScopedRequirements(student?.requirements, selectedSport);
+    const documents = Array.isArray(scopedRequirements.documents) ? scopedRequirements.documents : [];
+    documents.forEach((document) => {
+      const submissionId = String(document?.submissionId || '').trim();
+      if (!submissionId
+        || document.hasUpload !== true
+        || !document.screenerForwardedAt
+        || String(document.coachStatus || '').trim().toLowerCase() !== 'approved') return;
+
+      const requirementKey = `${athleteId}:${document.participationType || ''}:${submissionId}`;
+      if (requirements.has(requirementKey)) return;
+      requirements.add(requirementKey);
+      athletes.add(athleteId);
+
+      const finalStatus = String(document.finalStatus ?? document.status ?? '').trim().toLowerCase();
+      if (finalStatus === 'pending') counts.pendingRequirements += 1;
+      if (finalStatus === 'approved') counts.verifiedRequirements += 1;
+    });
+  });
+
+  counts.totalStudents = athletes.size;
+  return counts;
+};
+
+export const getCoachScreeningEmptyStateMessage = (yearLevelFilter, hasStudentsForYearLevel) => (
+  yearLevelFilter !== 'All' && !hasStudentsForYearLevel
+    ? 'No student-athlete from this year level'
+    : 'No student requirements match your assigned sports.'
+);
 
 export const areDisplayedRequirementsComplete = (requirements, columns) => {
   const displayedDocuments = (Array.isArray(columns) ? columns : [])

@@ -30,13 +30,6 @@ const getCoachAssignedSports = (coachUser = {}) => {
   }, []);
 };
 
-const getCoachPrimarySport = (coachUser, assignedSports) => {
-  const primarySport = String(coachUser?.sport || '').replace(/\s+/g, ' ').trim();
-  return assignedSports.find((sport) => normalizeSportValue(sport) === normalizeSportValue(primarySport))
-    || assignedSports[0]
-    || '';
-};
-
 const CoachDocumentScreening = () => {
   const { authReady, authError, user } = usePortalSession(['coach'], 'Coach');
   const navigate = useNavigate();
@@ -44,7 +37,6 @@ const CoachDocumentScreening = () => {
   if (!authReady) return authError ? <PortalSessionError /> : null;
 
   const assignedSports = getCoachAssignedSports(user);
-  const primarySport = getCoachPrimarySport(user, assignedSports);
   const coachName = String(user?.fullname || user?.name || '').trim();
 
   return (
@@ -101,8 +93,7 @@ const CoachDocumentScreening = () => {
 
       <div className="coach-screening-workspace">
         <RequirementScreeningInterface
-          hideFilters={['program', 'sport']}
-          initialSport={primarySport}
+          hideFilters={['program']}
           simpleDocumentPreview
         />
       </div>

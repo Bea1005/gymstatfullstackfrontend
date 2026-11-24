@@ -15,6 +15,7 @@ import {
   buildActiveRequirementBoxColumns,
   buildRequirementColumns,
   getRequirementColumnEntry,
+  getScreenerRequirementCounts,
   getSportScopedRequirements
 } from '../requirementScreeningUtils';
 import './ScreenerPage.css';
@@ -91,11 +92,10 @@ const ScreenerPage = () => {
   const [students, setStudents] = useState([]);
   const [publishedRequirements, setPublishedRequirements] = useState([]);
   const [reviewingSubmissionIds, setReviewingSubmissionIds] = useState(() => new Set());
-  const [assignedDepartment, setAssignedDepartment] = useState('');
-  const [departmentUnassigned, setDepartmentUnassigned] = useState(false);
+  const [assignedCollege, setAssignedCollege] = useState('');
+  const [collegeUnassigned, setCollegeUnassigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pendingSportReload, setPendingSportReload] = useState(false);
-  const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
   const [approveTarget, setApproveTarget] = useState(null); // req id being approved
@@ -117,6 +117,7 @@ const ScreenerPage = () => {
   const pendingSportReloadRef = useRef(false);
   const requirementsPollingStoppedRef = useRef(false);
   const reviewingSubmissionIdsRef = useRef(new Set());
+  const previewEntriesRef = useRef([]);
 
   useEffect(() => {
     const role = String(user?.role || '').trim().toLowerCase();
@@ -124,8 +125,7 @@ const ScreenerPage = () => {
       sessionStorage.setItem('role', role);
     }
     if (role === 'screener') {
-      const department = String(user?.department || user?.dept || '').trim();
-      setAssignedDepartment(department);
+      setAssignedCollege(String(user?.college || '').trim());
     }
   }, [user]);
   
@@ -142,6 +142,28 @@ const ScreenerPage = () => {
       .map((sport) => [String(sport).trim(), String(sport).trim()])
   ).values());
   const requirementColumns = buildActiveRequirementBoxColumns(publishedRequirements, sportFilter);
+  const previewSport = sportFilter === 'All' ? selectedStudent?.sport : sportFilter;
+  const publishedPreviewColumns = buildRequirementColumns(publishedRequirements, previewSport);
+  const previewEntries = (selectedStudent?.requirements?.documents || [])
+    .filter((entry) => (
+      entry?.submissionId
+      && entry.hasUpload === true
+      && entry.screenerForwardedAt
+      && entry.coachStatus === 'approved'
+      && getMatchingPublishedRequirement(entry, publishedPreviewColumns)
+    ))
+    .flatMap((entry) => getRequirementFiles(entry)
+      .slice(0, 1)
+      .map((file, index) => [
+        getRequirementPreviewKey(entry, index),
+        { ...entry, ...file },
+        getRequirementFileUrl(entry, index)
+      ]))
+    .filter(([, , fileUrl]) => Boolean(fileUrl));
+  const previewSignature = JSON.stringify(
+    previewEntries.map(([key, , fileUrl]) => [key, fileUrl])
+  );
+  previewEntriesRef.current = previewEntries;
 
   const loadRequirements = async (silent = false) => {
     if (requirementsPollingStoppedRef.current) return;
@@ -167,14 +189,14 @@ const ScreenerPage = () => {
         ? publishedRequirementsResponse.data
         : []);
       if (isScreener) {
-        const nextAssignedDepartment = String(response?.assignedDepartment || '').trim();
-        setAssignedDepartment((currentDepartment) => {
-          if (normalizeDepartmentValue(currentDepartment) !== normalizeDepartmentValue(nextAssignedDepartment)) {
-            return nextAssignedDepartment;
+        const nextAssignedCollege = String(response?.assignedCollege || '').trim();
+        setAssignedCollege((currentCollege) => {
+          if (normalizeDepartmentValue(currentCollege) !== normalizeDepartmentValue(nextAssignedCollege)) {
+            return nextAssignedCollege;
           }
-          return currentDepartment;
+          return currentCollege;
         });
-        setDepartmentUnassigned(false);
+        setCollegeUnassigned(false);
       }
       setStudents(safeData);
       setSelectedStudent((current) => {
@@ -183,35 +205,24 @@ const ScreenerPage = () => {
         if (!refreshedStudent) setCurrentView('list');
         return refreshedStudent || null;
       });
-      const totalStudents = safeData.length;
-      const pendingRequirements = safeData.reduce((acc, student) => {
-        const statuses = Object.values(student.requirements || {}).filter((item) => !Array.isArray(item));
-        return acc + statuses.filter((item) => item && item.status !== 'approved').length;
-      }, 0);
-      const verifiedRequirements = safeData.reduce((acc, student) => {
-        const statuses = Object.values(student.requirements || {}).filter((item) => !Array.isArray(item));
-        return acc + statuses.filter((item) => item && item.status === 'approved').length;
-      }, 0);
-      setStats({ totalStudents, pendingRequirements, verifiedRequirements });
-      setDepartmentUnassigned(false);
+      setCollegeUnassigned(false);
       hasNotifiedLoadErrorRef.current = false;
     } catch (error) {
       if (requestedSport !== selectedSportRef.current) return;
       console.error('Failed to load screener requirements', error);
       if (isScreener && error?.status === 403
-        && /department is not configured/i.test(error?.message || '')) {
-        setAssignedDepartment('');
-        setDepartmentUnassigned(true);
+        && /college is not configured/i.test(error?.message || '')) {
+        setAssignedCollege('');
+        setCollegeUnassigned(true);
         setStudents([]);
         setSelectedStudent(null);
         setCurrentView('list');
-        setStats({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
         requirementsPollingStoppedRef.current = false;
         if (!silent && !hasNotifiedLoadErrorRef.current) {
           notify(
             'screener-error',
-            'Department Assignment Required',
-            'Your account has no assigned department. Contact an Admin to receive access to student-athlete records.'
+            'College Assignment Required',
+            'Your account has no valid assigned college. Contact an Admin to receive access to student-athlete records.'
           );
           hasNotifiedLoadErrorRef.current = true;
         }
@@ -314,6 +325,7 @@ const ScreenerPage = () => {
             ? {
               ...entry,
               status: savedSubmission.status,
+            finalStatus: savedSubmission.status,
               remarks: savedSubmission.remarks || '',
             }
             : entry
@@ -367,16 +379,16 @@ const ScreenerPage = () => {
   }, [authReady, sportFilter]);
 
   useEffect(() => {
-    if (!authReady) return undefined;
+    if (!authReady || currentView !== 'list') return undefined;
     const refreshInterval = window.setInterval(() => {
       if (!requirementsPollingStoppedRef.current) loadRequirementsEvent(true);
     }, 10000);
 
     return () => window.clearInterval(refreshInterval);
-  }, [authReady]);
+  }, [authReady, currentView]);
 
   useEffect(() => {
-    if (!authReady) return undefined;
+    if (!authReady || currentView !== 'list') return undefined;
     const handleRequirementUpdate = () => {
       if (!requirementsPollingStoppedRef.current) loadRequirementsEvent(true);
     };
@@ -394,28 +406,12 @@ const ScreenerPage = () => {
       window.removeEventListener('gymstat-requirement-updated', handleRequirementUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
     };
-  }, [authReady]);
+  }, [authReady, currentView]);
 
   useEffect(() => {
     let cancelled = false;
     const createdUrls = [];
-    const previewSport = sportFilter === 'All' ? selectedStudent?.sport : sportFilter;
-    const publishedColumns = buildRequirementColumns(publishedRequirements, previewSport);
-    const entries = (selectedStudent?.requirements?.documents || [])
-      .filter((entry) => (
-        entry?.submissionId
-        && entry.hasUpload === true
-        && entry.screenerForwardedAt
-        && entry.coachStatus === 'approved'
-        && getMatchingPublishedRequirement(entry, publishedColumns)
-      ))
-      .flatMap((entry) => getRequirementFiles(entry)
-        .map((file, index) => [
-          getRequirementPreviewKey(entry, index),
-          { ...entry, ...file },
-          getRequirementFileUrl(entry, index)
-        ]))
-      .filter(([, , fileUrl]) => Boolean(fileUrl));
+    const entries = previewEntriesRef.current;
 
     setPreviewUrls({});
     setPreviewLoading(Object.fromEntries(entries.map(([key]) => [key, true])));
@@ -447,7 +443,7 @@ const ScreenerPage = () => {
       cancelled = true;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [notify, publishedRequirements, selectedStudent, sportFilter]);
+  }, [notify, previewSignature]);
 
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
@@ -457,6 +453,7 @@ const ScreenerPage = () => {
   const handleBackToList = () => {
     setCurrentView('list');
     setSelectedStudent(null);
+    loadRequirements(true);
   };
 
   const handleLogout = () => {
@@ -478,15 +475,15 @@ const ScreenerPage = () => {
   // Filter students based on search query and filters
   const filteredStudents = students.filter((student) => {
     const matchesSearch = (student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    // The Screener API already scopes records by the forwarding coach's department.
-    const hasAssignedDepartment = !isScreener
-      || Boolean(assignedDepartment);
+    // The Screener API scopes forwarded records by the authenticated account's college.
+    const hasAssignedCollege = !isScreener
+      || Boolean(assignedCollege);
     const matchesSport = sportFilter === 'All'
       || student.sport === sportFilter
       || student.sports?.includes(sportFilter);
     const matchesYear = yearLevelFilter === 'All' || student.yearLevel === yearLevelFilter;
     
-    return hasAssignedDepartment && matchesSearch && matchesSport && matchesYear;
+    return hasAssignedCollege && matchesSearch && matchesSport && matchesYear;
   }).sort((studentA, studentB) => {
     const getSurname = (student) => {
       const name = String(student.lastName || student.surname || student.name || '').trim();
@@ -496,6 +493,7 @@ const ScreenerPage = () => {
 
     return getSurname(studentA).localeCompare(getSurname(studentB), undefined, { sensitivity: 'base' });
   });
+  const stats = getScreenerRequirementCounts(filteredStudents, sportFilter);
 
   const renderStatusBadge = (status) => {
     if (status === 'approved' || status === 'Completed') return <span className="badge badge-completed">Completed</span>;
@@ -680,8 +678,8 @@ const ScreenerPage = () => {
 
         {loading ? (
           <div className="loading-state">Loading submitted requirements…</div>
-        ) : departmentUnassigned ? (
-          <div className="loading-state">No department is assigned to your screener account. Contact an Admin to receive access.</div>
+        ) : collegeUnassigned ? (
+          <div className="loading-state">No valid college is assigned to your screener account. Contact an Admin to receive access.</div>
         ) : (
           <div className="table-container">
             <table className="screener-table">
@@ -804,7 +802,7 @@ const ScreenerPage = () => {
                 onClick={() => setShowOverallApprovalConfirmation(true)}
                 disabled={overallApprovalInProgress || reviewingSubmissionIds.size > 0}
               >
-                {overallApprovalInProgress ? 'Approving...' : 'Overall Approved'}
+                {overallApprovalInProgress ? 'Approving...' : 'Approve All'}
               </button>
             )}
           </div>

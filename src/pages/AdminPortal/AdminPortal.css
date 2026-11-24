@@ -1689,7 +1689,6 @@
   background: #7b1e1e;
   transition: height 0.35s ease, background-color 0.2s ease;
 }
-.db-analytics-trend__point:nth-child(3n) .db-analytics-trend__bar { background: #d2a500; }
 .db-analytics-trend__point:hover .db-analytics-trend__bar { filter: brightness(1.12); }
 .db-analytics-trend__label {
   max-width: 100%;
@@ -1795,7 +1794,6 @@
   transition: width 0.45s ease, background-color 0.2s ease;
 }
 .db-analytics-bar:hover .db-analytics-bar__fill { filter: brightness(1.12); }
-.db-analytics-bar--top .db-analytics-bar__fill { background: #d2a500; }
 .db-analytics-bar--top .db-analytics-bar__label,
 .db-analytics-bar--top .db-analytics-bar__value { color: #5a0000; }
 .db-analytics-bar__badge {
@@ -1807,28 +1805,6 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.db-borrower-type-badge {
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border: 1px solid var(--borrower-type-border);
-  border-radius: 999px;
-  background: var(--borrower-type-background);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.db-borrower-type-badge::before {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: var(--borrower-type-color);
-  content: "";
-}
 .db-analytics-pie {
   display: grid;
   min-width: 0;
@@ -1837,18 +1813,16 @@
   gap: 10px;
 }
 .db-analytics-pie__svg { width: 100%; max-width: 112px; overflow: visible; }
-.db-analytics-pie__track {
-  fill: none;
-  stroke: #f0ece9;
-  stroke-width: 13;
-}
 .db-analytics-pie__segment {
-  fill: none;
-  stroke-width: 13;
   cursor: help;
-  transition: stroke-width 0.18s ease, opacity 0.18s ease;
+  transition: opacity 0.18s ease;
 }
-.db-analytics-pie__segment:hover { stroke-width: 16; }
+.db-analytics-pie__segment:hover { opacity: 0.88; }
+.db-analytics-pie__center {
+  fill: #fff;
+  stroke: #7b1e1e;
+  stroke-width: 1;
+}
 .db-analytics-pie__total {
   fill: #4f1717;
   font-size: 14px;
@@ -1856,7 +1830,7 @@
   font-variant-numeric: tabular-nums;
 }
 .db-analytics-pie__caption {
-  fill: #8a817c;
+  fill: #4f1717;
   font-size: 6px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -1903,7 +1877,7 @@
 }
 @keyframes db-analytics-spin { to { transform: rotate(360deg); } }
 @keyframes db-analytics-pie-in {
-  from { opacity: 0.4; stroke-dasharray: 0 100; }
+  from { opacity: 0.4; }
   to { opacity: 1; }
 }
 

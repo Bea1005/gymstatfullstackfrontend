@@ -4,10 +4,12 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { getAdminStudents, getAdminCoaches, getAdminScreeners, getNextAdminScreenerId, createUser, updateUserArchiveStatus, archiveUsers } from '../../services/api';
 import { DEPARTMENT_OPTIONS } from '../../constants/studentRegistrationOptions';
 import { isPasswordValid, PASSWORD_POLICY_MESSAGE } from '../../constants/passwordPolicy';
+import COLLEGE_DEPARTMENT_OPTIONS from '../../../../shared/collegeDepartmentOptions.json';
 import Icon from '../../components/Icon';
 import './AdminPortal.css';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const COLLEGE_OPTIONS = Object.keys(COLLEGE_DEPARTMENT_OPTIONS);
 
 const getUserActivityStatus = (user) => {
   const explicitStatus = String(user?.status ?? '').trim();
@@ -66,6 +68,7 @@ const normalizeUserRow = (user) => {
     fullname: raw?.fullname || raw?.name || raw?.username || '',
     username: raw?.username || '',
     email: raw?.email || '',
+    college: raw?.college || '',
     dept: deptVal,
     department: deptVal,
     sport: sportVal || '',
@@ -185,7 +188,7 @@ export default function AdminUserRecords() {
   const [screenerDept,   setScreenerDept]   = useState('All');
   const [screenerAccountStatus, setScreenerAccountStatus] = useState('active');
   const [selScreeners,   setSelScreeners]   = useState([]);
-  const [scrForm,        setScrForm]        = useState({ email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
+  const [scrForm,        setScrForm]        = useState({ email: '', dept: DEPARTMENT_OPTIONS[0], college: '', password: '' });
   const [scrPwShow,      setScrPwShow]      = useState(false);
   const [scrError,       setScrError]       = useState('');
   const [creatingScreener, setCreatingScreener] = useState(false);
@@ -256,7 +259,7 @@ export default function AdminUserRecords() {
   const fetchNextScreenerId = async () => {
     try {
       const response = await getNextAdminScreenerId();
-      if (typeof response?.id !== 'string' || !/^S\d{6,}$/.test(response.id)) {
+      if (typeof response?.id !== 'string' || !/^S\d{4}-[0-9A-F]{4}$/.test(response.id)) {
         throw new Error('The server returned an invalid Screener ID.');
       }
       setNextScreenerId(response.id);
@@ -352,15 +355,19 @@ export default function AdminUserRecords() {
       return; 
     }
 
+    if (!scrForm.college || !COLLEGE_OPTIONS.includes(scrForm.college)) {
+      showRegisterError('Please select a valid college.');
+      return;
+    }
+
     screenerCreationInProgressRef.current = true;
     setCreatingScreener(true);
     try {
-      const assignedScreenerId = nextScreenerId || await getNextAdminScreenerId();
       const screenerData = {
-        id: assignedScreenerId,
         email,
         password: scrForm.password,
         department: scrForm.dept,
+        college: scrForm.college,
         role: 'screener'
       };
 
@@ -370,7 +377,7 @@ export default function AdminUserRecords() {
         setScreeners((previous) => [newScreener, ...previous]);
       }
       void fetchNextScreenerId();
-      setScrForm({ email: '', dept: DEPARTMENT_OPTIONS[0], password: '' });
+      setScrForm({ email: '', dept: DEPARTMENT_OPTIONS[0], college: '', password: '' });
       setScrError('');
       showToast('Screener account created successfully.', 'success');
     } catch (error) {
@@ -776,7 +783,7 @@ export default function AdminUserRecords() {
                     <td>
                       <div className="ur-name-cell">
                         <Avatar name={s.name} />
-                        <div><div className="ur-name">{s.name}</div><div className="ur-username">@{s.username}</div></div>
+                        <div><div className="ur-name">{s.name}</div><div className="ur-username"></div></div>
                       </div>
                     </td>
                     <td><StatusBadge status={s.status} /></td>
@@ -863,7 +870,7 @@ export default function AdminUserRecords() {
             <form className="ur-reg-form" onSubmit={registerScreener} noValidate>
               <div className="ur-reg-row">
                 <div className="ur-reg-group">
-                  <label className="ur-reg-label">Screener ID</label>
+                  <label className="ur-reg-label">Screener ID (automatic)</label>
                   <input
                     type="text"
                     className="ur-reg-input"
@@ -891,6 +898,18 @@ export default function AdminUserRecords() {
                   <select className="ur-reg-input ur-reg-select" value={scrForm.dept}
                     onChange={e => setScrForm(f => ({ ...f, dept: e.target.value }))}>
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="ur-reg-group">
+                  <label className="ur-reg-label">Assigned College *</label>
+                  <select
+                    className="ur-reg-input ur-reg-select"
+                    value={scrForm.college}
+                    onChange={e => setScrForm(f => ({ ...f, college: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select a college</option>
+                    {COLLEGE_OPTIONS.map(college => <option key={college} value={college}>{college}</option>)}
                   </select>
                 </div>
               </div>
@@ -959,7 +978,7 @@ export default function AdminUserRecords() {
                       onChange={() => toggleAll(filtScreeners, selScreeners, setSelScreeners)}
                     />
                   </th>
-                  <th>Name</th><th>Email address</th><th>Program</th><th>Status ↕</th><th></th>
+                  <th>Name</th><th>Email address</th><th>Program</th><th>Assigned College</th><th>Status ↕</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -971,18 +990,19 @@ export default function AdminUserRecords() {
                     <td>
                       <div className="ur-name-cell">
                         <Avatar name={s.name} />
-                        <div><div className="ur-name">{s.name}</div><div className="ur-username">@{s.username}</div></div>
+                        <div><div className="ur-name">{s.name}</div><div className="ur-username">ID: {s.id}</div></div>
                       </div>
                     </td>
                     <td className="ur-email">{s.email || '—'}</td>
                     <td className="ur-dept-tag">{s.dept || '—'}</td>
+                    <td className="ur-dept-tag">{s.college || '—'}</td>
                     <td><StatusBadge status={s.status} /></td>
                     <td>
                       {s.accountStatus === 'archived' ? <button className="ur-row-del" onClick={() => restoreUser(s.id, 'screener')}>Restore</button> : <button className="ur-row-del" onClick={() => archiveScreener(s.id)}><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path fill="#000000" d="M224 48H32a16 16 0 0 0-16 16v24a16 16 0 0 0 16 16v88a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16v-88a16 16 0 0 0 16-16V64a16 16 0 0 0-16-16Zm-16 144H48v-88h160Zm16-104H32V64h192v24ZM96 136a8 8 0 0 1 8-8h48a8 8 0 0 1 0 16h-48a8 8 0 0 1-8-8Z" /></svg></button>}
                     </td>
                   </tr>
                 ))}
-                {filtScreeners.length === 0 && <tr><td colSpan="6" className="ur-empty">No screeners found.</td></tr>}
+                {filtScreeners.length === 0 && <tr><td colSpan="7" className="ur-empty">No screeners found.</td></tr>}
               </tbody>
             </table>
           </div>

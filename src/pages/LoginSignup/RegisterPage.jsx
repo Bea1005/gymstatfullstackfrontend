@@ -10,6 +10,7 @@ import { useNotifications } from "../../components/useNotifications";
 import AuthSuccessPopup from "../../components/AuthSuccessPopup";
 import Icon from "../../components/Icon";
 import { DEPARTMENT_OPTIONS } from "../../constants/studentRegistrationOptions";
+import COLLEGE_DEPARTMENT_OPTIONS from "../../../../shared/collegeDepartmentOptions.json";
 import {
   PREFERRED_CATEGORY_OPTIONS,
   REGISTRATION_CATEGORIES,
@@ -151,6 +152,7 @@ export default function RegisterPage() {
     contactNumber: "",
     email: "",
     password: "",
+    college: "",
     department: "",
     sport: "",
     id: ""
@@ -172,6 +174,7 @@ export default function RegisterPage() {
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+  const [collegeError, setCollegeError] = useState("");
   const [departmentError, setDepartmentError] = useState("");
   const [mainCategory, setMainCategory] = useState("");
   const [sportSubcategory, setSportSubcategory] = useState("");
@@ -188,6 +191,7 @@ export default function RegisterPage() {
       ? selectedSubcategory?.sports || []
       : selectedCategory?.events || []
   );
+  const registrationDepartmentOptions = COLLEGE_DEPARTMENT_OPTIONS[form.college] || [];
 
   useEffect(() => {
     if (resendSecondsLeft <= 0) return undefined;
@@ -251,11 +255,19 @@ export default function RegisterPage() {
     setIdentityErrors(nextIdentityErrors);
     if (Object.values(nextIdentityErrors).some(Boolean)) return;
 
-    if (!form.department.trim() || form.department === "Select Department") {
-      setDepartmentError("Please select department.");
+    const nextCollegeError = Object.prototype.hasOwnProperty.call(COLLEGE_DEPARTMENT_OPTIONS, form.college)
+      ? ""
+      : "Please select a valid college.";
+    const nextDepartmentError = !form.department
+      ? "Please select a department."
+      : !registrationDepartmentOptions.includes(form.department)
+        ? "Please select a department assigned to the selected college."
+        : "";
+    setCollegeError(nextCollegeError);
+    setDepartmentError(nextDepartmentError);
+    if (nextCollegeError || nextDepartmentError) {
       return;
     }
-    setDepartmentError("");
 
     if (
       !selectedCategory
@@ -691,8 +703,35 @@ export default function RegisterPage() {
             </div>
 
             <div className="login-field">
-              <label>Program</label>
+              <label htmlFor="registration-college">College</label>
               <select
+                id="registration-college"
+                className={`login-input ${collegeError ? "input-error" : ""}`}
+                value={form.college}
+                onChange={(event) => {
+                  setForm((previous) => ({
+                    ...previous,
+                    college: event.target.value,
+                    department: "",
+                  }));
+                  setCollegeError("");
+                  setDepartmentError("");
+                }}
+                aria-invalid={Boolean(collegeError)}
+                aria-required="true"
+              >
+                <option value="">Select College</option>
+                {Object.keys(COLLEGE_DEPARTMENT_OPTIONS).map((college) => (
+                  <option key={college} value={college}>{college}</option>
+                ))}
+              </select>
+              {collegeError && <p className="password-match-error">{collegeError}</p>}
+            </div>
+
+            <div className="login-field">
+              <label htmlFor="registration-department">Department</label>
+              <select
+                id="registration-department"
                 className={`login-input ${departmentError ? "input-error" : ""}`}
                 value={form.department}
                 onChange={(event) => {
@@ -700,9 +739,13 @@ export default function RegisterPage() {
                   setDepartmentError("");
                 }}
                 aria-invalid={Boolean(departmentError)}
+                disabled={!form.college}
+                aria-required="true"
               >
-                <option value="">Select Program</option>
-                {DEPARTMENT_OPTIONS.map((department) => (
+                <option value="">Select Department</option>
+                {registrationDepartmentOptions
+                  .filter((department) => DEPARTMENT_OPTIONS.includes(department))
+                  .map((department) => (
                   <option key={department} value={department}>{department}</option>
                 ))}
               </select>

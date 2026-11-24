@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import * as api from '../../services/api';
 import Icon from '../../components/Icon';
@@ -57,6 +57,17 @@ const getAnalyticsTopItem = (items, countKey = 'count') => {
   ));
 };
 
+const getActiveStudentRecordCount = (response) => {
+  const users = Array.isArray(response)
+    ? response
+    : Array.isArray(response?.users)
+      ? response.users
+      : Array.isArray(response?.data)
+        ? response.data
+        : [];
+  return users.filter((user) => String(user?.role || 'student').toLowerCase() === 'student').length;
+};
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
@@ -81,10 +92,12 @@ const AdminDashboard = () => {
   });
   const [analyticsLoadState, setAnalyticsLoadState] = useState('loading');
   const [analyticsError, setAnalyticsError] = useState('');
+  const [activeStudentCount, setActiveStudentCount] = useState(null);
   const [analyticsExpanded, setAnalyticsExpanded] = useState(true);
   const [analyticsPeriod, setAnalyticsPeriod] = useState('yearly');
   const [analyticsDate, setAnalyticsDate] = useState(getCurrentAnalyticsDate('yearly'));
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const analyticsColorAssignments = useRef(new Map());
 
   useEffect(() => {
     let mounted = true;
@@ -98,12 +111,20 @@ const AdminDashboard = () => {
         const data = await api.getAdminDashboard({ period: analyticsPeriod, date: analyticsDate });
         if (!mounted) return;
 
-        const [scheduleResult, pendingRequestResult, borrowingResult] = await Promise.allSettled([
+        const [scheduleResult, pendingRequestResult, borrowingResult, studentRecordsResult] = await Promise.allSettled([
           api.getSchedules(),
           api.getScheduleRequests({ status: 'pending' }),
           api.getBorrowingRecords(),
+          api.getAdminStudents('active'),
         ]);
         if (!mounted) return;
+
+        if (studentRecordsResult.status === 'fulfilled') {
+          setActiveStudentCount(getActiveStudentRecordCount(studentRecordsResult.value));
+        } else {
+          console.error('Admin dashboard active student records fetch error:', studentRecordsResult.reason);
+          setActiveStudentCount(null);
+        }
 
         setStats({
           totalUsers: Number(data.totalUsers) || 0,
@@ -355,7 +376,7 @@ const AdminDashboard = () => {
                   <div className="db-analytics-summary">
                     <AnalyticsSummaryCard
                       label="Total Players"
-                      value={Number(analytics.totalRegisteredStudentAthletes || 0).toLocaleString()}
+                      value={activeStudentCount === null ? '—' : activeStudentCount.toLocaleString()}
                       detail={`${Number(analytics.studentAthletesRegisteredInPeriod || 0).toLocaleString()} in period · ${formatPeriodComparison(
                         analytics.studentAthletesRegisteredInPeriod,
                         analytics.previousStudentAthletesRegistered
@@ -399,6 +420,7 @@ const AdminDashboard = () => {
                       items={analytics.studentAthletesByDepartment}
                       labelKey="department"
                       emptyMessage="No dated student-athlete registrations were found for this period."
+                      colorAssignments={analyticsColorAssignments.current}
                     />
                     <AnalyticsChart
                       title="Borrower Type Activity"
@@ -408,7 +430,7 @@ const AdminDashboard = () => {
                       detailKey="borrowers"
                       detailLabel="unique borrowers"
                       emptyMessage="No classified borrower-type activity was found for this period."
-                      categoryColorMap={BORROWER_TYPE_COLORS}
+                      colorAssignments={analyticsColorAssignments.current}
                     />
                     <AnalyticsChart
                       title="Most Borrowed Equipment"
@@ -417,6 +439,7 @@ const AdminDashboard = () => {
                       labelKey="equipment"
                       emptyMessage="No equipment borrowing records were found for this period."
                       horizontal
+                      colorAssignments={analyticsColorAssignments.current}
                     />
                   </div>
                   <div className="db-analytics__trend-grid">
@@ -542,32 +565,40 @@ const AdminDashboard = () => {
   );
 };
 
-const ANALYTICS_COLORS = ['#7b1e1e', '#d2a500', '#a94b4b', '#e3bd46', '#542020', '#c87955', '#8b7b62', '#d88989'];
-const BORROWER_TYPE_COLORS = {
-  'coach/trainer': {
-    color: '#941b0c',
-    background: '#f7eaea',
-    border: '#620A1A',
-    text: '#9450c',
-  },
-  faculty: {
-    color: '#BC3908',
-    background: '#fff8e1',
-    border: '#d4703a',
-    text: '#BC3908',
-  },
-  student: {
-    color: '#e98a15',
-    background: '#e3f2fd',
-    border: '#eac77a',
-    text: '#e98a15',
-  },
-  'others (office/agency)': {
-    color: '#e1c511',
-    background: '#f3e5f5',
-    border: '#f9e000',
-    text: '#c7be59',
-  },
+const ANALYTICS_COLORS = ['#B8860B', '#7B1E1E', '#D4B000', '#6D4C41'];
+
+const getAnalyticsColor = (index) => ANALYTICS_COLORS[index % ANALYTICS_COLORS.length];
+
+const getAnalyticsCategoryColor = (assignments, chartId, category) => {
+  let chartAssignments = assignments.get(chartId);
+  if (!chartAssignments) {
+    chartAssignments = new Map();
+    assignments.set(chartId, chartAssignments);
+  }
+
+  const categoryKey = String(category || 'Not specified').trim().toLowerCase();
+  if (!chartAssignments.has(categoryKey)) {
+    chartAssignments.set(categoryKey, getAnalyticsColor(chartAssignments.size));
+  }
+  return chartAssignments.get(categoryKey);
+};
+
+const getPieSegmentPath = (percent, offset, radius = 58) => {
+  const startAngle = offset * 3.6 - 90;
+  const sweepAngle = percent * 3.6;
+  const endAngle = startAngle + sweepAngle;
+  const getPoint = (angle) => {
+    const radians = angle * Math.PI / 180;
+    return {
+      x: (60 + radius * Math.cos(radians)).toFixed(3),
+      y: (60 + radius * Math.sin(radians)).toFixed(3),
+    };
+  };
+  const start = getPoint(startAngle);
+  const end = getPoint(endAngle);
+  const largeArc = sweepAngle > 180 ? 1 : 0;
+
+  return `M 60 60 L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
 };
 
 const getFiniteAnalyticsCount = (value) => {
@@ -626,7 +657,7 @@ const AnalyticsChart = ({
   detailLabel,
   emptyMessage,
   horizontal = false,
-  categoryColorMap = null,
+  colorAssignments,
 }) => {
   const leaderItems = labelKey === 'department'
     ? items.filter((item) => !isDepartmentUnavailable(item.department))
@@ -636,20 +667,15 @@ const AnalyticsChart = ({
     0
   );
   const total = getAnalyticsTotal(items);
-  const chartItems = items.map((item, index) => {
+  const chartItems = items.map((item) => {
     const count = getFiniteAnalyticsCount(item.count);
-    const categoryStyle = categoryColorMap?.[String(item[labelKey] || '').trim().toLowerCase()] || null;
+    const label = String(item[labelKey] || 'Not specified');
     return {
-      label: String(item[labelKey] || 'Not specified'),
+      label,
       count,
       detailCount: detailKey ? getFiniteAnalyticsCount(item[detailKey]) : null,
       percent: Number.isFinite(total) && total > 0 ? (count / total) * 100 : 0,
-      categoryStyle,
-      color: categoryStyle?.color || (!isDepartmentUnavailable(item.department)
-        && count === topCount
-        && topCount > 0
-        ? '#d2a500'
-        : ANALYTICS_COLORS[index % ANALYTICS_COLORS.length]),
+      color: getAnalyticsCategoryColor(colorAssignments, title, label),
       isTop: !isDepartmentUnavailable(item.department) && count === topCount && topCount > 0,
     };
   });
@@ -671,14 +697,8 @@ const AnalyticsChart = ({
               >
                 <div className="db-analytics-bar__meta">
                   <span
-                    className={`db-analytics-bar__label${item.categoryStyle ? ' db-borrower-type-badge' : ''}`}
+                    className="db-analytics-bar__label"
                     title={item.label}
-                    style={item.categoryStyle ? {
-                      color: item.categoryStyle.text,
-                      '--borrower-type-color': item.categoryStyle.color,
-                      '--borrower-type-background': item.categoryStyle.background,
-                      '--borrower-type-border': item.categoryStyle.border,
-                    } : undefined}
                   >
                     {item.label}
                   </span>
@@ -709,28 +729,42 @@ const AnalyticsChart = ({
               role="img"
               aria-label={`${title} pie chart. Total ${total.toLocaleString()}.`}
             >
-              <circle className="db-analytics-pie__track" cx="60" cy="60" r="44" />
+              {chartItems[0] && <circle cx="60" cy="60" r="58" fill={chartItems[0].color} />}
               {chartItems.reduce((segments, item) => {
                 if (!Number.isFinite(item.percent) || item.percent <= 0) return segments;
-                const offset = segments.reduce((sum, segment) => sum + segment.percent, 0);
-                segments.push(
-                  <circle
-                    className="db-analytics-pie__segment"
-                    key={item.label}
-                    cx="60"
-                    cy="60"
-                    r="44"
-                    pathLength="100"
-                    stroke={item.color}
-                    strokeDasharray={`${item.percent} ${100 - item.percent}`}
-                    strokeDashoffset={Number.isFinite(offset) ? -offset : 0}
-                    transform="rotate(-90 60 60)"
-                  >
-                    <title>{`${item.label}: ${item.count.toLocaleString()} (${item.percent.toFixed(1)}%)${detailKey ? `, ${item.detailCount.toLocaleString()} ${detailLabel}` : ''}`}</title>
-                  </circle>
-                );
+                const offset = segments.percent;
+                const titleText = `${item.label}: ${item.count.toLocaleString()} (${item.percent.toFixed(1)}%)${detailKey ? `, ${item.detailCount.toLocaleString()} ${detailLabel}` : ''}`;
+                const segment = item.percent >= 100
+                  ? (
+                    <circle
+                      className="db-analytics-pie__segment"
+                      key={item.label}
+                      cx="60"
+                      cy="60"
+                      r="58"
+                      fill={item.color}
+                    >
+                      <title>{titleText}</title>
+                    </circle>
+                  )
+                  : (
+                    <path
+                      className="db-analytics-pie__segment"
+                      key={item.label}
+                      d={getPieSegmentPath(item.percent, offset)}
+                      fill={item.color}
+                      stroke={item.color}
+                      strokeWidth="0.5"
+                      strokeLinejoin="round"
+                    >
+                      <title>{titleText}</title>
+                    </path>
+                  );
+                segments.elements.push(segment);
+                segments.percent += item.percent;
                 return segments;
-              }, [])}
+              }, { elements: [], percent: 0 }).elements}
+              <circle className="db-analytics-pie__center" cx="60" cy="60" r="16" />
               <text className="db-analytics-pie__total" x="60" y="58" textAnchor="middle">{total.toLocaleString()}</text>
               <text className="db-analytics-pie__caption" x="60" y="72" textAnchor="middle">TOTAL</text>
             </svg>
@@ -739,13 +773,7 @@ const AnalyticsChart = ({
                 <li key={`${item.label}-${index}`} title={`${item.label}: ${item.count.toLocaleString()} (${item.percent.toFixed(1)}%)`}>
                   <span className="db-analytics-pie__swatch" style={{ backgroundColor: item.color }} />
                   <span
-                    className={`db-analytics-pie__legend-label${item.categoryStyle ? ' db-borrower-type-badge' : ''}`}
-                    style={item.categoryStyle ? {
-                      color: item.categoryStyle.text,
-                      '--borrower-type-color': item.categoryStyle.color,
-                      '--borrower-type-background': item.categoryStyle.background,
-                      '--borrower-type-border': item.categoryStyle.border,
-                    } : undefined}
+                    className="db-analytics-pie__legend-label"
                   >
                     {item.label}
                   </span>
@@ -818,7 +846,7 @@ const AnalyticsTrendChart = ({ title, data, period, valueLabel }) => {
         <p className="db-analytics-card__empty">No records with timestamps in this period.</p>
       ) : (
         <div className="db-analytics-trend__chart" role="img" aria-label={`${title}: ${total} ${valueLabel}`}>
-          {points.map((point) => (
+          {points.map((point, index) => (
             <div
               className="db-analytics-trend__point"
               key={point.key}
@@ -827,7 +855,10 @@ const AnalyticsTrendChart = ({ title, data, period, valueLabel }) => {
             >
               <span
                 className="db-analytics-trend__bar"
-                style={{ height: point.count > 0 ? `${Math.max(4, (point.count / max) * 100)}%` : '2px' }}
+                style={{
+                  height: point.count > 0 ? `${Math.max(4, (point.count / max) * 100)}%` : '2px',
+                  backgroundColor: getAnalyticsColor(index),
+                }}
               />
               <span className="db-analytics-trend__label">{point.label}</span>
             </div>

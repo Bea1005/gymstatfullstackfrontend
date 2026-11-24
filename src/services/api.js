@@ -476,6 +476,7 @@ export const register = async (userData) => {
       contactNumber: userData.contactNumber,
       email: userData.email,
       password: userData.password,
+      college: userData.college || "",
       department: userData.department || "",
       sport: userData.sport || "",
       sports: userData.sports || [userData.sport].filter(Boolean),

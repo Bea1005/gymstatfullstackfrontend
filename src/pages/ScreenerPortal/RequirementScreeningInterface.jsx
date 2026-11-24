@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
 import RejectModal from '../../components/RejectModal';
 import { useNotifications } from '../../components/useNotifications';
@@ -10,10 +10,10 @@ import usePortalSession, { PortalSessionError } from '../../hooks/usePortalSessi
 import {
   YEAR_LEVEL_OPTIONS
 } from '../../constants/studentRegistrationOptions';
-import { REGISTRATION_SPORT_EVENT_OPTIONS } from '../../constants/registrationCategories';
 import {
   buildActiveRequirementBoxColumns,
-  buildRequirementColumns,
+  getCoachRequirementCounts,
+  getCoachScreeningEmptyStateMessage,
   getRequirementColumnEntry,
   getSportScopedRequirements
 } from '../requirementScreeningUtils';
@@ -217,7 +217,6 @@ export const RequirementScreeningInterface = ({
   const [pendingSportReload, setPendingSportReload] = useState(false);
   const [loading, setLoading] = useState(false);
   const { authReady, authError } = usePortalSession(['coach'], 'Coach');
-  const [stats, setStats] = useState({ totalStudents: 0, pendingRequirements: 0, verifiedRequirements: 0 });
 
   // Modal states
   const [approveTarget, setApproveTarget] = useState(null); // req id being approved
@@ -246,7 +245,7 @@ export const RequirementScreeningInterface = ({
   const [sportFilter, setSportFilter] = useState(initialSport || 'All');
   const [yearLevelFilter, setYearLevelFilter] = useState('All');
   const sportFilterOptions = Array.from(new Map(
-    [...REGISTRATION_SPORT_EVENT_OPTIONS, ...assignedSports, ...students.flatMap((student) => getStudentSportValues(student))]
+    [...assignedSports, ...students.flatMap((student) => getStudentSportValues(student))]
       .filter((sport) => typeof sport === 'string' && sport.trim())
       .map((sport) => [normalizeSportValue(sport), sport.trim()])
   ).values());
@@ -254,6 +253,10 @@ export const RequirementScreeningInterface = ({
   const selectedSportRef = useRef(selectedSport);
   selectedSportRef.current = selectedSport;
   const requirementColumns = buildActiveRequirementBoxColumns(publishedRequirements, sportFilter);
+  const stats = useMemo(() => ({
+    totalStudents: students.length,
+    ...getCoachRequirementCounts(students, publishedRequirements, sportFilter)
+  }), [students, publishedRequirements, sportFilter]);
   const loadRequirements = async (silent = false) => {
     if (requirementsRequestInProgressRef.current) {
       if (activeRequestSportRef.current !== selectedSport) pendingSportReloadRef.current = true;
@@ -278,9 +281,13 @@ export const RequirementScreeningInterface = ({
       // Ensure data is always an array to avoid rendering crashes
       const safeData = Array.isArray(data) ? data : [];
       setStudents(safeData);
-      setAssignedSports(Array.isArray(coachRequirementsResult.value?.assignedSports)
+      const resolvedAssignedSports = Array.isArray(coachRequirementsResult.value?.assignedSports)
         ? coachRequirementsResult.value.assignedSports
-        : []);
+        : [];
+      setAssignedSports(resolvedAssignedSports);
+      if (sportFilter === 'All' && resolvedAssignedSports.length === 1) {
+        setSportFilter(resolvedAssignedSports[0]);
+      }
       const resolvedSport = String(coachRequirementsResult.value?.selectedSport || '').trim();
       if (hideFilters.includes('sport') && resolvedSport && sportFilter !== resolvedSport) {
         setSportFilter(resolvedSport);
@@ -315,28 +322,6 @@ export const RequirementScreeningInterface = ({
         if (!refreshedStudent) setCurrentView('list');
         return refreshedStudent || null;
       });
-      const totalStudents = safeData.length;
-      const statisticSport = resolvedSport || requestedSport;
-      const activeRequirementColumns = buildRequirementColumns(
-        activePublishedRequirements,
-        statisticSport || 'All'
-      );
-      const pendingRequirements = safeData.reduce((acc, student) => {
-        const sportScopedRequirements = getSportScopedRequirements(
-          student.requirements,
-          statisticSport
-        );
-        return acc + activeRequirementColumns.filter((column) => (
-          String(getRequirementColumnEntry(sportScopedRequirements, column)?.status || '')
-            .trim()
-            .toLocaleLowerCase() === 'pending'
-        )).length;
-      }, 0);
-      const verifiedRequirements = safeData.reduce((acc, student) => {
-        const statuses = Object.values(student.requirements || {}).filter((item) => !Array.isArray(item));
-        return acc + statuses.filter((item) => item && item.status === 'approved').length;
-      }, 0);
-      setStats({ totalStudents, pendingRequirements, verifiedRequirements });
       hasNotifiedLoadErrorRef.current = false;
     } catch (error) {
       if (requestedSport !== selectedSportRef.current) return;
@@ -373,7 +358,7 @@ export const RequirementScreeningInterface = ({
   const handleForwardRequirements = async () => {
     if (forwardingInProgress) return;
     if (!selectedSport) {
-      notify('coach-error', 'Sport Unavailable', 'Your assigned sport could not be determined.');
+      notify('coach-error', 'Select a Sport', 'Choose one of your assigned sports before forwarding documents.');
       return;
     }
 
@@ -533,7 +518,11 @@ export const RequirementScreeningInterface = ({
       const response = await api.getCoachDocumentRequirements(selectedSport);
       const data = response?.data || [];
       setStudents(data);
-      setAssignedSports(Array.isArray(response?.assignedSports) ? response.assignedSports : []);
+      const resolvedAssignedSports = Array.isArray(response?.assignedSports) ? response.assignedSports : [];
+      setAssignedSports(resolvedAssignedSports);
+      if (sportFilter === 'All' && resolvedAssignedSports.length === 1) {
+        setSportFilter(resolvedAssignedSports[0]);
+      }
       setForwardingStatus(response?.forwardingStatus || {
         ready: false,
         forwarded: false,
@@ -742,6 +731,17 @@ export const RequirementScreeningInterface = ({
 
     return getSurname(studentA).localeCompare(getSurname(studentB), undefined, { sensitivity: 'base' });
   });
+  const hasStudentsForSelectedYearLevel = students.some((student) => {
+    const matchesSport = sportFilter === 'All'
+      || getStudentSportValues(student)
+        .some((sport) => normalizeSportValue(sport) === normalizeSportValue(sportFilter));
+    return matchesSport
+      && normalizeYearLevel(student.yearLevel) === normalizeYearLevel(yearLevelFilter);
+  });
+  const emptyStateMessage = getCoachScreeningEmptyStateMessage(
+    yearLevelFilter,
+    hasStudentsForSelectedYearLevel
+  );
 
   const renderStatusBadge = (status) => {
     if (status === 'approved') return <span className="badge badge-completed">Coach-Approved</span>;
@@ -949,9 +949,11 @@ export const RequirementScreeningInterface = ({
             type="button"
             className="forward-screener-btn"
             onClick={handleForwardRequirements}
-            aria-disabled={loading || checkingForwardEligibility || forwardingInProgress}
-            disabled={loading || checkingForwardEligibility || forwardingInProgress}
-            title="Check approval status and forward approved documents to the Screener"
+            aria-disabled={!selectedSport || loading || checkingForwardEligibility || forwardingInProgress}
+            disabled={!selectedSport || loading || checkingForwardEligibility || forwardingInProgress}
+            title={selectedSport
+              ? 'Check approval status and forward approved documents to the Screener'
+              : 'Select one assigned sport before forwarding documents'}
             style={{
               backgroundColor: 'var(--primary-maroon)',
               color: '#fff',
@@ -960,7 +962,7 @@ export const RequirementScreeningInterface = ({
               padding: '10px 16px',
               fontFamily: 'inherit',
               fontWeight: 600,
-              cursor: loading || checkingForwardEligibility || forwardingInProgress ? 'not-allowed' : 'pointer',
+              cursor: !selectedSport || loading || checkingForwardEligibility || forwardingInProgress ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
             }}
           >
@@ -975,7 +977,7 @@ export const RequirementScreeningInterface = ({
         {loading ? (
           <div className="loading-state">Loading submitted requirements…</div>
         ) : filteredStudents.length === 0 ? (
-          <div className="loading-state">No student requirements match your assigned sports.</div>
+          <div className="loading-state">{emptyStateMessage}</div>
         ) : (
           <div className="table-container">
             <table className="screener-table">
@@ -1033,9 +1035,12 @@ export const RequirementScreeningInterface = ({
 
   // --- VIEW 2: VIEW STUDENT ATHLETE REQUIREMENTS MAIN GRID ---
   if (currentView === 'view-details' && selectedStudent) {
-    const selectedSport = sportFilter === 'All' ? selectedStudent.sport : sportFilter;
+    const selectedSport = sportFilter === 'All' ? '' : sportFilter;
     const selectedRequirements = getSportScopedRequirements(selectedStudent.requirements, selectedSport);
     const requirementCards = getPublishedRequirementCards(selectedRequirements, publishedRequirements);
+    const displayedSports = selectedSport
+      ? selectedSport
+      : (selectedStudent.sports || []).join(', ') || selectedStudent.sport;
 
     return (
       <div className="view-req-container">
@@ -1055,7 +1060,7 @@ export const RequirementScreeningInterface = ({
             <h2>{selectedStudent.name}</h2>
             <p><strong>Department :</strong> {selectedStudent.department || selectedStudent.dept || 'Not specified'}</p>
             {!hideFilters.includes('sport') && (
-              <p><strong>Sport :</strong> {selectedSport || 'Not specified'}</p>
+              <p><strong>Sport :</strong> {displayedSports || 'Not specified'}</p>
             )}
           </div>
 
